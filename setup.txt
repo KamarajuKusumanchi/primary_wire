@@ -1,0 +1,63 @@
+====== primary_wire: Setup ======
+
+This guide covers cloning the repo, installing dependencies with uv,
+and running fetch.py manually for the first time.
+
+===== Prerequisites =====
+
+  * A Digital Ocean droplet running Ubuntu
+  * Git installed (''sudo apt install git'')
+  * Python 3.10+ installed (''sudo apt install python3'')
+  * A GitHub account with SSH access configured
+
+===== 1. Install uv =====
+
+uv is a fast Python package manager. Install it with:
+
+  curl -Lsf https://astral.sh/uv/install.sh | sh
+
+Verify the install:
+
+  uv --version
+
+===== 2. Clone the repo =====
+
+  git clone git@github.com:YOUR_USERNAME/primary_wire.git
+  cd primary_wire
+
+===== 3. Create a virtual environment =====
+
+  uv venv
+
+This creates a ''.venv'' folder in the project root.
+
+===== 4. Install dependencies =====
+
+  uv pip install -r requirements.txt
+
+===== 5. Run fetch.py manually =====
+
+  uv run src/fetch.py
+
+You should see output like:
+
+  Skipping sources with no RSS feed: ['costco']
+  Fetching fedex ...
+    2026-06-01: +3 new entries → data/2026/2026-06-01.csv
+  Fetching google ...
+    2026-06-01: +5 new entries → data/2026/2026-06-01.csv
+  Fetching nvidia ...
+    2026-06-01: +2 new entries → data/2026/2026-06-01.csv
+
+  Done. Total new entries added: 10
+
+===== 6. Run tests =====
+
+  uv run pytest tests/
+
+All tests should pass before setting up the cron job.
+
+===== Next Steps =====
+
+See [[cron.txt]] to automate fetch.py via cron.
+See [[sources.txt]] to add new sources.
