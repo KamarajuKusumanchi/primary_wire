@@ -1,0 +1,18 @@
+# Python
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+
+# Logs
+logs/
+
+# OS
+.DS_Store
+
+# Vim
+*.swp
+*.swo
+*~
+.netrwhist
