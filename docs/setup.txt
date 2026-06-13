@@ -1,0 +1,81 @@
+====== primary_wire: Setup ======
+
+This guide covers cloning the repo and installing the tools needed to
+view and edit CSV data files.
+
+===== Prerequisites =====
+
+  * Git installed
+  * Python 3.10+ installed
+  * uv installed (see below)
+
+===== 1. Install uv =====
+
+uv is a fast Python package manager used to manage dependencies.
+
+**Linux / Mac:**
+  curl -Lsf https://astral.sh/uv/install.sh | sh
+
+**Windows (PowerShell):**
+  powershell -c "irm https://astral.sh/uv/install.ps1 | iex"
+
+Verify:
+  uv --version
+
+===== 2. Clone the repo =====
+
+  git clone git@github.com:YOUR_USERNAME/primary_wire.git
+  cd primary_wire
+
+===== 3. Create a virtual environment =====
+
+  uv venv
+
+Activate it:
+
+**Linux / Mac:**
+  source .venv/bin/activate
+
+**Windows:**
+  .venv\Scripts\activate
+
+===== 4. Install dependencies =====
+
+  uv pip install -r requirements.txt
+
+This installs:
+
+  * **visidata** — terminal spreadsheet for viewing and editing CSV files
+  * **csvkit** — command-line tools for querying and validating CSV files
+  * **pytest** — testing framework for future Python scripts
+
+===== 5. Viewing CSV files with VisiData =====
+
+Open a daily CSV file:
+
+  vd data/2026/2026-06-01.csv
+
+Useful keys inside VisiData:
+
+^ Key      ^ Action               ^
+| ''a''        | Add a new row        |
+| ''e''        | Edit current cell    |
+| ''d''        | Delete row           |
+| ''/''        | Search               |
+| ''Ctrl+S''   | Save changes to CSV  |
+| ''q''        | Quit                 |
+
+===== 6. Viewing CSV files with csvkit =====
+
+Pretty-print a CSV file in aligned columns:
+
+  csvlook data/2026/2026-06-01.csv
+
+Filter by slug:
+
+  csvgrep -c slug -m fedex data/2026/2026-06-01.csv | csvlook
+
+===== Next Steps =====
+
+See [[contributing.txt]] to learn how to add new press release links.
+See [[sources.txt]] to learn how to add new sources.

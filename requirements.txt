@@ -1,0 +1,11 @@
+# primary_wire dependencies
+# Install with: uv pip install -r requirements.txt
+
+# CSV viewing and editing in the terminal
+visidata
+
+# CSV querying and validation tools
+csvkit
+
+# Testing framework (for future Python scripts)
+pytest

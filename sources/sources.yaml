@@ -1,0 +1,40 @@
+# primary_wire sources
+# This is the master list of organizations tracked by primary_wire.
+#
+# Format:
+#   slug:         short unique identifier used in CSV data files
+#   name:         full display name of the organization
+#   ticker:       stock ticker symbol (omit for non-public sources)
+#   ir_url:       investor relations or official newsroom page
+#   notes:        any useful context about finding press releases
+
+sources:
+
+  - slug: fedex
+    name: FedEx Corporation
+    ticker: FDX
+    ir_url: https://newsroom.fedex.com/newsroom/global-english
+    notes: Distributes press releases via Business Wire.
+
+  - slug: costco
+    name: Costco Wholesale Corporation
+    ticker: COST
+    ir_url: https://investor.costco.com/news/default.aspx
+    notes: null
+
+  - slug: google
+    name: Alphabet Inc. (Google)
+    ticker: GOOGL
+    ir_url: https://abc.xyz/investor/news/default.aspx
+    notes: Investor relations hosted at abc.xyz.
+
+  - slug: nvidia
+    name: NVIDIA Corporation
+    ticker: NVDA
+    ir_url: https://investor.nvidia.com/news/press-releases/default.aspx
+    notes: null
+
+  - slug: bls
+    name: U.S. Bureau of Labor Statistics
+    ir_url: https://www.bls.gov/newsrelease/
+    notes: Covers CPI, jobs reports, and other BLS releases. No ticker.

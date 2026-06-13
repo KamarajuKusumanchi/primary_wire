@@ -1,0 +1,59 @@
+====== primary_wire: Managing Sources ======
+
+This guide covers how to add new sources to ''sources/sources.yaml''.
+
+===== Source fields =====
+
+^ Field    ^ Required ^ Description                                          ^
+| slug     | Yes      | Short unique identifier used in CSV data files       |
+| name     | Yes      | Full display name of the organization                |
+| ticker   | No       | Stock ticker symbol — omit for non-public sources    |
+| ir_url   | Yes      | Investor relations or official newsroom page URL     |
+| notes    | No       | Useful context about finding press releases          |
+
+===== Adding a new source =====
+
+  - Check that the organization is not already in ''sources/sources.yaml''
+  - Find the official IR or newsroom page URL
+  - Choose a short, lowercase slug (e.g. ''apple'', ''jnj'', ''fed'')
+  - Add an entry to ''sources/sources.yaml'':
+
+<code yaml>
+  - slug: apple
+    name: Apple Inc.
+    ticker: AAPL
+    ir_url: https://investor.apple.com/news/default.aspx
+    notes: null
+</code>
+
+  - Submit a pull request with the updated ''sources.yaml''
+
+===== Slug naming conventions =====
+
+  * Lowercase only
+  * No spaces — use underscores if needed (e.g. ''bank_of_america'')
+  * Keep it short and obvious
+  * Use the company's common name, not legal name (e.g. ''jnj'' not ''johnson_and_johnson'')
+
+===== Non-company sources =====
+
+Government agencies and other non-public organizations should omit the ''ticker'' field:
+
+<code yaml>
+  - slug: fed
+    name: U.S. Federal Reserve
+    ir_url: https://www.federalreserve.gov/newsevents/pressreleases.htm
+    notes: Covers monetary policy decisions, FOMC statements, and regulatory actions.
+</code>
+
+===== Disabling a source =====
+
+Do not delete sources that have existing data. Instead add a note:
+
+<code yaml>
+  - slug: example_corp
+    name: Example Corp
+    ticker: EXMP
+    ir_url: https://investor.example.com
+    notes: Acquired by Acme Corp on 2026-06-01. No longer issuing independent press releases.
+</code>

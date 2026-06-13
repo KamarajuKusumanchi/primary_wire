@@ -1,0 +1,101 @@
+====== primary_wire: Contributing ======
+
+primary_wire is community-maintained. Anyone can contribute new press release
+links by submitting a GitHub pull request.
+
+===== What to contribute =====
+
+  * Official press releases from S&P 500 companies
+  * Releases from government agencies (Fed, BLS, SEC, etc.)
+  * Links must point directly to the original source — no third-party articles
+  * One pull request per day's worth of data is preferred
+
+===== Step-by-step contribution guide =====
+
+==== 1. Fork and clone the repo ====
+
+On GitHub, click **Fork**, then clone your fork:
+
+  git clone git@github.com:YOUR_USERNAME/primary_wire.git
+  cd primary_wire
+
+==== 2. Find the correct CSV file ====
+
+Data files are organised by date:
+
+  data/YYYY/YYYY-MM-DD.csv
+
+For example, a press release published on June 1 2026 goes in:
+
+  data/2026/2026-06-01.csv
+
+Create the file and its year directory if they do not exist:
+
+  mkdir -p data/2026
+  touch data/2026/2026-06-01.csv
+
+==== 3. Add the header row (new files only) ====
+
+If the file is new, add the header row first:
+
+  slug,ticker,title,url,publish_datetime
+
+==== 4. Add your entry ====
+
+Open the file in VisiData:
+
+  vd data/2026/2026-06-01.csv
+
+Press ''a'' to append a new row and fill in each column:
+
+^ Column       ^ Example value                                     ^
+| slug         | ''fedex''                                             |
+| ticker       | ''FDX'' (leave empty for govt sources)                |
+| title        | ''FedEx Completes Spin-Off of FedEx Freight''         |
+| url          | ''https://newsroom.fedex.com/...''                    |
+| publish_datetime | See format table below                                |
+
+Press ''Ctrl+S'' to save, then ''q'' to quit.
+
+==== publish_datetime format ====
+
+Use whatever precision is available on the source page — do not guess or fill in missing information:
+
+^ What's available        ^ Example value             ^
+| Date only               | ''2026-06-01''              |
+| Date and time           | ''2026-06-01 05:30 AM''     |
+| Date, time and timezone | ''2026-06-10 08:30 AM EST'' |
+
+==== 5. Validate your entry ====
+
+Check the file looks correct:
+
+  csvlook data/2026/2026-06-01.csv
+
+Make sure:
+  * The URL points to the original source, not a news aggregator
+  * The slug matches an entry in ''sources/sources.yaml''
+  * The publish_datetime matches the filename date
+  * There are no duplicate URLs
+
+==== 6. Commit and submit a pull request ====
+
+  git checkout -b add-2026-06-01
+  git add data/2026/2026-06-01.csv
+  git commit -m "data: add press releases for 2026-06-01"
+  git push origin add-2026-06-01
+
+Then open a pull request on GitHub against the ''main'' branch.
+
+===== Contribution rules =====
+
+  * Links must be publicly accessible — no paywalls or login walls
+  * Links must point to the original organization's website
+  * Do not add duplicate URLs
+  * Do not modify existing entries — open an issue instead
+  * Slugs must exist in ''sources/sources.yaml'' — see [[sources.txt]] to add a new source
+
+===== Adding a new source =====
+
+If the organization is not yet in ''sources/sources.yaml'', add it first.
+See [[sources.txt]] for instructions.
