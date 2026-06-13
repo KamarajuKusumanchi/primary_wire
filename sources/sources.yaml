@@ -1,0 +1,43 @@
+# primary_wire sources
+# Format:
+#   slug:         short unique identifier used in CSV files
+#   name:         full display name
+#   ticker:       stock ticker symbol (optional, omit for non-public sources)
+#   newsroom_url: human-readable newsroom page
+#   rss_url:      RSS feed URL (null if not available — scraping required)
+#   notes:        any special handling instructions
+
+sources:
+
+  - slug: fedex
+    name: FedEx Corporation
+    ticker: FDX
+    newsroom_url: https://newsroom.fedex.com/newsroom/global-english
+    rss_url: https://newsroom.fedex.com/rss
+    notes: null
+
+  - slug: costco
+    name: Costco Wholesale Corporation
+    ticker: COST
+    newsroom_url: https://investor.costco.com/news/default.aspx
+    rss_url: null
+    notes: >
+      No public RSS feed found. Investor relations page uses JavaScript rendering.
+      May require scraping or checking PR Newswire for Costco releases.
+      Fallback: https://www.prnewswire.com/rss/news-releases-list.rss filtered by "Costco"
+
+  - slug: google
+    name: Google LLC (Alphabet Inc.)
+    ticker: GOOGL
+    newsroom_url: https://blog.google
+    rss_url: https://blog.google/rss
+    notes: >
+      Covers Google's official blog.
+      For investor-specific releases also check https://abc.xyz/investor/
+
+  - slug: nvidia
+    name: NVIDIA Corporation
+    ticker: NVDA
+    newsroom_url: https://nvidianews.nvidia.com
+    rss_url: https://nvidianews.nvidia.com/rss.xml
+    notes: null
