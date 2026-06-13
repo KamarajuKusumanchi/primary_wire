@@ -1,0 +1,70 @@
+====== primary_wire: Managing Sources ======
+
+This guide covers how to add, update, or disable sources in sources.yaml.
+
+===== Source fields =====
+
+^ Field          ^ Required ^ Description                                      ^
+| slug           | Yes      | Short unique identifier used in CSV files        |
+| name           | Yes      | Full display name of the organization            |
+| ticker         | No       | Stock ticker symbol (omit for non-public sources)|
+| newsroom_url   | Yes      | Human-readable newsroom page URL                 |
+| rss_url        | No       | RSS feed URL — set to null if not available      |
+| notes          | No       | Special handling instructions or fallback info   |
+
+===== Adding a source with an RSS feed =====
+
+  - Find the company's newsroom RSS feed URL
+    * Check the newsroom page source for ''<link rel="alternate" type="application/rss+xml">''
+    * Try common paths: ''/rss'', ''/rss.xml'', ''/feed'', ''/feed.xml''
+    * Try pasting the newsroom URL into [[https://rss.app]] to detect the feed
+  - Add an entry to ''sources/sources.yaml'':
+
+<code yaml>
+  - slug: apple
+    name: Apple Inc.
+    ticker: AAPL
+    newsroom_url: https://www.apple.com/newsroom/
+    rss_url: https://www.apple.com/newsroom/rss-feed.rss
+    notes: null
+</code>
+
+  - Run fetch.py manually to verify it works:
+
+  uv run src/fetch.py
+
+===== Adding a source without an RSS feed =====
+
+Some companies (e.g. Costco) do not expose a public RSS feed. Options:
+
+  - Set ''rss_url: null'' and document the fallback in ''notes''
+  - Check if the company distributes via PR Newswire or Business Wire
+  - Consider writing a custom scraper for that source in a future update
+
+===== Disabling a source =====
+
+Rather than deleting a source, set ''rss_url: null'' and add a note:
+
+<code yaml>
+  - slug: example_corp
+    name: Example Corp
+    ticker: EXMP
+    newsroom_url: https://newsroom.example.com
+    rss_url: null
+    notes: RSS feed discontinued as of 2026-06-01.
+</code>
+
+fetch.py will skip it and print a warning, but the historical data is preserved.
+
+===== Non-company sources (Fed, BLS, etc.) =====
+
+primary_wire supports any official source, not just S&P 500 companies.
+Simply omit the ''ticker'' field:
+
+<code yaml>
+  - slug: bls
+    name: U.S. Bureau of Labor Statistics
+    newsroom_url: https://www.bls.gov/newsrelease/
+    rss_url: https://www.bls.gov/feed/bls_latest.rss
+    notes: Covers CPI, jobs reports, and other BLS releases.
+</code>
