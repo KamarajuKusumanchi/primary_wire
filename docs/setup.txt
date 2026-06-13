@@ -39,6 +39,9 @@ Activate it:
 **Windows:**
   .venv\Scripts\activate
 
+**git bash on Windows:**
+  source .venv/Scripts/activate
+
 ===== 4. Install dependencies =====
 
   uv pip install -r requirements.txt
