@@ -1,0 +1,84 @@
+====== primary_wire: Cron Automation ======
+
+This guide covers automating fetch.py and git commits on a Digital Ocean droplet.
+
+===== Overview =====
+
+Two cron jobs are needed:
+
+  - **Fetch every 30 minutes** — runs fetch.py to pull new RSS entries
+  - **Commit once a day at midnight** — commits and pushes new CSV data to GitHub
+
+===== 1. Configure GitHub SSH key on the droplet =====
+
+The droplet needs to push to GitHub without a password prompt.
+
+Generate an SSH key on the droplet:
+
+  ssh-keygen -t ed25519 -C "primary_wire_droplet"
+
+Press Enter to accept the default path. Then print the public key:
+
+  cat ~/.ssh/id_ed25519.pub
+
+Copy the output and add it to GitHub:
+  - Go to GitHub → Settings → SSH and GPG keys → New SSH key
+  - Paste the key and save
+
+Test the connection:
+
+  ssh -T git@github.com
+
+You should see: //Hi YOUR_USERNAME! You've successfully authenticated.//
+
+===== 2. Configure git on the droplet =====
+
+  git config --global user.name "primary_wire"
+  git config --global user.email "your@email.com"
+
+===== 3. Open the crontab editor =====
+
+  crontab -e
+
+===== 4. Add the two cron jobs =====
+
+Add these two lines to the crontab:
+
+  # Fetch RSS feeds every 30 minutes
+  */30 * * * * cd /home/user/primary_wire && uv run src/fetch.py >> logs/fetch.log 2>&1
+
+  # Commit and push new data to GitHub once a day at midnight
+  0 0 * * * cd /home/user/primary_wire && git diff --quiet data/ || (git add data/ && git commit -m "fetch: $(date +\%F)" && git push)
+
+Replace ''/home/user/primary_wire'' with your actual project path.
+
+===== 5. Create the logs directory =====
+
+  mkdir -p /home/user/primary_wire/logs
+
+Add ''logs/'' to ''.gitignore'' so log files are not committed:
+
+  echo "logs/" >> .gitignore
+
+===== 6. Verify cron is running =====
+
+After 30 minutes, check the log:
+
+  tail -f logs/fetch.log
+
+You should see fetch output with new entries being added.
+
+===== Troubleshooting =====
+
+**Cron job not running?**
+  - Check cron is active: ''sudo systemctl status cron''
+  - Check for errors: ''grep CRON /var/log/syslog''
+
+**Git push failing?**
+  - Verify SSH key is added to GitHub (see step 1)
+  - Test manually: ''cd /home/user/primary_wire && git push''
+
+**uv: command not found in cron?**
+  - Cron runs with a minimal PATH. Use the full path to uv:
+    ''which uv'' to find it (usually ''/home/user/.cargo/bin/uv'')
+  - Replace ''uv'' in the cron job with the full path
