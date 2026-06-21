@@ -1,4 +1,12 @@
 # primary_wire dependencies
+# Install or update with:
+#   uv pip install -r requirements.txt
+#
+# The above command is additive only: if a package is removed from this file,
+# it won't uninstall it from the existing venv. For a build that exactly
+# matches this file, use:
+#   uv pip sync -r requirements.txt
+
 # Install with: uv pip install -r requirements.txt
 
 # CSV viewing and editing in the terminal
@@ -9,3 +17,9 @@ csvkit
 
 # Testing framework (for future Python scripts)
 pytest
+
+# YAML round-trip parsing/writing for sources.yaml (preserves comments and formatting)
+ruamel.yaml
+
+# Ticker -> company name lookup for update_source.py
+yfinance

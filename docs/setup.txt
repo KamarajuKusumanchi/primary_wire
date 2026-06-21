@@ -82,3 +82,27 @@ Filter by slug:
 
 See [[contributing.txt]] to learn how to add new press release links.
 See [[sources.txt]] to learn how to add new sources.
+
+===== Resetting the environment =====
+
+If the uv-managed virtual environment ever ends up in a bad state — for
+example, packages got installed into the wrong environment, or
+dependencies are tangled — recreate it from scratch:
+
+  deactivate
+  uv venv --clear
+  source .venv/bin/activate
+
+  uv pip install -r requirements.txt
+
+(On Windows, replace ''source .venv/bin/activate'' with
+''.venv\Scripts\activate''.)
+
+''deactivate'' first if the environment is currently active. On Windows,
+the interpreter file inside an active venv is locked while in use, and
+''--clear'' can fail partway through if you skip this step.
+
+After reinstalling, confirm the install landed in the right place: the
+first line of ''uv pip install'' output should read
+''Using Python ... environment at: <path>\.venv'' — not a path pointing
+into a Conda environment such as ''.conda\envs\...''.
