@@ -40,6 +40,7 @@ sources:
     name: DoorDash, Inc.
     ticker: DASH
     ir_url: https://ir.doordash.com/
+
   - slug: virtu
     name: Virtu Financial, Inc.
     ticker: VIRT
