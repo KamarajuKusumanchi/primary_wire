@@ -1,4 +1,0 @@
-feedparser
-pandas
-pyyaml
-pytest
