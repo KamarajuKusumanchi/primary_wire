@@ -36,3 +36,7 @@ sources:
     name: U.S. Bureau of Labor Statistics
     ir_url: https://www.bls.gov/newsrelease/
     notes: Covers CPI, jobs reports, and other BLS releases. No ticker.
+  - slug: doordash
+    name: DoorDash, Inc.
+    ticker: DASH
+    ir_url: https://ir.doordash.com/
