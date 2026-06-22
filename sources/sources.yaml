@@ -56,6 +56,10 @@ sources:
     name: Moderna, Inc.
     ticker: MRNA
     ir_url: https://investors.modernatx.com/
+  - slug: netflix
+    name: Netflix, Inc.
+    ticker: NFLX
+    ir_url: https://ir.netflix.net
   - slug: nvidia
     name: NVIDIA Corporation
     ticker: NVDA
