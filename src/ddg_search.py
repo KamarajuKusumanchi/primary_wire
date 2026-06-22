@@ -10,10 +10,11 @@ def main():
 
     query = " ".join(sys.argv[1:])
     with DDGS() as ddgs:
-        results = list(ddgs.text(query, max_results=1))
+        results = list(ddgs.text(query, max_results=5))
 
     if results:
-        print(results[0]["href"])
+        for i in range(len(results)):
+          print(results[i]["href"])
     else:
         print("No results found.", file=sys.stderr)
         sys.exit(1)
