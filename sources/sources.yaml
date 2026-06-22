@@ -14,6 +14,10 @@ sources:
     name: AbbVie Inc.
     ticker: ABBV
     ir_url: https://investors.abbvie.com/
+  - slug: accenture
+    name: Accenture plc
+    ticker: ACN
+    ir_url: https://investor.accenture.com/
   - slug: bls
     name: U.S. Bureau of Labor Statistics
     ir_url: https://www.bls.gov/newsrelease/
@@ -35,11 +39,23 @@ sources:
     ticker: FDX
     ir_url: https://newsroom.fedex.com/newsroom/global-english
     notes: Distributes press releases via Business Wire.
+  - slug: fox
+    name: Fox Corporation
+    ticker: FOXA
+    ir_url: https://investor.foxcorporation.com/
+  - slug: gen-digital
+    name: Gen Digital Inc.
+    ticker: GEN
+    ir_url: https://investor.gendigital.com/
   - slug: google
     name: Alphabet Inc. (Google)
     ticker: GOOGL
     ir_url: https://abc.xyz/investor/news/default.aspx
     notes: Investor relations hosted at abc.xyz.
+  - slug: moderna
+    name: Moderna, Inc.
+    ticker: MRNA
+    ir_url: https://investors.modernatx.com/
   - slug: nvidia
     name: NVIDIA Corporation
     ticker: NVDA
@@ -56,6 +72,10 @@ sources:
     name: Super Micro Computer, Inc.
     ticker: SMCI
     ir_url: https://ir.supermicro.com/
+  - slug: verisign
+    name: VeriSign, Inc.
+    ticker: VRSN
+    ir_url: https://investor.verisign.com/
   - slug: verizon
     name: Verizon Communications Inc.
     ticker: VZ
