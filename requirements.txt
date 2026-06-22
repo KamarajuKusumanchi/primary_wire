@@ -32,3 +32,22 @@ requests
 # Pin to a version with Windows wheels; 3.2.5 dropped them and requires MSVC to build from source
 # (greenlet is a transitive dependency: csvkit -> sqlalchemy -> greenlet)
 greenlet==3.2.0
+
+# On Windows, I am getting
+# $ python src/update_source.py
+# Ticker: smci
+# Looking up company name for SMCI...
+#   Lookup failed (Failed to perform, curl: (60) SSL certificate problem: unable to get local issuer certificate. See https://curl.se/libcurl/c/libcurl-errors.html first for more details.).
+#
+# I tried the following approaches:
+# 1) install pip-system-certs which patches Python's SSL to use the
+# Windows certificate store automatically. But it did not work.
+#
+# 2) install truststore which reads the Windows certificate store directly and
+# then added the following lines to python script
+#   import truststore
+#   truststore.inject_into_ssl()
+# That also did not work.
+#
+# 3) install python-certifi-win32. This fixed the issue.
+python-certifi-win32
