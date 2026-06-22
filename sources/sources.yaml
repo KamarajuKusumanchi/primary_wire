@@ -10,10 +10,18 @@
 
 sources:
 
+  - slug: abbvie
+    name: AbbVie Inc.
+    ticker: ABBV
+    ir_url: https://investors.abbvie.com/
   - slug: bls
     name: U.S. Bureau of Labor Statistics
     ir_url: https://www.bls.gov/newsrelease/
     notes: Covers CPI, jobs reports, and other BLS releases. No ticker.
+  - slug: coherent
+    name: Coherent Corp.
+    ticker: COHR
+    ir_url: https://www.coherent.com/company/investor-relations
   - slug: costco
     name: Costco Wholesale Corporation
     ticker: COST
@@ -36,6 +44,18 @@ sources:
     name: NVIDIA Corporation
     ticker: NVDA
     ir_url: https://investor.nvidia.com/news/press-releases/default.aspx
+  - slug: on-semiconductor
+    name: ON Semiconductor Corporation
+    ticker: ON
+    ir_url: https://investor.onsemi.com/
+  - slug: skyworks-solutions
+    name: Skyworks Solutions, Inc.
+    ticker: SWKS
+    ir_url: https://www.skyworksinc.com/investors
+  - slug: super-micro-computer
+    name: Super Micro Computer, Inc.
+    ticker: SMCI
+    ir_url: https://ir.supermicro.com/
   - slug: verizon
     name: Verizon Communications Inc.
     ticker: VZ
