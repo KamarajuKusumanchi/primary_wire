@@ -173,6 +173,8 @@ def main():
         print("Aborted. No changes written.")
         return
 
+    sources.sort(key=lambda s: s.get("slug", ""))
+
     with open(SOURCES_PATH, "w") as f:
         yaml.dump(data, f)
 
