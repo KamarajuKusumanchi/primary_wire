@@ -10,6 +10,7 @@ Usage:
 """
 
 import argparse
+import io
 from pathlib import Path
 
 import pandas as pd
@@ -27,7 +28,12 @@ def get_sp500_tickers() -> set[str]:
     url = "https://en.wikipedia.org/wiki/List_of_S%26P_500_companies"
     headers = {"User-Agent": "Mozilla/5.0 (compatible; primary_wire/1.0)"}
     html = requests.get(url, headers=headers, timeout=30).text
-    tables = pd.read_html(html)
+    # pandas 2.x requires a file-like object; bare HTML strings are treated as file paths by lxml
+    # So instead of doing
+    #   tables = pd.read_html(html)
+    # do
+    #   tables = pd.read_html(io.StringIO(html))
+    tables = pd.read_html(io.StringIO(html))
     df = tables[0]
     tickers = df["Symbol"].str.strip().tolist()
     # Wikipedia uses BRK.B; yfinance expects BRK-B
