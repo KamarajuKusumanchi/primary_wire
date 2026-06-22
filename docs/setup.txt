@@ -115,3 +115,21 @@ After reinstalling, confirm the install landed in the right place: the
 first line of ''uv pip install'' output should read
 ''Using Python ... environment at: <path>\.venv'' — not a path pointing
 into a Conda environment such as ''.conda\envs\...''.
+
+==== Invalid peer certificate ====
+
+If you are getting
+<code>
+$ uv pip install -r requirements.txt
+⠇ Resolving dependencies...
+  x Request failed after 3 retries in 5.2s
+  |-> Failed to fetch: `https://pypi.org/simple/pytest/`
+  |-> error sending request for url (https://pypi.org/simple/pytest/)
+  |-> client error (Connect)
+  `-> invalid peer certificate: UnknownIssuer
+  help: Consider enabling use of system TLS certificates with the `--system-certs` command-line flag
+</code>
+
+The uv tool is not able to verify the PyPI certificate - likely a corporate proxy using a custom CA. Try:
+
+  uv pip install -r requirements.txt --system-certs
