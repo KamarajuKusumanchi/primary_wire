@@ -13,7 +13,8 @@ Anyone can contribute by submitting a pull request.
   - Press release links are added manually to daily CSV files
   - Each file covers one calendar date: ''data/YYYY/YYYY-MM-DD.csv''
   - Contributions are made via GitHub pull requests
-  - No automated scrapers — humans verify every link
+  - Automated link collection is welcome — if you build a scraper and raise a
+    pull request, it will be accepted. Links are verified before merging.
 
 ===== Data format =====
 
