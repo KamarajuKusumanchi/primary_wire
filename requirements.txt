@@ -51,3 +51,6 @@ greenlet==3.2.0
 #
 # 3) install python-certifi-win32. This fixed the issue.
 python-certifi-win32
+
+# To get the IR URL
+ddgs
