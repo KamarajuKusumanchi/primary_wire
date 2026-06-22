@@ -91,12 +91,21 @@ dependencies are tangled — recreate it from scratch:
 
   deactivate
   uv venv --clear
+
+Activate the fresh environment:
+
+**Linux / Mac:**
   source .venv/bin/activate
 
-  uv pip install -r requirements.txt
+**Windows:**
+  .venv\Scripts\activate
 
-(On Windows, replace ''source .venv/bin/activate'' with
-''.venv\Scripts\activate''.)
+**git bash on Windows:**
+  source .venv/Scripts/activate
+
+Then reinstall dependencies:
+
+  uv pip install -r requirements.txt
 
 ''deactivate'' first if the environment is currently active. On Windows,
 the interpreter file inside an active venv is locked while in use, and

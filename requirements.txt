@@ -23,3 +23,12 @@ ruamel.yaml
 
 # Ticker -> company name lookup for update_source.py
 yfinance
+
+# S&P 500 ticker list scraping and data manipulation (used by src/missing_tickers.py)
+pandas
+lxml
+requests
+
+# Pin to a version with Windows wheels; 3.2.5 dropped them and requires MSVC to build from source
+# (greenlet is a transitive dependency: csvkit -> sqlalchemy -> greenlet)
+greenlet==3.2.0
