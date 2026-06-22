@@ -45,3 +45,7 @@ sources:
     name: Virtu Financial, Inc.
     ticker: VIRT
     ir_url: https://ir.virtu.com/
+  - slug: visa
+    name: Visa Inc.
+    ticker: V
+    ir_url: https://investor.visa.com/
