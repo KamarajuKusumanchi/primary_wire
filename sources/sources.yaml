@@ -22,10 +22,22 @@ sources:
     name: U.S. Bureau of Labor Statistics
     ir_url: https://www.bls.gov/newsrelease/
     notes: Covers CPI, jobs reports, and other BLS releases. No ticker.
+  - slug: chipotle
+    name: Chipotle Mexican Grill, Inc.
+    ticker: CMG
+    ir_url: https://ir.chipotle.com/
+  - slug: ciena
+    name: Ciena Corporation
+    ticker: CIEN
+    ir_url: https://investor.ciena.com/
   - slug: coherent
     name: Coherent Corp.
     ticker: COHR
     ir_url: https://www.coherent.com/company/investor-relations
+  - slug: corning
+    name: Corning Incorporated
+    ticker: GLW
+    ir_url: https://investor.corning.com/
   - slug: costco
     name: Costco Wholesale Corporation
     ticker: COST
@@ -68,6 +80,10 @@ sources:
     name: ON Semiconductor Corporation
     ticker: ON
     ir_url: https://investor.onsemi.com/
+  - slug: palantir
+    name: Palantir Technologies Inc.
+    ticker: PLTR
+    ir_url: https://investors.palantir.com/
   - slug: skyworks-solutions
     name: Skyworks Solutions, Inc.
     ticker: SWKS
