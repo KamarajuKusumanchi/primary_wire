@@ -10,16 +10,26 @@
 
 sources:
 
-  - slug: fedex
-    name: FedEx Corporation
-    ticker: FDX
-    ir_url: https://newsroom.fedex.com/newsroom/global-english
-    notes: Distributes press releases via Business Wire.
+  - slug: bls
+    name: U.S. Bureau of Labor Statistics
+    ir_url: https://www.bls.gov/newsrelease/
+    notes: Covers CPI, jobs reports, and other BLS releases. No ticker.
 
   - slug: costco
     name: Costco Wholesale Corporation
     ticker: COST
     ir_url: https://investor.costco.com/news/default.aspx
+
+  - slug: doordash
+    name: DoorDash, Inc.
+    ticker: DASH
+    ir_url: https://ir.doordash.com/
+
+  - slug: fedex
+    name: FedEx Corporation
+    ticker: FDX
+    ir_url: https://newsroom.fedex.com/newsroom/global-english
+    notes: Distributes press releases via Business Wire.
 
   - slug: google
     name: Alphabet Inc. (Google)
@@ -32,19 +42,11 @@ sources:
     ticker: NVDA
     ir_url: https://investor.nvidia.com/news/press-releases/default.aspx
 
-  - slug: bls
-    name: U.S. Bureau of Labor Statistics
-    ir_url: https://www.bls.gov/newsrelease/
-    notes: Covers CPI, jobs reports, and other BLS releases. No ticker.
-  - slug: doordash
-    name: DoorDash, Inc.
-    ticker: DASH
-    ir_url: https://ir.doordash.com/
-
   - slug: virtu
     name: Virtu Financial, Inc.
     ticker: VIRT
     ir_url: https://ir.virtu.com/
+
   - slug: visa
     name: Visa Inc.
     ticker: V
