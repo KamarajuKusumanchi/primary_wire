@@ -8,10 +8,16 @@ are interested in helping expand coverage, contributions are welcome.
 ==== Goal ====
 
 Build an open, community-maintained aggregator of official press release links,
-covering S&P 500 companies and government agencies (Fed, BLS, etc.). The
-long-term aim is to make link collection as automated as possible — scrapers and
-automated PRs are explicitly welcome. Manual curation is the starting point, not
-the end state.
+covering S&P 500 companies and government agencies (Fed, BLS, etc.).
+
+This project exists to support personal research into the relationship between
+company announcements and market behavior — for example, quantifying the stock
+price impact following a specific press release, or working backward from an
+unusual price move to identify whether a press release preceded it.
+
+Free to use. Free to build on. If you make a million dollars off it, good for
+you. If you want to say thanks, the author drinks tea — preferably with masala
+bathani or cut mirchi on the side.
 
 ==== Scope ====
 
@@ -21,16 +27,35 @@ S&P 500 provided they trade in U.S. markets.
 
 No third-party articles. No editorializing. Just the primary source.
 
+This project stores URLs only. No press release content is reproduced or
+cached. All links point to the originating company's own servers.
+
 Data is maintained as plain CSV files in a git repository — one file per day.
 Anyone can contribute by submitting a pull request.
+
+Data is provided as-is with no guarantees of completeness or accuracy. This
+is not financial advice.
 
 ===== How it works =====
 
   - Press release links are currently added manually to daily CSV files
   - Each file covers one calendar date: ''data/YYYY/YYYY-MM-DD.csv''
   - Contributions are made via GitHub pull requests
-  - Automated link collection is welcome — if you build a scraper and raise a
-    pull request, it will be accepted. Links are verified before merging.
+  - Automated link collection is welcome, provided contributors follow the
+    guidelines below. Links are verified before merging.
+
+===== Guidelines for automated contributions =====
+
+Scrapers are welcome, but must be courteous to the servers they access:
+
+  - Space requests at least 10–30 seconds apart per domain
+  - Run scrapers at most once per day — more frequent polling is unnecessary
+    and inconsiderate
+  - If a server returns errors or rate-limit responses, back off immediately
+    and do not retry aggressively
+  - Treat these servers as a shared public resource, not a firehose
+
+Scrapers that ignore these guidelines will not have their PRs accepted.
 
 ===== Data format =====
 
