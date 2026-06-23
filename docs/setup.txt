@@ -116,7 +116,7 @@ first line of ''uv pip install'' output should read
 ''Using Python ... environment at: <path>\.venv'' — not a path pointing
 into a Conda environment such as ''.conda\envs\...''.
 
-==== Invalid peer certificate ====
+===== Invalid peer certificate =====
 
 If you are getting
 <code>

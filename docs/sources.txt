@@ -31,9 +31,9 @@ This guide covers how to add new sources to ''sources/sources.yaml''.
 ===== Slug naming conventions =====
 
   * Lowercase only
-  * No spaces — use underscores if needed (e.g. ''bank_of_america'')
+  * No spaces — use hyphens if needed (e.g. ''bank-of-america'')
   * Keep it short and obvious
-  * Use the company's common name, not legal name (e.g. ''jnj'' not ''johnson_and_johnson'')
+  * Use the company's common name, not legal name (e.g. ''jnj'' not ''johnson-and-johnson'')
 
 ===== Non-company sources =====
 
