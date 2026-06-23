@@ -28,6 +28,7 @@ except ImportError:
 REPO_ROOT = Path(__file__).resolve().parent.parent
 SOURCES_PATH = REPO_ROOT / "sources" / "sources.yaml"
 CSV_FIELDS = ["slug", "ticker", "title", "url", "publish_datetime"]
+SORT_FIELDS = ["publish_datetime", "slug", "ticker", "title", "url"]
 
 
 # ---------------------------------------------------------------------------
@@ -182,7 +183,6 @@ def main():
     df = pd.concat([df, new_row], ignore_index=True) # append new row
 
     # 11. Sort and write
-    SORT_FIELDS = ["publish_datetime", "slug", "ticker", "title", "url"]
     df = df.sort_values(SORT_FIELDS).reset_index(drop=True)
     write_csv(csv_path, df)
 
