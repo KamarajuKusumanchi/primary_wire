@@ -18,10 +18,18 @@ sources:
     name: Accenture plc
     ticker: ACN
     ir_url: https://investor.accenture.com/
+  - slug: axon
+    name: Axon Enterprise, Inc.
+    ticker: AXON
+    ir_url: https://investor.axon.com/
   - slug: bls
     name: U.S. Bureau of Labor Statistics
     ir_url: https://www.bls.gov/newsrelease/
     notes: Covers CPI, jobs reports, and other BLS releases. No ticker.
+  - slug: cdw
+    name: CDW Corporation
+    ticker: CDW
+    ir_url: https://investor.cdw.com/
   - slug: chipotle
     name: Chipotle Mexican Grill, Inc.
     ticker: CMG
@@ -34,6 +42,10 @@ sources:
     name: Coherent Corp.
     ticker: COHR
     ir_url: https://www.coherent.com/company/investor-relations
+  - slug: conagra
+    name: Conagra Brands, Inc.
+    ticker: CAG
+    ir_url: https://www.conagrabrands.com/investor-relations
   - slug: corning
     name: Corning Incorporated
     ticker: GLW
@@ -51,6 +63,10 @@ sources:
     ticker: FDX
     ir_url: https://newsroom.fedex.com/newsroom/global-english
     notes: Distributes press releases via Business Wire.
+  - slug: fedex-freight
+    name: FedEx Freight Holding Company, Inc.
+    ticker: FDXF
+    ir_url: https://ir.fedexfreight.com/
   - slug: fox
     name: Fox Corporation
     ticker: FOXA
@@ -64,6 +80,10 @@ sources:
     ticker: GOOGL
     ir_url: https://abc.xyz/investor/news/default.aspx
     notes: Investor relations hosted at abc.xyz.
+  - slug: ibm
+    name: International Business Machines Corporation
+    ticker: IBM
+    ir_url: https://www.ibm.com/investor
   - slug: moderna
     name: Moderna, Inc.
     ticker: MRNA
@@ -88,6 +108,10 @@ sources:
     name: Palantir Technologies Inc.
     ticker: PLTR
     ir_url: https://investors.palantir.com/
+  - slug: sandisk
+    name: Sandisk Corporation
+    ticker: SNDK
+    ir_url: https://investor.sandisk.com/
   - slug: skyworks-solutions
     name: Skyworks Solutions, Inc.
     ticker: SWKS
