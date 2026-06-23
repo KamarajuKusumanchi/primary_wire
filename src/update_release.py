@@ -237,7 +237,7 @@ def main():
         print(f"Detected title: {fetched_title}")
         title = fetched_title if confirm("Does this title look correct?") else prompt("Enter correct title")
     else:
-        print("Could not auto-detect title.")
+        print("Could not extract title (page may require JavaScript). Please enter it manually.")
         title = prompt("Enter title")
 
     raw_dt = extract_dateline(soup) if soup else None
@@ -251,7 +251,7 @@ def main():
             raw = prompt("Enter publish_datetime (e.g. 2026-06-01 or June 1, 2026 05:30 AM ET)")
             publish_datetime = normalize_datetime(raw) or raw
     else:
-        print("Could not auto-detect publish date/time.")
+        print("Could not extract publish date/time (page may require JavaScript). Please enter it manually.")
         raw = prompt("Enter publish_datetime (e.g. 2026-06-01 or June 1, 2026 05:30 AM ET)")
         publish_datetime = normalize_datetime(raw) or raw
 
