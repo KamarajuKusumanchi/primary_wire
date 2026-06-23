@@ -83,10 +83,9 @@ sources:
     ticker: GEN
     ir_url: https://investor.gendigital.com/
   - slug: google
-    name: Alphabet Inc. (Google)
+    name: Alphabet Inc.
     ticker: GOOGL
-    ir_url: https://abc.xyz/investor/news/default.aspx
-    notes: Investor relations hosted at abc.xyz.
+    ir_url: https://abc.xyz/investor/
   - slug: ibm
     name: International Business Machines Corporation
     ticker: IBM
