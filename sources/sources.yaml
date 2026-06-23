@@ -30,6 +30,10 @@ sources:
     name: CDW Corporation
     ticker: CDW
     ir_url: https://investor.cdw.com/
+  - slug: charter
+    name: Charter Communications, Inc.
+    ticker: CHTR
+    ir_url: https://ir.charter.com/
   - slug: chipotle
     name: Chipotle Mexican Grill, Inc.
     ticker: CMG
@@ -71,6 +75,10 @@ sources:
     name: Fox Corporation
     ticker: FOXA
     ir_url: https://investor.foxcorporation.com/
+  - slug: ge-healthcare
+    name: GE HealthCare Technologies Inc.
+    ticker: GEHC
+    ir_url: https://investor.gehealthcare.com/
   - slug: gen-digital
     name: Gen Digital Inc.
     ticker: GEN
