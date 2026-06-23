@@ -72,6 +72,10 @@ sources:
     name: Netflix, Inc.
     ticker: NFLX
     ir_url: https://ir.netflix.net
+  - slug: nike
+    name: NIKE, Inc.
+    ticker: NKE
+    ir_url: https://investors.nike.com/
   - slug: nvidia
     name: NVIDIA Corporation
     ticker: NVDA
