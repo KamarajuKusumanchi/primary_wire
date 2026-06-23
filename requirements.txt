@@ -54,3 +54,6 @@ python-certifi-win32
 
 # To get the IR URL
 ddgs
+
+# To fetch aspx pages
+playwright
