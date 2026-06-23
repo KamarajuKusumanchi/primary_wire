@@ -65,8 +65,7 @@ sources:
   - slug: fedex
     name: FedEx Corporation
     ticker: FDX
-    ir_url: https://newsroom.fedex.com/newsroom/global-english
-    notes: Distributes press releases via Business Wire.
+    ir_url: https://investors.fedex.com/
   - slug: fedex-freight
     name: FedEx Freight Holding Company, Inc.
     ticker: FDXF
