@@ -96,24 +96,15 @@ def prompt_for_slug(sources, suggested: str, exclude_ticker: Optional[str] = Non
         return slug
 
 
-def handle_notes(existing) -> None:
-    """Mutates `existing` in place: keep / update / delete the notes field."""
-    current = existing.get("notes")
-    display = current if current else "(none)"
-    print(f"Current notes: {display}")
-    while True:
-        choice = input("Keep / Update / Delete notes? [k/u/d]: ").strip().lower()
-        if choice in ("k", "keep", ""):
-            return
-        if choice in ("u", "update"):
-            new_notes = input("New notes: ").strip()
-            existing["notes"] = new_notes
-            return
-        if choice in ("d", "delete"):
-            if "notes" in existing:
-                del existing["notes"]
-            return
-        print("  Please answer k, u, or d.")
+def prompt_optional(text: str, default: str = "") -> Optional[str]:
+    """Prompt for an optional field. Enter keeps the current value, typing replaces it, '-' deletes it."""
+    suffix = f" [{default}]" if default else ""
+    val = input(f"{text}{suffix}: ").strip()
+    if val == "-":
+        return None
+    if val == "":
+        return default or None
+    return val
 
 
 def main():
@@ -153,7 +144,11 @@ def main():
         existing["slug"] = slug
         existing["name"] = name
         existing["ir_url"] = ir_url
-        handle_notes(existing)
+        notes = prompt_optional("Notes", default=existing.get("notes", ""))
+        if notes:
+            existing["notes"] = notes
+        elif "notes" in existing:
+            del existing["notes"]
         entry = existing
         action = "Updated"
     else:
