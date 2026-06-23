@@ -25,18 +25,17 @@ Anyone can contribute by submitting a pull request.
 
 Each daily CSV file has five columns:
 
-^ Column       ^ Description                                      ^
-| slug         | Short identifier for the organization (e.g. ''fedex'') |
-| ticker       | Stock ticker symbol (empty for govt sources)     |
-| title        | Press release title                              |
-| url          | Link to the full press release                   |
-| publish_date | Date published in YYYY-MM-DD format              |
+^ Column           ^ Description                                      ^
+| slug             | Short identifier for the organization (e.g. ''fedex'') |
+| ticker           | Stock ticker symbol (empty for govt sources)     |
+| title            | Press release title                              |
+| url              | Link to the full press release                   |
+| publish_datetime | Date published in YYYY-MM-DD format. Time added if available |
 
 Example: ''data/2026/2026-06-01.csv''
 
-  slug,ticker,title,url,publish_date
-  fedex,FDX,FedEx Completes Spin-Off of FedEx Freight,https://newsroom.fedex.com/...,2026-06-01
-  bls,,CPI May 2026,https://bls.gov/...,2026-06-01
+  slug,ticker,title,url,publish_datetime
+  fedex,FDX,FedEx Completes Spin-Off of FedEx Freight,https://newsroom.fedex.com/...,2026-06-01 05:30 AM
 
 ===== Project structure =====
 
