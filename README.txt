@@ -19,6 +19,39 @@ Free to use. Free to build on. If you make a million dollars off it, good for
 you. If you want to say thanks, the author drinks tea — preferably with masala
 bathani or cut mirchi on the side.
 
+==== Motivation ====
+
+The obvious question is: why not just use an existing data source? The short
+answer is that none of the free ones are actually suitable for this purpose.
+
+Business Wire, PR Newswire, and GlobeNewswire are open publishing platforms —
+any company or individual can pay to distribute through them. Their feeds
+contain a mix of official company announcements, third-party commentary,
+sponsored content, and noise. Filtering that down to only genuine press releases
+from a specific company is a non-trivial problem, and even then you are relying
+on the company choosing to distribute through that wire service, which is not
+always the case.
+
+SEC EDGAR is a different problem. Companies file 8-Ks for material events, and
+press releases are sometimes attached as exhibits. But many press releases —
+product announcements, partnerships, executive appointments below C-suite level
+— never trigger an 8-K filing at all. EDGAR gives you a biased sample skewed
+toward regulatory disclosures, not the full picture of what a company is
+communicating publicly. An 8-K and a press release are not the same thing.
+
+The only clean approach is to go directly to each company's investor relations
+page — the same page the company points investors to. That is what this project
+does. It is more work, but it is the only way to be confident that what you have
+is actually what the company intended to say, sourced from where the company
+intended it to be read.
+
+A secondary benefit is that consolidating these links into a single,
+machine-readable dataset makes quantitative research more accessible. Studying
+the relationship between press releases and market behavior currently requires
+either expensive data subscriptions or a lot of manual work. A clean, open,
+structured index of primary sources lowers that barrier and makes the research
+itself easier to reproduce and share.
+
 ==== Scope ====
 
 The project primarily aims to cover S&P 500 companies, plus government
