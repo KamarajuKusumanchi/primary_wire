@@ -1,7 +1,12 @@
 ====== primary_wire ======
 
-A community-maintained aggregator of official press release links from S&P 500
-companies and government agencies (Fed, BLS, etc.).
+A community-maintained aggregator of official press release links.
+
+==== Scope ====
+
+The project primarily aims to cover S&P 500 companies, plus government
+agencies (Fed, BLS, etc.). Contributors may also add companies outside the
+S&P 500 provided they trade in U.S. markets.
 
 No third-party articles. No editorializing. Just the primary source.
 

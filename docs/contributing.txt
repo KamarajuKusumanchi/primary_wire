@@ -5,7 +5,9 @@ links by submitting a GitHub pull request.
 
 ===== What to contribute =====
 
-  * Official press releases from S&P 500 companies
+  * Official press releases from S&P 500 companies (primary focus)
+  * Official press releases from companies outside the S&P 500 are also
+    welcome provided those companies trade in U.S. markets
   * Releases from government agencies (Fed, BLS, SEC, etc.)
   * Links must point directly to the original source — no third-party articles
   * One pull request per day's worth of data is preferred
