@@ -34,15 +34,26 @@ try:
 except ImportError:
     sys.exit("Missing dependency. Install with: pip install ruamel.yaml")
 
-# Assumes this script lives in <repo_root>/src/update_release.py
+
 REPO_ROOT = Path(__file__).resolve().parent.parent
 SOURCES_PATH = REPO_ROOT / "sources" / "sources.yaml"
-
 CSV_FIELDS = ["slug", "ticker", "title", "url", "publish_datetime"]
+HEADERS = {"User-Agent": "Mozilla/5.0"}
+
+# Matches a press-release dateline in the body, e.g.:
+#   "NEW YORK, June 1, 2026 /PRNewswire/ --"
+#   "DALLAS, June 2, 2026 --"
+#   "June 3, 2026 /GlobeNewswire/"
+DATELINE_RE = re.compile(
+    r"(?:[A-Z][A-Z ,\.]+,\s*)?"                               # optional CITY,
+    r"((?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)"   # month abbrev
+    r"[a-z]*\s+\d{1,2},\s+\d{4}"                             # D, YYYY
+    r"(?:\s+\d{1,2}:\d{2}\s*[AP]M)?)",                       # optional time
+)
 
 
 # ---------------------------------------------------------------------------
-# Helpers
+# UI helpers
 # ---------------------------------------------------------------------------
 
 def prompt(text: str, default: Optional[str] = None) -> str:
@@ -66,45 +77,36 @@ def confirm(text: str) -> bool:
         print("  Please answer y or n.")
 
 
-def load_sources():
-    yaml = YAML()
-    yaml.preserve_quotes = True
-    with open(SOURCES_PATH) as f:
-        data = yaml.load(f)
-    return data["sources"]
+# ---------------------------------------------------------------------------
+# Source matching
+# ---------------------------------------------------------------------------
 
-
-def find_source_by_url(sources, url: str) -> Optional[dict]:
+def find_source_by_url(sources: list, url: str) -> Optional[dict]:
     """
-    Match a press-release URL against sources by checking whether the URL
-    starts with (or shares the host of) any known ir_url.
-    Falls back to hostname substring matching.
+    Match a press-release URL to a source in sources.yaml.
+    Tries prefix match on ir_url first, then falls back to hostname match.
     """
-    parsed_url = urlparse(url)
-    url_host = parsed_url.netloc.lower().lstrip("www.")
-
-    # Try strict prefix match on ir_url first
     for source in sources:
         ir_url = source.get("ir_url", "")
         if ir_url and url.startswith(ir_url):
             return source
 
-    # Then hostname containment: url host contains source host or vice versa
+    url_host = urlparse(url).netloc.lstrip("www.")
     for source in sources:
         ir_url = source.get("ir_url", "")
-        if not ir_url:
-            continue
-        ir_host = urlparse(ir_url).netloc.lower().lstrip("www.")
-        if ir_host and (ir_host in url_host or url_host in ir_host):
+        if ir_url and urlparse(ir_url).netloc.lstrip("www.") == url_host:
             return source
 
     return None
 
 
-def fetch_page(url: str):
-    """Fetch URL and return a BeautifulSoup object, or None on failure."""
+# ---------------------------------------------------------------------------
+# Page fetching and extraction
+# ---------------------------------------------------------------------------
+
+def fetch_page(url: str) -> Optional[BeautifulSoup]:
     try:
-        resp = requests.get(url, timeout=15, headers={"User-Agent": "Mozilla/5.0"})
+        resp = requests.get(url, timeout=15, headers=HEADERS)
         resp.raise_for_status()
         return BeautifulSoup(resp.text, "html.parser")
     except Exception as e:
@@ -112,8 +114,7 @@ def fetch_page(url: str):
         return None
 
 
-def extract_title(soup) -> Optional[str]:
-    """Extract page title from a BeautifulSoup object."""
+def extract_title(soup: BeautifulSoup) -> Optional[str]:
     og = soup.find("meta", property="og:title")
     if og and og.get("content"):
         return og["content"].strip()
@@ -122,216 +123,79 @@ def extract_title(soup) -> Optional[str]:
     return None
 
 
-def extract_publish_datetime(soup) -> Optional[str]:
+def extract_dateline(soup: BeautifulSoup) -> Optional[str]:
     """
-    Try to extract a publish date/time string from a BeautifulSoup object.
-
-    Tries, in order:
-      1. Common meta tags (article:published_time, publishdate, date, etc.)
-      2. JSON-LD structured data (datePublished)
-      3. <time> elements with datetime attribute or itemprop
-      4. Elements whose class or id contains date/time/publish hints
-         (covers Business Wire, GlobeNewswire, Q4/Nasdaq IR, and similar)
-      5. Press-release dateline in the first few paragraphs:
-         e.g. "NEW YORK, June 1, 2026 /PRNewswire/ --"
-         or   "DALLAS, June 1, 2026 --"
+    Search the first 30 short elements for a press-release dateline, e.g.:
+      "NEW YORK, June 1, 2026 /PRNewswire/ --"
+    Returns just the date (and time if present), e.g. "June 1, 2026 05:30 AM".
     """
-    import json as _json
-
-    # 1. Meta tags
-    meta_candidates = [
-        ("meta", {"property": "article:published_time"}),
-        ("meta", {"name": "publishdate"}),
-        ("meta", {"name": "date"}),
-        ("meta", {"name": "DC.date"}),
-        ("meta", {"itemprop": "datePublished"}),
-    ]
-    for tag, attrs in meta_candidates:
-        el = soup.find(tag, attrs)
-        if el:
-            val = el.get("content") or el.get("datetime") or (el.string or "")
-            val = val.strip()
-            if val:
-                return val
-
-    # 2. JSON-LD
-    for script in soup.find_all("script", type="application/ld+json"):
-        try:
-            data = _json.loads(script.string or "")
-            # data may be a dict or a list
-            items = data if isinstance(data, list) else [data]
-            for item in items:
-                val = item.get("datePublished") or item.get("dateModified")
-                if val:
-                    return val.strip()
-        except Exception:
-            pass
-
-    # 3. <time> elements
-    for el in soup.find_all("time"):
-        val = el.get("datetime") or el.get_text(strip=True)
-        if val:
-            return val.strip()
-
-    # 4. Elements with date/publish hints in class or id
-    # Covers: bwdate (Business Wire), release-date, publish-date,
-    # article-date, date, dateline, pressrelease-date, etc.
-    DATE_HINTS = re.compile(
-        r"\b(date|publish|release.?date|dateline|article.?date|pr.?date|posted)\b",
-        re.I,
-    )
-    for el in soup.find_all(True):
-        cls = " ".join(el.get("class", []))
-        eid = el.get("id", "")
-        if DATE_HINTS.search(cls) or DATE_HINTS.search(eid):
-            txt = el.get_text(separator=" ", strip=True)
-            if txt and len(txt) < 120:  # avoid grabbing huge containers
-                return txt
-
-    # 5. Dateline in body paragraphs
-    # Pattern: optional ALL-CAPS CITY, then "Month D, YYYY" possibly followed
-    # by wire service tag and em-dash.
-    # Examples:
-    #   "NEW YORK, June 1, 2026 /PRNewswire/ --"
-    #   "DALLAS, June 1, 2026 --"
-    #   "June 1, 2026 /GlobeNewswire/"
-    DATELINE_RE = re.compile(
-        r"(?:[A-Z][A-Z ,\.]+,\s*)?"  # optional CITY prefix
-        r"((?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*"
-        r"\s+\d{1,2},\s+\d{4}"  # Month D, YYYY
-        r"(?:\s+\d{1,2}:\d{2}\s*[AP]M)?)"  # optional time
-        r"(?:\s*/[^/]+/)?"  # optional /WireName/
-        r"(?:\s+[-–])?",  # optional dash
-        re.I,
-    )
-    for p in soup.find_all(["p", "div", "span"], limit=30):
-        txt = p.get_text(separator=" ", strip=True)
-        # Only look at short-ish elements that look like datelines
-        if len(txt) > 300:
-            continue
-        m = DATELINE_RE.search(txt)
-        if m:
-            return m.group(1).strip()
-
+    for el in soup.find_all(["p", "div", "span"], limit=30):
+        txt = el.get_text(separator=" ", strip=True)
+        if len(txt) < 300:
+            m = DATELINE_RE.search(txt)
+            if m:
+                return m.group(1).strip()
     return None
 
 
-def parse_and_normalize_date(raw: str) -> Optional[str]:
-    """
-    Parse a raw datetime string. Return it with the date portion converted to
-    YYYY-MM-DD, preserving any time and timezone information as-is.
+# ---------------------------------------------------------------------------
+# Date normalisation
+# ---------------------------------------------------------------------------
 
-    Strategy:
-      1. If raw contains YYYY-MM-DD (possibly with ISO T separator), normalise
-         in place and keep the rest of the string verbatim.
-      2. Otherwise try common written forms ("June 1, 2026 05:30 AM ET"),
-         preserving the time/tz suffix that strptime cannot consume.
+def normalize_datetime(raw: str) -> Optional[str]:
+    """
+    Convert a dateline date string like "June 1, 2026 05:30 AM ET" to
+    "YYYY-MM-DD [time] [tz]" format. Returns None if it cannot be parsed.
     """
     raw = raw.strip()
-
-    # 1a. ISO 8601 with T separator: "2026-06-10T08:30:00-05:00"
-    #     Collapse the T to a space; keep the rest (time + tz offset) as-is.
-    m = re.match(r"(\d{4}-\d{2}-\d{2})T(.+)", raw)
-    if m:
-        return f"{m.group(1)} {m.group(2)}"
-
-    # 1b. YYYY-MM-DD already present (possibly followed by time/tz)
-    m = re.match(r"(\d{4}-\d{2}-\d{2})(.*)", raw)
-    if m:
-        rest = m.group(2).strip()
-        return f"{m.group(1)} {rest}".strip() if rest else m.group(1)
-
-    # 2. Written-form dates: try progressively less specific patterns,
-    #    but preserve any trailing time/tz text that strptime ignores.
-    #
-    #    We extract just the date-and-optional-time part, convert it to
-    #    YYYY-MM-DD, then re-attach any trailing text (e.g. timezone).
-    #
-    #    Patterns ordered from most to least specific so the right one
-    #    matches first.
-    DATE_PART_RE = re.compile(
+    # Split into the part strptime can handle and any trailing timezone text
+    # e.g. "June 1, 2026 05:30 AM" + " ET"
+    m = re.match(
         r"((?:Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|Jun(?:e)?|"
         r"Jul(?:y)?|Aug(?:ust)?|Sep(?:tember)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?)"
         r"\s+\d{1,2},?\s+\d{4}"
-        r"(?:\s+\d{1,2}:\d{2}(?::\d{2})?\s*[AP]M)?)"  # optional time
-        r"(.*)",  # trailing text (tz etc.)
-        re.I,
+        r"(?:\s+\d{1,2}:\d{2}(?::\d{2})?\s*[AP]M)?)"  # optional HH:MM[:SS] AM/PM
+        r"(.*)",                                          # trailing timezone
+        raw, re.I,
     )
-    m = DATE_PART_RE.match(raw)
-    if m:
-        date_and_time = m.group(1).strip()
-        trailing = m.group(2).strip()  # e.g. "ET", "EST", "Eastern Time"
+    if not m:
+        return None
 
-        patterns = [
-            "%B %d, %Y %I:%M:%S %p",
-            "%B %d, %Y %I:%M %p",
-            "%B %d %Y %I:%M %p",
-            "%B %d, %Y",
-            "%b %d, %Y %I:%M:%S %p",
-            "%b %d, %Y %I:%M %p",
-            "%b %d %Y %I:%M %p",
-            "%b %d, %Y",
-        ]
-        for pat in patterns:
-            try:
-                dt = datetime.strptime(date_and_time, pat)
-                date_str = dt.strftime("%Y-%m-%d")
-                # Reconstruct: keep time portion from original string if present
-                # by re-attaching everything after the date.
-                time_re = re.search(
-                    r"\d{1,2}:\d{2}(?::\d{2})?\s*[AP]M", date_and_time, re.I
-                )
-                time_part = time_re.group(0).strip() if time_re else ""
-                parts = [date_str]
-                if time_part:
-                    parts.append(time_part)
-                if trailing:
-                    parts.append(trailing)
-                return " ".join(parts)
-            except ValueError:
-                pass
+    date_time_part = m.group(1).strip()
+    trailing_tz = m.group(2).strip()
 
-    # 3. Numeric: MM/DD/YYYY [H:MM AM tz]
-    m = re.match(r"(\d{1,2})/(\d{1,2})/(\d{4})(.*)", raw)
-    if m:
+    for fmt in [
+        "%B %d, %Y %I:%M:%S %p", "%B %d, %Y %I:%M %p", "%B %d, %Y",
+        "%b %d, %Y %I:%M:%S %p", "%b %d, %Y %I:%M %p", "%b %d, %Y",
+    ]:
         try:
-            dt = datetime.strptime(f"{m.group(1)}/{m.group(2)}/{m.group(3)}", "%m/%d/%Y")
-            rest = m.group(4).strip()
+            dt = datetime.strptime(date_time_part, fmt)
             date_str = dt.strftime("%Y-%m-%d")
-            return f"{date_str} {rest}".strip() if rest else date_str
+            time_m = re.search(r"\d{1,2}:\d{2}(?::\d{2})?\s*[AP]M", date_time_part, re.I)
+            time_part = time_m.group(0).strip() if time_m else ""
+            return " ".join(filter(None, [date_str, time_part, trailing_tz]))
         except ValueError:
             pass
 
     return None
 
 
+# ---------------------------------------------------------------------------
+# CSV helpers
+# ---------------------------------------------------------------------------
+
 def csv_path_for_date(date_str: str) -> Path:
-    """Return data/YYYY/YYYY-MM-DD.csv path for a given YYYY-MM-DD date string."""
-    year = date_str[:4]
-    return REPO_ROOT / "data" / year / f"{date_str}.csv"
+    return REPO_ROOT / "data" / date_str[:4] / f"{date_str}.csv"
 
 
-def extract_date_from_publish_datetime(publish_datetime: str) -> Optional[str]:
-    """Pull YYYY-MM-DD from a publish_datetime string."""
-    m = re.match(r"(\d{4}-\d{2}-\d{2})", publish_datetime)
-    return m.group(1) if m else None
-
-
-def load_csv(path: Path) -> list[dict]:
+def load_csv(path: Path) -> list:
     if not path.exists():
         return []
     with open(path, newline="", encoding="utf-8") as f:
         return list(csv.DictReader(f))
 
 
-def entry_exists(rows: list[dict], slug: str, ticker: str, url: str) -> bool:
-    for row in rows:
-        if row.get("slug") == slug and row.get("ticker") == ticker and row.get("url") == url:
-            return True
-    return False
-
-
-def write_csv(path: Path, rows: list[dict]) -> None:
+def write_csv(path: Path, rows: list) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     with open(path, "w", newline="", encoding="utf-8") as f:
         writer = csv.DictWriter(f, fieldnames=CSV_FIELDS)
@@ -339,27 +203,21 @@ def write_csv(path: Path, rows: list[dict]) -> None:
         writer.writerows(rows)
 
 
-def sort_rows(rows: list[dict]) -> list[dict]:
-    return sorted(rows, key=lambda r: (
-        r.get("slug", ""),
-        r.get("ticker", ""),
-        r.get("title", ""),
-        r.get("publish_datetime", ""),
-    ))
-
-
 # ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
 
 def main():
-    # 1. Prompt for URL
-    url = prompt("Press-release URL").strip()
+    # 1. URL
+    url = prompt("Press-release URL")
 
-    # 2. Determine slug and ticker from sources.yaml
-    sources = load_sources()
+    # 2. Match to a source
+    yaml = YAML()
+    yaml.preserve_quotes = True
+    with open(SOURCES_PATH) as f:
+        sources = yaml.load(f)["sources"]
+
     source = find_source_by_url(sources, url)
-
     if source is None:
         print("\nCould not match this URL to any entry in sources/sources.yaml.")
         print("Please add the source first.")
@@ -370,45 +228,34 @@ def main():
     ticker = source.get("ticker", "")
     print(f"\nMatched source: slug='{slug}', ticker='{ticker}' ({source.get('name', '')})")
 
-    # 3 & 4. Fetch page once, extract title and publish_datetime
+    # 3 & 4. Fetch page once; extract title and publish_datetime
     print("\nFetching page...")
     soup = fetch_page(url)
 
-    # Title
     fetched_title = extract_title(soup) if soup else None
     if fetched_title:
         print(f"Detected title: {fetched_title}")
-        if not confirm("Does this title look correct?"):
-            title = prompt("Enter correct title")
-        else:
-            title = fetched_title
+        title = fetched_title if confirm("Does this title look correct?") else prompt("Enter correct title")
     else:
         print("Could not auto-detect title.")
         title = prompt("Enter title")
 
-    # Publish datetime
-    raw_dt = extract_publish_datetime(soup) if soup else None
-    suggested_dt = None
-    if raw_dt:
-        suggested_dt = parse_and_normalize_date(raw_dt)
-        if not suggested_dt:
-            print(f"Found raw date string but could not parse it: {raw_dt!r}")
+    raw_dt = extract_dateline(soup) if soup else None
+    suggested_dt = normalize_datetime(raw_dt) if raw_dt else None
 
     if suggested_dt:
         print(f"Detected publish_datetime: {suggested_dt}")
-        if not confirm("Does this publish_datetime look correct?"):
-            raw_input = prompt("Enter publish_datetime (date must be YYYY-MM-DD; include time/tz if known)")
-            normalized = parse_and_normalize_date(raw_input)
-            publish_datetime = normalized if normalized else raw_input
-        else:
+        if confirm("Does this publish_datetime look correct?"):
             publish_datetime = suggested_dt
+        else:
+            raw = prompt("Enter publish_datetime (e.g. 2026-06-01 or June 1, 2026 05:30 AM ET)")
+            publish_datetime = normalize_datetime(raw) or raw
     else:
         print("Could not auto-detect publish date/time.")
-        raw_input = prompt("Enter publish_datetime (date must be YYYY-MM-DD; include time/tz if known)")
-        normalized = parse_and_normalize_date(raw_input)
-        publish_datetime = normalized if normalized else raw_input
+        raw = prompt("Enter publish_datetime (e.g. 2026-06-01 or June 1, 2026 05:30 AM ET)")
+        publish_datetime = normalize_datetime(raw) or raw
 
-    # 5. Confirm final values
+    # 5. Confirm and save
     print("\n--- Confirm entry ---")
     print(f"  slug:             {slug}")
     print(f"  ticker:           {ticker}")
@@ -421,29 +268,24 @@ def main():
         print("Aborted. No changes written.")
         return
 
-    # Determine target CSV path
-    date_str = extract_date_from_publish_datetime(publish_datetime)
-    if not date_str:
-        print(f"Error: could not extract a YYYY-MM-DD date from publish_datetime '{publish_datetime}'.")
+    date_m = re.match(r"(\d{4}-\d{2}-\d{2})", publish_datetime)
+    if not date_m:
+        print(f"Error: could not extract a YYYY-MM-DD date from '{publish_datetime}'.")
         sys.exit(1)
 
-    csv_path = csv_path_for_date(date_str)
+    csv_path = csv_path_for_date(date_m.group(1))
     rows = load_csv(csv_path)
 
-    new_entry = {
-        "slug": slug,
-        "ticker": ticker,
-        "title": title,
-        "url": url,
-        "publish_datetime": publish_datetime,
-    }
-
-    if entry_exists(rows, slug, ticker, url):
+    if any(row.get("url") == url for row in rows):
         print(f"\nEntry already exists in {csv_path.relative_to(REPO_ROOT)}. No changes made.")
         return
 
-    rows.append(new_entry)
-    rows = sort_rows(rows)
+    rows = sorted(
+        rows + [{"slug": slug, "ticker": ticker, "title": title,
+                 "url": url, "publish_datetime": publish_datetime}],
+        key=lambda r: (r.get("slug", ""), r.get("ticker", ""),
+                       r.get("title", ""), r.get("publish_datetime", "")),
+    )
     write_csv(csv_path, rows)
 
     action = "Created" if len(rows) == 1 else "Updated"
