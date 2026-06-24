@@ -31,12 +31,14 @@ def load_sources(sources_path: Path) -> list[dict]:
 
 
 def find_source(sources: list[dict], query: str) -> dict | None:
-    """Return the first record matching query as slug or ticker (case-insensitive)."""
-    q = query.strip().lower()
+    """Return the first record matching query as slug or ticker.
+
+    query must already be stripped and lowercased.
+    """
     for s in sources:
-        if s.get("slug", "").lower() == q:
+        if s.get("slug", "").lower() == query:
             return s
-        if s.get("ticker", "").lower() == q:
+        if s.get("ticker", "").lower() == query:
             return s
     return None
 
@@ -74,14 +76,22 @@ def main():
 
     sources = load_sources(args.sources)
 
+    # Deduplicate queries, treating them as case-insensitive and stripping
+    # whitespace. Preserve the original string for display purposes.
+    seen = {}
+    for q in args.queries:
+        key = q.strip().lower()
+        if key not in seen:
+            seen[key] = q
+
     exit_code = 0
-    for query in list(dict.fromkeys(args.queries)):
-        record = find_source(sources, query)
+    for normalized, original in seen.items():
+        record = find_source(sources, normalized)
         if record is None:
-            print(f"Not found: {query}", file=sys.stderr)
+            print(f"Not found: {original}", file=sys.stderr)
             exit_code = 1
         else:
-            print(f"{query}:")
+            print(f"{original}:")
             print(format_record(record))
 
     sys.exit(exit_code)
