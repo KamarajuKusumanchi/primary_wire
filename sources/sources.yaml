@@ -26,6 +26,10 @@ sources:
     name: U.S. Bureau of Labor Statistics
     ir_url: https://www.bls.gov/newsrelease/
     notes: Covers CPI, jobs reports, and other BLS releases. No ticker.
+  - slug: builders-firstsource
+    name: Builders FirstSource, Inc.
+    ticker: BLDR
+    ir_url: https://investors.bldr.com/
   - slug: cdw
     name: CDW Corporation
     ticker: CDW
