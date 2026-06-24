@@ -9,8 +9,8 @@ Reads the Costco record from sources/sources.yaml (slug = "costco") to get the
 ir_url and ticker, appends /news/default.aspx, then delegates all scraping
 and output work to scrape_q4_ir.
 
-Costco's Q4 IR theme embeds dates in listing-page cards, so
-pass --no-fetch-detail-pages to disable it.
+Costco's Q4 IR theme embeds dates in listing-page cards, so detail-page
+fetches are not needed. Pass --fetch-detail-pages to enable them anyway.
 
 Examples:
     # Preview what would be written, without writing anything
@@ -41,8 +41,8 @@ from sources_utils import load_source_record
 
 TARGET_SLUG = "costco"
 NEWS_PATH = "/news/default.aspx"
-# Costco's Q4 theme embeds dates in listing cards; So detail-page fetches
-# are not required to resolve them.
+# Costco's Q4 theme embeds dates in listing cards, so detail-page fetches
+# are not needed to resolve them. Set to True for themes that omit dates.
 FETCH_DETAIL_PAGES = False
 
 

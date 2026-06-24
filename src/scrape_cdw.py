@@ -10,8 +10,8 @@ ir_url and ticker, appends /news/default.aspx, then delegates all scraping
 and output work to scrape_q4_ir.
 
 CDW's Q4 IR theme does not embed dates in listing-page cards, so
---fetch-detail-pages is on by default here (unlike the generic script where
-it is opt-in). Pass --no-fetch-detail-pages to disable it.
+--fetch-detail-pages is enabled by default here (unlike the generic script
+where it is opt-in). Pass --no-fetch-detail-pages to disable it.
 
 Examples:
     # Preview what would be written, without writing anything
