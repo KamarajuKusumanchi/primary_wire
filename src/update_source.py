@@ -126,6 +126,8 @@ def main():
     if not name:
         name = prompt("Could not auto-fetch name. Enter company name manually")
 
+    print(f"Company name: {name}")
+
     if existing:
         print(f"Found existing entry for {ticker}.")
         suggested_slug = existing.get("slug", make_slug(name))
@@ -134,8 +136,6 @@ def main():
         print(f"No existing entry for {ticker}. Creating a new one.")
         suggested_slug = make_slug(name)
         slug = prompt_for_slug(sources, suggested_slug, exclude_ticker=None)
-
-    print(f"Company name: {name}")
 
     if existing:
         ir_url = prompt("IR URL", default=existing.get("ir_url"))

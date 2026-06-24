@@ -98,6 +98,10 @@ sources:
     name: International Business Machines Corporation
     ticker: IBM
     ir_url: https://www.ibm.com/investor
+  - slug: iqvia
+    name: IQVIA Holdings Inc.
+    ticker: IQV
+    ir_url: https://ir.iqvia.com/
   - slug: micron
     name: Micron Technology, Inc.
     ticker: MU
