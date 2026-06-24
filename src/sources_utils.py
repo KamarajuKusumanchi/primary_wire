@@ -52,6 +52,28 @@ def find_source(sources: list[dict], query: str) -> Optional[dict]:
     return None
 
 
+def find_source_by_ir_url(sources: list[dict], url: str) -> Optional[dict]:
+    """Return the first record whose ir_url matches the host of *url*.
+
+    Matching is by hostname only (scheme-insensitive, www-stripped) so that
+    ``https://investor.cdw.com/news/default.aspx`` finds the record whose
+    ir_url is ``https://investor.cdw.com/``. Returns None if not found.
+    """
+    from urllib.parse import urlparse
+
+    def _host(u: str) -> str:
+        return urlparse(u).netloc.lower().lstrip("www.")
+
+    target = _host(url)
+    if not target:
+        return None
+    for record in sources:
+        ir_url = record.get("ir_url", "")
+        if ir_url and _host(ir_url) == target:
+            return record
+    return None
+
+
 def load_source_record(slug: str, sources_path: Path = SOURCES_PATH) -> dict:
     """Return the sources.yaml record for *slug*, exiting on failure.
 

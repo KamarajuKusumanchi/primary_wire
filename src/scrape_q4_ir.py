@@ -96,6 +96,8 @@ DEFAULT_URL = "https://investor.costco.com/news/default.aspx"
 DEFAULT_SLUG = "costco"
 DEFAULT_TICKER = "COST"
 
+NEWS_PATH = "/news/default.aspx"
+
 CSV_FIELDS = ["slug", "ticker", "title", "url", "publish_datetime"]
 SORT_FIELDS = ["publish_datetime", "slug", "ticker", "title", "url"]
 
@@ -741,16 +743,19 @@ def build_arg_parser() -> argparse.ArgumentParser:
 
     source = parser.add_argument_group("source")
     source.add_argument(
-        "--url", default=DEFAULT_URL,
-        help=f"IR news page URL (default: {DEFAULT_URL})",
+        "--url", default=None,
+        help=(
+            "IR news page URL. If omitted, derived from sources.yaml via --slug or --ticker. "
+            f"Falls back to {DEFAULT_URL} if none of the three are given."
+        ),
     )
     source.add_argument(
-        "--slug", default=DEFAULT_SLUG,
-        help=f"sources.yaml slug to tag rows with (default: {DEFAULT_SLUG})",
+        "--slug", default=None,
+        help="sources.yaml slug. Looked up from sources.yaml when --url or --ticker is given.",
     )
     source.add_argument(
-        "--ticker", default=DEFAULT_TICKER,
-        help=f"Ticker to tag rows with (default: {DEFAULT_TICKER})",
+        "--ticker", default=None,
+        help="Ticker symbol. Looked up from sources.yaml when --url or --slug is given.",
     )
 
     filt = parser.add_argument_group("filtering")
@@ -849,6 +854,76 @@ def main(argv: Optional[list[str]] = None) -> int:
     level = {0: logging.WARNING, 1: logging.INFO}.get(args.verbose, logging.DEBUG)
     logging.basicConfig(level=level, format="%(levelname)s: %(message)s")
 
+    # ------------------------------------------------------------------
+    # Resolve --url / --slug / --ticker from sources.yaml.
+    #
+    # Priority:
+    #   1. If --slug or --ticker is given, look up the record and fill in
+    #      the missing fields; url is built from ir_url + NEWS_PATH.
+    #   2. If only --url is given, look up the record by hostname and
+    #      derive slug + ticker from it.
+    #   3. If nothing is given, fall back to the Costco defaults so the
+    #      bare "python scrape_q4_ir.py" invocation keeps working.
+    # ------------------------------------------------------------------
+    try:
+        from sources_utils import find_source, find_source_by_ir_url, load_sources
+        _sources = load_sources()
+    except Exception as exc:
+        logger.warning("Could not load sources.yaml (%s); slug/ticker lookup disabled.", exc)
+        _sources = []
+
+    slug: str = args.slug or ""
+    ticker: str = args.ticker or ""
+    url: str = args.url or ""
+
+    if slug or ticker:
+        # Prefer slug; fall back to ticker as the lookup key.
+        query = slug or ticker
+        record = find_source(_sources, query) if _sources else None
+        if record is None:
+            logger.warning(
+                "No sources.yaml record found for '%s'. Using provided slug/ticker as-is.",
+                query,
+            )
+        else:
+            slug = slug or record.get("slug", "")
+            ticker = ticker or record.get("ticker", "")
+            if not url:
+                ir_url = record.get("ir_url", "")
+                if ir_url:
+                    url = ir_url.rstrip("/") + NEWS_PATH
+                else:
+                    logger.warning(
+                        "Record '%s' has no ir_url; cannot derive --url automatically.", slug
+                    )
+    elif url:
+        record = find_source_by_ir_url(_sources, url) if _sources else None
+        if record is None:
+            logger.warning(
+                "No sources.yaml record matched the host of '%s'. "
+                "Slug and ticker will be empty unless passed explicitly.",
+                url,
+            )
+        else:
+            slug = record.get("slug", "")
+            ticker = record.get("ticker", "")
+    else:
+        # No input at all -- use Costco defaults.
+        slug = DEFAULT_SLUG
+        ticker = DEFAULT_TICKER
+        url = DEFAULT_URL
+
+    if not url:
+        logger.error("Could not determine a news URL. Pass --url, --slug, or --ticker.")
+        return 1
+
+    if not slug:
+        logger.warning("Slug is empty; CSV rows will have an empty slug column.")
+    if not ticker:
+        logger.warning("Ticker is empty; CSV rows will have an empty ticker column.")
+
+    logger.info("slug=%s  ticker=%s  url=%s", slug, ticker, url)
+
     if args.start_year and args.end_year is None:
         args.end_year = args.start_year
     if args.end_year and args.start_year is None:
@@ -863,7 +938,7 @@ def main(argv: Optional[list[str]] = None) -> int:
         if debug_path and len(years_to_visit) > 1:
             debug_path = debug_path.with_name(f"{debug_path.stem}_{y}{debug_path.suffix}")
         html = render_news_page(
-            url=args.url,
+            url=url,
             year=y,
             category=args.category,
             headless=args.headless,
@@ -874,7 +949,7 @@ def main(argv: Optional[list[str]] = None) -> int:
             max_load_more=args.max_load_more,
             debug_dump_html=debug_path,
         )
-        items = parse_news_items(html, base_url=args.url, slug=args.slug, ticker=args.ticker)
+        items = parse_news_items(html, base_url=url, slug=slug, ticker=ticker)
         all_items.extend(items)
         if y is not None and len(years_to_visit) > 1:
             time.sleep(args.polite_delay)
