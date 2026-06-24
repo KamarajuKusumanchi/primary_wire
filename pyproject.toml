@@ -1,0 +1,105 @@
+[project]
+name = "primary_wire"
+version = "0.1.0"
+requires-python = ">=3.11"
+
+# primary_wire dependencies
+dependencies = [
+    # CSV viewing and editing in the terminal
+    "visidata",
+
+    # CSV querying and validation tools
+    "csvkit",
+
+    # YAML round-trip parsing/writing for sources.yaml (preserves comments and formatting)
+    "ruamel.yaml",
+
+    # Ticker -> company name lookup for update_source.py
+    "yfinance",
+
+    # S&P 500 ticker list scraping and data manipulation (used by src/missing_tickers.py)
+    "pandas",
+    "lxml",
+    "requests",
+
+    # Pin to a version with Windows wheels; 3.2.5 dropped them and requires MSVC to build from source
+    # (greenlet is a transitive dependency: csvkit -> sqlalchemy -> greenlet)
+    "greenlet == 3.2.0",
+
+    # On Windows, I am getting
+    # $ python src/update_source.py
+    # Ticker: smci
+    # Looking up company name for SMCI...
+    #   Lookup failed (Failed to perform, curl: (60) SSL certificate problem: unable to get local issuer certificate. See https://curl.se/libcurl/c/libcurl-errors.html first for more details.).
+    #
+    # I tried the following approaches:
+    # 1) install pip-system-certs which patches Python's SSL to use the
+    # Windows certificate store automatically. But it did not work.
+    #
+    # 2) install truststore which reads the Windows certificate store directly and
+    # then added the following lines to python script
+    #   import truststore
+    #   truststore.inject_into_ssl()
+    # That also did not work.
+    #
+    # 3) install python-certifi-win32. This fixed the issue.
+    "python-certifi-win32",
+
+    # To get the IR URL
+    "ddgs",
+
+    # To fetch aspx pages
+    "playwright",
+]
+
+[project.optional-dependencies]
+# Testing framework (for future Python scripts)
+dev = [
+    "pytest",
+]
+
+# ======= Workflow Commands =======
+#
+# Initial setup or recreate environment from scratch:
+#   uv venv --clear && uv sync --extra dev
+#
+# Install/sync dependencies (normal day-to-day):
+#   uv sync --extra dev
+#
+# Force reinstall all packages without nuking the venv:
+#   uv sync --extra dev --reinstall
+#
+# Add a new runtime dependency:
+#   uv add <package>
+#
+# Add a new dev dependency:
+#   uv add --optional dev <package>
+#
+# Run a script:
+#   uv run python sources/your_script.py
+#
+# Run tests:
+#   uv run pytest
+#
+# ====== migrating from requirements.txt ======
+# today | 2026-06-23
+# Initially, I was using the requirements.txt file to manage the dependencies.
+# But one shortcoming of the requirements.txt approach is #that there is no way
+# to specify the minimum python version used by the project.
+#
+# The modern approach to specify both requirements and minimum python version
+# is to use pyproject.toml instead of requirements.txt.
+#
+# The equivalent of
+#   uv pip install -r requirements.txt
+# is
+#   uv sync --extra dev
+#
+# The equivalent of
+#   deactivate && uv venv --clear && source .venv/Scripts/activate && uv pip install -r requirements.txt
+# is
+#   uv sync --reinstall --extra dev
+# ''uv sync'' reads pyproject.toml, recreates the environment if needed, and
+# installs everything. --reinstall forces a clean reinstall of all packages
+# even if they're already present, which is the equivalent of --clear + reinstall
+#
