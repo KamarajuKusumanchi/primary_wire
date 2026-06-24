@@ -10,7 +10,7 @@ The page is rendered client-side (it is a Q4 Inc. IR website, like a number
 of other sources/sources.yaml entries -- nvidia, qualcomm, corning, etc.).
 A plain `requests.get()` only returns a "Loading..." placeholder, so this
 script drives the locally installed Chrome browser via Playwright
-(see src/fetch_aspx_page.py for the pattern this borrows: channel="chrome",
+(see src/fetch_aspx_page_v1.py for the pattern this borrows: channel="chrome",
 wait_until="networkidle") and then parses the rendered DOM with
 BeautifulSoup. No internal/private API is reverse-engineered -- this reads
 exactly what a human visiting the page in Chrome would see.
