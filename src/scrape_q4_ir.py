@@ -35,14 +35,11 @@ Examples:
     # CDW -- dates only on detail pages; --fetch-detail-pages is required
     python src/scrape_q4_ir.py \\
         --url https://investor.cdw.com/news/default.aspx \\
-        --slug cdw --ticker CDW \\
         --fetch-detail-pages --dry-run
 
-    # Any other Q4 IR site
-    python src/scrape_q4_ir.py \\
-        --url https://investor.nvidia.com/news/default.aspx \\
-        --slug nvidia --ticker NVDA \\
-        --fetch-detail-pages --dry-run
+    # Any other Q4 IR site by slug or ticker
+    python src/scrape_q4_ir.py --slug nvidia --fetch-detail-pages --dry-run
+    python src/scrape_q4_ir.py --ticker NVDA --fetch-detail-pages --dry-run
 
     # Scrape a specific year
     python src/scrape_q4_ir.py --year 2025
@@ -187,6 +184,21 @@ def _find_category_near(text: str) -> str:
 # ---------------------------------------------------------------------------
 # Browser helpers
 # ---------------------------------------------------------------------------
+
+def _launch_browser(p, headless: bool, browser_channel: str, timeout_ms: int):
+    """Launch a Chromium browser and return a configured Page.
+
+    Extracted to avoid duplicating the same launch/configure block in both
+    render_news_page() and fetch_missing_dates().
+    """
+    launch_kwargs: dict = {"headless": headless}
+    if browser_channel:
+        launch_kwargs["channel"] = browser_channel
+    browser = p.chromium.launch(**launch_kwargs)
+    page = browser.new_page()
+    page.set_default_timeout(timeout_ms)
+    return browser, page
+
 
 def _try_select_year(page: Page, year: int, timeout_ms: int) -> bool:
     """Best-effort: set the page's year filter to `year`.
@@ -342,12 +354,7 @@ def render_news_page(
     """Drive Chrome to the listing page, apply filters, expand pagination, and
     return the fully rendered HTML."""
     with sync_playwright() as p:
-        launch_kwargs: dict = {"headless": headless}
-        if browser_channel:
-            launch_kwargs["channel"] = browser_channel
-        browser = p.chromium.launch(**launch_kwargs)
-        page = browser.new_page()
-        page.set_default_timeout(timeout_ms)
+        browser, page = _launch_browser(p, headless, browser_channel, timeout_ms)
 
         logger.info("Loading %s ...", url)
         page.goto(url, wait_until="domcontentloaded", timeout=timeout_ms)
@@ -542,12 +549,7 @@ def fetch_missing_dates(
     )
 
     with sync_playwright() as p:
-        launch_kwargs: dict = {"headless": headless}
-        if browser_channel:
-            launch_kwargs["channel"] = browser_channel
-        browser = p.chromium.launch(**launch_kwargs)
-        page = browser.new_page()
-        page.set_default_timeout(timeout_ms)
+        browser, page = _launch_browser(p, headless, browser_channel, timeout_ms)
 
         for i, item in enumerate(undated):
             if i > 0:
@@ -722,7 +724,88 @@ def print_preview(items: list[NewsItem]) -> None:
 # CLI
 # ---------------------------------------------------------------------------
 
+def resolve_source(
+    url: Optional[str],
+    slug: Optional[str],
+    ticker: Optional[str],
+) -> tuple[str, str, str]:
+    """Resolve (url, slug, ticker) by consulting sources.yaml.
+
+    Accepts whichever subset of the three the caller supplied and fills in
+    the rest from the matching sources.yaml record.  Priority:
+
+      1. slug or ticker given  →  look up record, derive missing fields;
+         url built from ir_url + NEWS_PATH if not already provided.
+      2. only url given        →  look up record by hostname, derive slug + ticker.
+      3. nothing given         →  fall back to Costco defaults so the bare
+                                  "python scrape_q4_ir.py" invocation keeps working.
+
+    Returns (url, slug, ticker) as plain strings (never None).
+    Logs warnings for any fields that could not be resolved.
+    """
+    try:
+        from sources_utils import find_source, find_source_by_ir_url, load_sources
+        sources = load_sources()
+    except Exception as exc:
+        logger.warning("Could not load sources.yaml (%s); slug/ticker lookup disabled.", exc)
+        sources = []
+
+    url = url or ""
+    slug = slug or ""
+    ticker = ticker or ""
+
+    if slug or ticker:
+        query = slug or ticker
+        record = find_source(sources, query) if sources else None
+        if record is None:
+            logger.warning(
+                "No sources.yaml record found for '%s'. Using provided slug/ticker as-is.", query
+            )
+        else:
+            slug = slug or record.get("slug", "")
+            ticker = ticker or record.get("ticker", "")
+            if not url:
+                ir_url = record.get("ir_url", "")
+                if ir_url:
+                    url = ir_url.rstrip("/") + NEWS_PATH
+                else:
+                    logger.warning(
+                        "Record '%s' has no ir_url; cannot derive --url automatically.", slug
+                    )
+    elif url:
+        record = find_source_by_ir_url(sources, url) if sources else None
+        if record is None:
+            logger.warning(
+                "No sources.yaml record matched the host of '%s'. "
+                "Slug and ticker will be empty unless passed explicitly.",
+                url,
+            )
+        else:
+            slug = record.get("slug", "")
+            ticker = record.get("ticker", "")
+    else:
+        slug, ticker, url = DEFAULT_SLUG, DEFAULT_TICKER, DEFAULT_URL
+
+    if not slug:
+        logger.warning("Slug is empty; CSV rows will have an empty slug column.")
+    if not ticker:
+        logger.warning("Ticker is empty; CSV rows will have an empty ticker column.")
+
+    return url, slug, ticker
+
+
 def parse_year_list(args: argparse.Namespace) -> Optional[set[int]]:
+    """Return the set of years to scrape, or None if no year filter was given.
+
+    Normalises the three year-related args (--year, --start-year, --end-year)
+    into one set so callers don't have to reason about all three.
+    """
+    # Normalise half-specified ranges before building the set.
+    if args.start_year and args.end_year is None:
+        args.end_year = args.start_year
+    if args.end_year and args.start_year is None:
+        args.start_year = args.end_year
+
     years: set[int] = set()
     if args.year:
         years.update(args.year)
@@ -733,6 +816,63 @@ def parse_year_list(args: argparse.Namespace) -> Optional[set[int]]:
             start, end = end, start
         years.update(range(start, end + 1))
     return years or None
+
+
+def scrape_all_years(
+    url: str,
+    slug: str,
+    ticker: str,
+    years: Optional[set[int]],
+    args: argparse.Namespace,
+) -> list[NewsItem]:
+    """Render the listing page for each requested year and collect all NewsItems.
+
+    When no year filter is active, a single render of the default view is done.
+    Multiple years are separated by --polite-delay to avoid hammering the site.
+    Returns the combined, unfiltered list from all year passes.
+    """
+    years_to_visit: list[Optional[int]] = sorted(years) if years else [None]
+    all_items: list[NewsItem] = []
+
+    for i, year in enumerate(years_to_visit):
+        if i > 0:
+            time.sleep(args.polite_delay)
+
+        debug_path = args.debug_dump_html
+        if debug_path and len(years_to_visit) > 1:
+            debug_path = debug_path.with_name(f"{debug_path.stem}_{year}{debug_path.suffix}")
+
+        html = render_news_page(
+            url=url,
+            year=year,
+            category=args.category,
+            headless=args.headless,
+            browser_channel=args.browser_channel,
+            timeout_ms=args.timeout,
+            change_timeout_ms=args.change_timeout,
+            polite_delay=args.polite_delay,
+            max_load_more=args.max_load_more,
+            debug_dump_html=debug_path,
+        )
+        items = parse_news_items(html, base_url=url, slug=slug, ticker=ticker)
+        all_items.extend(items)
+
+    return all_items
+
+
+def print_csv_summary(summary: dict, data_dir: Path, dry_run: bool, filtered: list[NewsItem]) -> None:
+    """Print the one-line CSV write summary to stdout."""
+    action = "Would write" if dry_run else "Wrote"
+    dated_file_count = (
+        summary["files_written"]
+        if not dry_run
+        else len({i.publish_date for i in filtered if i.publish_date})
+    )
+    skipped = f" ({summary['undated']} undated item(s) skipped)" if summary["undated"] else ""
+    print(
+        f"{action} {summary['rows_added']} new + {summary['rows_updated']} updated row(s) "
+        f"across {dated_file_count} daily CSV file(s) under {data_dir}{skipped}"
+    )
 
 
 def build_arg_parser() -> argparse.ArgumentParser:
@@ -854,107 +994,15 @@ def main(argv: Optional[list[str]] = None) -> int:
     level = {0: logging.WARNING, 1: logging.INFO}.get(args.verbose, logging.DEBUG)
     logging.basicConfig(level=level, format="%(levelname)s: %(message)s")
 
-    # ------------------------------------------------------------------
-    # Resolve --url / --slug / --ticker from sources.yaml.
-    #
-    # Priority:
-    #   1. If --slug or --ticker is given, look up the record and fill in
-    #      the missing fields; url is built from ir_url + NEWS_PATH.
-    #   2. If only --url is given, look up the record by hostname and
-    #      derive slug + ticker from it.
-    #   3. If nothing is given, fall back to the Costco defaults so the
-    #      bare "python scrape_q4_ir.py" invocation keeps working.
-    # ------------------------------------------------------------------
-    try:
-        from sources_utils import find_source, find_source_by_ir_url, load_sources
-        _sources = load_sources()
-    except Exception as exc:
-        logger.warning("Could not load sources.yaml (%s); slug/ticker lookup disabled.", exc)
-        _sources = []
-
-    slug: str = args.slug or ""
-    ticker: str = args.ticker or ""
-    url: str = args.url or ""
-
-    if slug or ticker:
-        # Prefer slug; fall back to ticker as the lookup key.
-        query = slug or ticker
-        record = find_source(_sources, query) if _sources else None
-        if record is None:
-            logger.warning(
-                "No sources.yaml record found for '%s'. Using provided slug/ticker as-is.",
-                query,
-            )
-        else:
-            slug = slug or record.get("slug", "")
-            ticker = ticker or record.get("ticker", "")
-            if not url:
-                ir_url = record.get("ir_url", "")
-                if ir_url:
-                    url = ir_url.rstrip("/") + NEWS_PATH
-                else:
-                    logger.warning(
-                        "Record '%s' has no ir_url; cannot derive --url automatically.", slug
-                    )
-    elif url:
-        record = find_source_by_ir_url(_sources, url) if _sources else None
-        if record is None:
-            logger.warning(
-                "No sources.yaml record matched the host of '%s'. "
-                "Slug and ticker will be empty unless passed explicitly.",
-                url,
-            )
-        else:
-            slug = record.get("slug", "")
-            ticker = record.get("ticker", "")
-    else:
-        # No input at all -- use Costco defaults.
-        slug = DEFAULT_SLUG
-        ticker = DEFAULT_TICKER
-        url = DEFAULT_URL
-
+    url, slug, ticker = resolve_source(args.url, args.slug, args.ticker)
     if not url:
         logger.error("Could not determine a news URL. Pass --url, --slug, or --ticker.")
         return 1
-
-    if not slug:
-        logger.warning("Slug is empty; CSV rows will have an empty slug column.")
-    if not ticker:
-        logger.warning("Ticker is empty; CSV rows will have an empty ticker column.")
-
     logger.info("slug=%s  ticker=%s  url=%s", slug, ticker, url)
 
-    if args.start_year and args.end_year is None:
-        args.end_year = args.start_year
-    if args.end_year and args.start_year is None:
-        args.start_year = args.end_year
     years = parse_year_list(args)
+    all_items = scrape_all_years(url, slug, ticker, years, args)
 
-    years_to_visit: list[Optional[int]] = sorted(years) if years else [None]
-
-    all_items: list[NewsItem] = []
-    for y in years_to_visit:
-        debug_path = args.debug_dump_html
-        if debug_path and len(years_to_visit) > 1:
-            debug_path = debug_path.with_name(f"{debug_path.stem}_{y}{debug_path.suffix}")
-        html = render_news_page(
-            url=url,
-            year=y,
-            category=args.category,
-            headless=args.headless,
-            browser_channel=args.browser_channel,
-            timeout_ms=args.timeout,
-            change_timeout_ms=args.change_timeout,
-            polite_delay=args.polite_delay,
-            max_load_more=args.max_load_more,
-            debug_dump_html=debug_path,
-        )
-        items = parse_news_items(html, base_url=url, slug=slug, ticker=ticker)
-        all_items.extend(items)
-        if y is not None and len(years_to_visit) > 1:
-            time.sleep(args.polite_delay)
-
-    # Stage 2: resolve missing dates from individual detail pages.
     if args.fetch_detail_pages:
         fetch_missing_dates(
             all_items,
@@ -973,7 +1021,6 @@ def main(argv: Optional[list[str]] = None) -> int:
             )
 
     filtered = filter_items(all_items, years=years, since=args.since, until=args.until, limit=args.limit)
-
     if not filtered:
         logger.warning("No items matched the requested filters.")
 
@@ -981,17 +1028,7 @@ def main(argv: Optional[list[str]] = None) -> int:
 
     if args.format in ("csv", "both"):
         summary = merge_into_daily_csvs(filtered, args.data_dir, args.dry_run)
-        action = "Would write" if args.dry_run else "Wrote"
-        dated_file_count = (
-            summary["files_written"]
-            if not args.dry_run
-            else len({i.publish_date for i in filtered if i.publish_date})
-        )
-        print(
-            f"{action} {summary['rows_added']} new + {summary['rows_updated']} updated row(s) "
-            f"across {dated_file_count} daily CSV file(s) under {args.data_dir}"
-            + (f" ({summary['undated']} undated item(s) skipped)" if summary["undated"] else "")
-        )
+        print_csv_summary(summary, args.data_dir, args.dry_run, filtered)
 
     if args.format in ("json", "both"):
         write_json(filtered, args.output, args.dry_run)
