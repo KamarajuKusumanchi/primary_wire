@@ -12,8 +12,8 @@ To create a new wrapper:
   4. Set FETCH_DETAIL_PAGES:
        False  -- site embeds dates in listing cards (e.g. Costco, NVIDIA)
        True   -- dates only on individual detail pages (e.g. CDW)
-     When unsure, run with False first; any undated items in the output
-     mean you need True.
+     When unsure, start with False and run --dry-run; any items shown in the
+     preview with date "????-??-??" mean you need True.
   5. Update the module docstring and Examples below.
 
 Examples:
