@@ -57,7 +57,7 @@ sources:
   - slug: costco
     name: Costco Wholesale Corporation
     ticker: COST
-    ir_url: https://investor.costco.com/news/default.aspx
+    ir_url: https://investor.costco.com/
   - slug: doordash
     name: DoorDash, Inc.
     ticker: DASH
