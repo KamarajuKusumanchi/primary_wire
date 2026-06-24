@@ -75,7 +75,7 @@ def main():
     sources = load_sources(args.sources)
 
     exit_code = 0
-    for query in args.queries:
+    for query in list(dict.fromkeys(args.queries)):
         record = find_source(sources, query)
         if record is None:
             print(f"Not found: {query}", file=sys.stderr)
