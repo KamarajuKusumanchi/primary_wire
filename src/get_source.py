@@ -14,33 +14,9 @@ import argparse
 import sys
 from pathlib import Path
 
-try:
-    from ruamel.yaml import YAML
-except ImportError:
-    sys.exit("Missing dependency. Install with: pip install ruamel.yaml")
+sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-REPO_ROOT = Path(__file__).resolve().parent.parent
-SOURCES_PATH = REPO_ROOT / "sources" / "sources.yaml"
-
-
-def load_sources(sources_path: Path) -> list[dict]:
-    yaml = YAML()
-    with open(sources_path) as f:
-        data = yaml.load(f)
-    return data.get("sources", [])
-
-
-def find_source(sources: list[dict], query: str) -> dict | None:
-    """Return the first record matching query as slug or ticker.
-
-    query must already be stripped and lowercased.
-    """
-    for s in sources:
-        if s.get("slug", "").lower() == query:
-            return s
-        if s.get("ticker", "").lower() == query:
-            return s
-    return None
+from sources_utils import SOURCES_PATH, find_source, load_sources
 
 
 def format_record(record: dict) -> str:
@@ -70,9 +46,6 @@ def main():
         help="Path to sources.yaml (default: sources/sources.yaml relative to this script)",
     )
     args = parser.parse_args()
-
-    if not args.sources.exists():
-        sys.exit(f"sources.yaml not found at {args.sources}")
 
     sources = load_sources(args.sources)
 

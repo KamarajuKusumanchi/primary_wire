@@ -1,30 +1,25 @@
 #!/usr/bin/env python3
 """
-scrape_cdw.py
+scrape_COMPANY.py  <-- rename this file to match TARGET_SLUG
 
-Scrape CDW's investor relations news page and merge results into
+Scrape COMPANY's investor relations news page and merge results into
 primary_wire's daily data/YYYY/YYYY-MM-DD.csv files.
 
-Reads the CDW record from sources/sources.yaml (slug = "cdw") to get the
-ir_url and ticker, appends /news/default.aspx, then delegates all scraping
-and output work to scrape_q4_ir.
-
-CDW's Q4 IR theme does not embed dates in listing-page cards, so
---fetch-detail-pages is on by default here (unlike the generic script where
-it is opt-in). Pass --no-fetch-detail-pages to disable it.
+To create a new wrapper:
+  1. Copy this file to src/scrape_<slug>.py
+  2. Set TARGET_SLUG to match the slug in sources/sources.yaml
+  3. Set NEWS_PATH if the site uses a different path (rare)
+  4. Set FETCH_DETAIL_PAGES:
+       False  -- site embeds dates in listing cards (e.g. Costco, NVIDIA)
+       True   -- dates only on individual detail pages (e.g. CDW)
+     When unsure, run with False first; any undated items in the output
+     mean you need True.
+  5. Update the module docstring and Examples below.
 
 Examples:
-    # Preview what would be written, without writing anything
-    python src/scrape_cdw.py --dry-run
-
-    # Scrape and write to data/YYYY/YYYY-MM-DD.csv
-    python src/scrape_cdw.py
-
-    # Scrape a specific year
-    python src/scrape_cdw.py --year 2025
-
-    # Debug: show browser window and save rendered HTML
-    python src/scrape_cdw.py --show-browser --debug-dump-html /tmp/cdw.html --dry-run
+    python src/scrape_COMPANY.py --dry-run
+    python src/scrape_COMPANY.py --year 2025
+    python src/scrape_COMPANY.py --show-browser --debug-dump-html /tmp/COMPANY.html --dry-run
 
 All other flags (--year, --start-year, --end-year, --since, --until,
 --format, --dry-run, --verbose, etc.) are passed through to scrape_q4_ir.
@@ -40,11 +35,11 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import scrape_q4_ir
 from sources_utils import load_source_record
 
-TARGET_SLUG = "cdw"
-NEWS_PATH = "/news/default.aspx"
-# CDW's Q4 theme does not embed dates in listing cards; detail-page fetches
-# are required to resolve them. Set to False for themes that do embed dates.
-FETCH_DETAIL_PAGES = True
+# ---- Configure these three values per company ----
+TARGET_SLUG = "CHANGEME"           # must match slug in sources/sources.yaml
+NEWS_PATH = "/news/default.aspx"   # override only if the site differs
+FETCH_DETAIL_PAGES = False         # True if listing page omits dates (e.g. CDW)
+# --------------------------------------------------
 
 
 def main() -> int:

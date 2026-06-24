@@ -16,19 +16,19 @@ import sys
 from pathlib import Path
 from typing import Optional
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+
 try:
     import yfinance as yf
 except ImportError:
     sys.exit("Missing dependency. Install with: pip install yfinance")
 
+from sources_utils import SOURCES_PATH
+
 try:
     from ruamel.yaml import YAML
 except ImportError:
     sys.exit("Missing dependency. Install with: pip install ruamel.yaml")
-
-# Assumes this script lives in <repo_root>/src/update_source.py
-REPO_ROOT = Path(__file__).resolve().parent.parent
-SOURCES_PATH = REPO_ROOT / "sources" / "sources.yaml"
 
 LEGAL_SUFFIXES = [
     "Incorporated", "Inc.", "Inc", "Corporation", "Corp.", "Corp",
@@ -112,6 +112,8 @@ def main():
     yaml.preserve_quotes = True
     yaml.indent(mapping=2, sequence=4, offset=2)
 
+    if not SOURCES_PATH.exists():
+        sys.exit(f"sources.yaml not found at {SOURCES_PATH}")
     with open(SOURCES_PATH) as f:
         data = yaml.load(f)
     sources = data["sources"]

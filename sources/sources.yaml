@@ -62,6 +62,10 @@ sources:
     name: DoorDash, Inc.
     ticker: DASH
     ir_url: https://ir.doordash.com/
+  - slug: expedia
+    name: Expedia Group, Inc.
+    ticker: EXPE
+    ir_url: https://ir.expediagroup.com/
   - slug: fedex
     name: FedEx Corporation
     ticker: FDX
