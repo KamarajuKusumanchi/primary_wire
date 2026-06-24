@@ -99,8 +99,5 @@ dev = [
 # The equivalent of
 #   deactivate && uv venv --clear && source .venv/Scripts/activate && uv pip install -r requirements.txt
 # is
-#   uv sync --extra dev --reinstall
-# ''uv sync'' reads pyproject.toml, recreates the environment if needed, and
-# installs everything. --reinstall forces a clean reinstall of all packages
-# even if they're already present, which is the equivalent of --clear + reinstall
-#
+#   deactivate && uv venv --clear && uv sync --extra dev && source .venv/Scripts/activate
+
