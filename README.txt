@@ -127,7 +127,7 @@ functional but not yet complete, and more tooling is planned.
     data/
       2026/
         2026-06-01.csv
-    requirements.txt
+    pyproject.toml
     README.txt
 
 To see which S&P 500 companies are not yet covered, run:

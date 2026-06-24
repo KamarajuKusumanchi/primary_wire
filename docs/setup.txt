@@ -44,7 +44,7 @@ Activate it:
 
 ===== 4. Install dependencies =====
 
-  uv pip install -r requirements.txt
+  uv sync
 
 This installs:
 
@@ -105,14 +105,14 @@ Activate the fresh environment:
 
 Then reinstall dependencies:
 
-  uv pip install -r requirements.txt
+  uv sync
 
 ''deactivate'' first if the environment is currently active. On Windows,
 the interpreter file inside an active venv is locked while in use, and
 ''--clear'' can fail partway through if you skip this step.
 
 After reinstalling, confirm the install landed in the right place: the
-first line of ''uv pip install'' output should read
+first line of ''uv sync'' output should read
 ''Using Python ... environment at: <path>\.venv'' — not a path pointing
 into a Conda environment such as ''.conda\envs\...''.
 
@@ -120,7 +120,7 @@ into a Conda environment such as ''.conda\envs\...''.
 
 If you are getting
 <code>
-$ uv pip install -r requirements.txt
+$ uv sync
 ⠇ Resolving dependencies...
   x Request failed after 3 retries in 5.2s
   |-> Failed to fetch: `https://pypi.org/simple/pytest/`
@@ -132,4 +132,4 @@ $ uv pip install -r requirements.txt
 
 The uv tool is not able to verify the PyPI certificate - likely a corporate proxy using a custom CA. Try:
 
-  uv pip install -r requirements.txt --system-certs
+  uv sync --system-certs
