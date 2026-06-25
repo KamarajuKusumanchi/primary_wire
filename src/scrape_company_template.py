@@ -10,7 +10,7 @@ To create a new wrapper:
   2. Set TARGET_SLUG to match the slug in sources/sources.yaml
   3. Set NEWS_PATH if the site uses a different path (rare)
   4. Set FETCH_DETAIL_PAGES:
-       False  -- site embeds dates in listing cards (e.g. Costco, NVIDIA)
+       False  -- site embeds dates in listing cards (e.g. Costco)
        True   -- dates only on individual detail pages (e.g. CDW)
      When unsure, start with False and run --dry-run; any items shown in the
      preview with date "????-??-??" mean you need True.

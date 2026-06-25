@@ -5,7 +5,7 @@ sources_utils.py
 Shared utilities for reading sources/sources.yaml.
 
 Imported by get_source.py, update_source.py, scrape_q4_ir.py, and any
-company-specific scraper wrappers (scrape_cdw.py, scrape_nvidia.py, ...).
+company-specific scraper wrappers (scrape_cdw.py, scrape_costco.py, ...).
 """
 
 from __future__ import annotations
