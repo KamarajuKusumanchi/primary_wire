@@ -166,7 +166,7 @@ sources:
     name: Sandisk Corporation
     ticker: SNDK
     ir_url: https://investor.sandisk.com/
-  - slug: skyworks-solutions
+  - slug: skyworks
     name: Skyworks Solutions, Inc.
     ticker: SWKS
     ir_url: https://www.skyworksinc.com/investors
