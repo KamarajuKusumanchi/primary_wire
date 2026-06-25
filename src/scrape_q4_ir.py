@@ -38,8 +38,8 @@ Examples:
         --fetch-detail-pages --dry-run
 
     # Any other Q4 IR site by slug or ticker
-    python src/scrape_q4_ir.py --slug nvidia --fetch-detail-pages --dry-run
-    python src/scrape_q4_ir.py --ticker NVDA --fetch-detail-pages --dry-run
+    python src/scrape_q4_ir.py --slug cdw --fetch-detail-pages --dry-run
+    python src/scrape_q4_ir.py --ticker CDW --fetch-detail-pages --dry-run
 
     # Scrape a specific year
     python src/scrape_q4_ir.py --year 2025
