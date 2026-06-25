@@ -146,7 +146,7 @@ sources:
     name: NVIDIA Corporation
     ticker: NVDA
     ir_url: https://investor.nvidia.com/news/press-releases/default.aspx
-  - slug: on-semiconductor
+  - slug: onsemi
     name: ON Semiconductor Corporation
     ticker: ON
     ir_url: https://investor.onsemi.com/
