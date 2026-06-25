@@ -18,14 +18,30 @@ sources:
     name: Accenture plc
     ticker: ACN
     ir_url: https://investor.accenture.com/
+  - slug: apollo
+    name: Apollo Global Management, Inc.
+    ticker: APO
+    ir_url: https://ir.apollo.com/
+  - slug: ares
+    name: Ares Management Corporation
+    ticker: ARES
+    ir_url: https://ir.ares.com/
   - slug: axon
     name: Axon Enterprise, Inc.
     ticker: AXON
     ir_url: https://investor.axon.com/
+  - slug: blackstone
+    name: Blackstone Inc.
+    ticker: BX
+    ir_url: https://ir.blackstone.com/
   - slug: bls
     name: U.S. Bureau of Labor Statistics
     ir_url: https://www.bls.gov/newsrelease/
     notes: Covers CPI, jobs reports, and other BLS releases. No ticker.
+  - slug: booking
+    name: Booking Holdings Inc.
+    ticker: BKNG
+    ir_url: https://ir.bookingholdings.com/
   - slug: builders-firstsource
     name: Builders FirstSource, Inc.
     ticker: BLDR
@@ -50,6 +66,10 @@ sources:
     name: Coherent Corp.
     ticker: COHR
     ir_url: https://www.coherent.com/company/investor-relations
+  - slug: coinbase
+    name: Coinbase Global, Inc.
+    ticker: COIN
+    ir_url: https://investor.coinbase.com/
   - slug: conagra
     name: Conagra Brands, Inc.
     ticker: CAG
@@ -62,6 +82,10 @@ sources:
     name: Costco Wholesale Corporation
     ticker: COST
     ir_url: https://investor.costco.com/
+  - slug: criver
+    name: Charles River Laboratories International, Inc.
+    ticker: CRL
+    ir_url: https://ir.criver.com/
   - slug: doordash
     name: DoorDash, Inc.
     ticker: DASH
@@ -134,6 +158,10 @@ sources:
     name: QUALCOMM Incorporated
     ticker: QCOM
     ir_url: https://investor.qualcomm.com/
+  - slug: robinhood
+    name: Robinhood Markets, Inc.
+    ticker: HOOD
+    ir_url: https://investors.robinhood.com/
   - slug: sandisk
     name: Sandisk Corporation
     ticker: SNDK
@@ -150,6 +178,10 @@ sources:
     name: Super Micro Computer, Inc.
     ticker: SMCI
     ir_url: https://ir.supermicro.com/
+  - slug: united-airlines
+    name: United Airlines Holdings, Inc.
+    ticker: UAL
+    ir_url: https://ir.united.com/
   - slug: verisign
     name: VeriSign, Inc.
     ticker: VRSN
