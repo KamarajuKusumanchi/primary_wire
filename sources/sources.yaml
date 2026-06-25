@@ -174,7 +174,7 @@ sources:
     name: Space Exploration Technologies Corp.
     ticker: SPCX
     ir_url: https://ir.spacex.com/
-  - slug: super-micro-computer
+  - slug: super-micro
     name: Super Micro Computer, Inc.
     ticker: SMCI
     ir_url: https://ir.supermicro.com/
