@@ -54,6 +54,10 @@ sources:
     name: Booking Holdings Inc.
     ticker: BKNG
     ir_url: https://ir.bookingholdings.com/
+  - slug: broadcom
+    name: Broadcom Inc.
+    ticker: AVGO
+    ir_url: https://investors.broadcom.com/
   - slug: builders-firstsource
     name: Builders FirstSource, Inc.
     ticker: BLDR
