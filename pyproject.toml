@@ -100,4 +100,6 @@ dev = [
 #   deactivate && uv venv --clear && source .venv/Scripts/activate && uv pip install -r requirements.txt
 # is
 #   deactivate && uv venv --clear && uv sync --extra dev && source .venv/Scripts/activate
-
+#
+# ====== recreate the nevironment from scratch ======
+#   deactivate && uv venv --clear --system-certs && uv sync --extra dev --reinstall --system-certs && source .venv/Scripts/activate
