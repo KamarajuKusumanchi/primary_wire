@@ -126,6 +126,10 @@ sources:
     name: FedEx Freight Holding Company, Inc.
     ticker: FDXF
     ir_url: https://ir.fedexfreight.com/
+  - slug: flex
+    name: Flex Ltd.
+    ticker: FLEX
+    ir_url: https://investors.flex.com/
   - slug: fox
     name: Fox Corporation
     ticker: FOXA
@@ -198,6 +202,10 @@ sources:
     name: Sandisk Corporation
     ticker: SNDK
     ir_url: https://investor.sandisk.com/
+  - slug: seagate
+    name: Seagate Technology Holdings plc
+    ticker: STX
+    ir_url: https://investors.seagate.com/
   - slug: servicenow
     name: ServiceNow, Inc.
     ticker: NOW
