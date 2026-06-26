@@ -98,6 +98,10 @@ sources:
     name: Charles River Laboratories International, Inc.
     ticker: CRL
     ir_url: https://ir.criver.com/
+  - slug: datadog
+    name: Datadog, Inc.
+    ticker: DDOG
+    ir_url: https://investors.datadoghq.com/
   - slug: dell
     name: Dell Technologies Inc.
     ticker: DELL
@@ -110,6 +114,10 @@ sources:
     name: Expedia Group, Inc.
     ticker: EXPE
     ir_url: https://ir.expediagroup.com/
+  - slug: factset
+    name: FactSet Research Systems Inc.
+    ticker: FDS
+    ir_url: https://investor.factset.com/
   - slug: fedex
     name: FedEx Corporation
     ticker: FDX
@@ -190,6 +198,10 @@ sources:
     name: Sandisk Corporation
     ticker: SNDK
     ir_url: https://investor.sandisk.com/
+  - slug: servicenow
+    name: ServiceNow, Inc.
+    ticker: NOW
+    ir_url: https://investor.servicenow.com/
   - slug: skyworks
     name: Skyworks Solutions, Inc.
     ticker: SWKS
@@ -230,3 +242,11 @@ sources:
     name: Visa Inc.
     ticker: V
     ir_url: https://investor.visa.com/
+  - slug: western-digital
+    name: Western Digital Corporation
+    ticker: WDC
+    ir_url: https://investor.wdc.com/
+  - slug: workday
+    name: Workday, Inc.
+    ticker: WDAY
+    ir_url: https://investor.workday.com/
