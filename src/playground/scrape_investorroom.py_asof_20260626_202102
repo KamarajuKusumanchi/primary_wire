@@ -1,0 +1,919 @@
+#!/usr/bin/env python3
+"""
+scrape_investorroom.py
+
+Scrape press-release listings from any IR site powered by the InvestorRoom
+platform (sold by Notified, formerly Intrado/West) and merge them into
+primary_wire's daily data/YYYY/YYYY-MM-DD.csv files.
+
+InvestorRoom is a server-side-rendered IR platform used by a large number of
+S&P 500 companies, including Chipotle, Charter, Expedia, Fox, Workday, and
+many others. Unlike Q4 Inc. sites (which require a headless browser), these
+pages return full HTML to a plain HTTP request, so no Playwright is needed.
+
+Platform fingerprints
+---------------------
+You can identify an InvestorRoom site by any of:
+
+  * The listing URL ends with /news-releases (no .aspx extension)
+  * Detail pages use ?item=NNNNN  OR  a date-prefixed slug
+    e.g. /2025-10-29-chipotle-announces-q3-results
+  * Static assets / PDFs served from filecache.investorroom.com
+  * Page footer or source contains "investorroom" or "Notified"
+
+In sources.yaml, tag these sites with  platform: investorroom  so
+scrape_investorroom.py can self-discover them (optional but recommended).
+
+URL structure
+-------------
+Listing page (paginated):
+  {ir_base}/news-releases
+  {ir_base}/news-releases?p=2   (page 2, etc.)
+
+Press release detail pages come in two styles depending on how old the entry
+is and which InvestorRoom theme the company uses:
+
+  Style A (legacy):   {ir_base}/news-releases?item=122457
+  Style B (modern):   {ir_base}/2025-10-29-chipotle-announces-third-quarter-2025-results
+
+Both styles are handled. Date extraction:
+
+  1. Listing-page parse (zero extra requests): InvestorRoom listing pages
+     include the date near each link in the card HTML. This works for most
+     entries -- especially Style B URLs, which embed the date in the URL.
+
+  2. Detail-page fallback (opt-in via --fetch-detail-pages): for Style A
+     items where no date was found on the listing page, fetch the detail page
+     and extract the date from the article header. Fetches are spaced by
+     --polite-delay to be courteous.
+
+Usage
+-----
+  # Default: scrape Chipotle, dry-run (no files written)
+  python src/scrape_investorroom.py --dry-run
+
+  # Write real data for Chipotle
+  python src/scrape_investorroom.py
+
+  # Scrape any InvestorRoom site by slug or ticker
+  python src/scrape_investorroom.py --slug charter --dry-run
+  python src/scrape_investorroom.py --ticker CHTR --dry-run
+
+  # Scrape by URL directly
+  python src/scrape_investorroom.py --url https://ir.workday.com/news-releases --dry-run
+
+  # Restrict to a specific year or range
+  python src/scrape_investorroom.py --year 2025 --dry-run
+  python src/scrape_investorroom.py --start-year 2023 --end-year 2025 --dry-run
+
+  # Fetch detail pages to resolve missing dates
+  python src/scrape_investorroom.py --fetch-detail-pages --dry-run
+
+  # Output as JSON instead of CSV
+  python src/scrape_investorroom.py --format json --output out.json --dry-run
+
+  # Save raw HTML for debugging
+  python src/scrape_investorroom.py --debug-dump-html /tmp/chipotle.html --dry-run
+
+Requires
+--------
+  pip install requests beautifulsoup4 lxml ruamel.yaml
+
+Per README.txt guidelines: run at most once per day. Requests are spaced by
+--polite-delay (default 15 s) when fetching multiple pages or detail pages.
+"""
+
+from __future__ import annotations
+
+import argparse
+import csv
+import json
+import logging
+import re
+import sys
+import time
+from dataclasses import asdict, dataclass
+from datetime import date, datetime
+from pathlib import Path
+from typing import Iterable, Optional
+from urllib.parse import urljoin, urlparse, urlunparse, parse_qs, urlencode
+
+try:
+    import requests
+except ImportError:
+    sys.exit("Missing dependency. Install with: pip install requests")
+
+try:
+    from bs4 import BeautifulSoup
+except ImportError:
+    sys.exit("Missing dependency. Install with: pip install beautifulsoup4 lxml")
+
+REPO_ROOT = Path(__file__).resolve().parent.parent
+DATA_DIR = REPO_ROOT / "data"
+
+DEFAULT_SLUG = "chipotle"
+DEFAULT_TICKER = "CMG"
+DEFAULT_BASE_URL = "https://ir.chipotle.com"
+
+NEWS_RELEASES_PATH = "/news-releases"
+
+CSV_FIELDS = ["slug", "ticker", "title", "url", "publish_datetime"]
+SORT_FIELDS = ["publish_datetime", "slug", "ticker", "title", "url"]
+
+# Matches InvestorRoom detail URLs -- both legacy (?item=NNN) and modern (date-slug).
+# Used to distinguish detail links from navigation/section links.
+DETAIL_URL_LEGACY_RE = re.compile(r"[?&]item=\d+", re.IGNORECASE)
+DETAIL_URL_MODERN_RE = re.compile(r"/\d{4}-\d{2}-\d{2}-[^/]+/?$", re.IGNORECASE)
+
+MONTHS = (
+    "Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec|"
+    "January|February|March|April|May|June|July|August|September|October|November|December"
+)
+DATE_PATTERNS = [
+    # "June 18, 2026" / "Jun 18, 2026"
+    (re.compile(rf"\b(?:{MONTHS})\.?\s+\d{{1,2}},\s*\d{{4}}\b"), ["%b %d, %Y", "%B %d, %Y"]),
+    # "06/18/2026"
+    (re.compile(r"\b\d{1,2}/\d{1,2}/\d{4}\b"), ["%m/%d/%Y"]),
+    # "2026-06-18"
+    (re.compile(r"\b\d{4}-\d{2}-\d{2}\b"), ["%Y-%m-%d"]),
+]
+
+logger = logging.getLogger("scrape_investorroom")
+
+
+# ---------------------------------------------------------------------------
+# Data model
+# ---------------------------------------------------------------------------
+
+@dataclass
+class NewsItem:
+    slug: str
+    ticker: str
+    title: str
+    url: str
+    publish_date: Optional[date]
+    raw_date_text: str = ""
+
+    @property
+    def publish_datetime(self) -> str:
+        return self.publish_date.isoformat() if self.publish_date else ""
+
+    def to_csv_row(self) -> dict:
+        return {
+            "slug": self.slug,
+            "ticker": self.ticker,
+            "title": self.title,
+            "url": self.url,
+            "publish_datetime": self.publish_datetime,
+        }
+
+    def to_json_dict(self) -> dict:
+        d = asdict(self)
+        d["publish_date"] = self.publish_datetime
+        del d["raw_date_text"]
+        return d
+
+
+# ---------------------------------------------------------------------------
+# Date parsing
+# ---------------------------------------------------------------------------
+
+def _parse_date(text: str) -> tuple[Optional[date], str]:
+    """Return the first parseable date found in `text` and its raw match."""
+    for pattern, formats in DATE_PATTERNS:
+        m = pattern.search(text)
+        if not m:
+            continue
+        raw = m.group(0).strip()
+        cleaned = re.sub(r"\s+", " ", raw)
+        for fmt in formats:
+            try:
+                return datetime.strptime(cleaned, fmt).date(), raw
+            except ValueError:
+                continue
+    return None, ""
+
+
+def _date_from_url(url: str) -> Optional[date]:
+    """Extract date from a modern InvestorRoom URL like /2025-10-29-title."""
+    m = re.search(r"/(\d{4}-\d{2}-\d{2})-", url)
+    if m:
+        try:
+            return date.fromisoformat(m.group(1))
+        except ValueError:
+            pass
+    return None
+
+
+# ---------------------------------------------------------------------------
+# HTTP helpers
+# ---------------------------------------------------------------------------
+
+_SESSION: Optional[requests.Session] = None
+
+def _get_session() -> requests.Session:
+    global _SESSION
+    if _SESSION is None:
+        _SESSION = requests.Session()
+        _SESSION.headers.update({
+            "User-Agent": (
+                "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
+                "AppleWebKit/537.36 (KHTML, like Gecko) "
+                "Chrome/124.0.0.0 Safari/537.36"
+            ),
+            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+            "Accept-Language": "en-US,en;q=0.9",
+        })
+    return _SESSION
+
+
+def _fetch_html(url: str, timeout: int = 30) -> str:
+    """Fetch a page and return its HTML. Raises on HTTP errors."""
+    session = _get_session()
+    resp = session.get(url, timeout=timeout)
+    resp.raise_for_status()
+    return resp.text
+
+
+def _is_detail_url(href: str) -> bool:
+    """Return True if href looks like an InvestorRoom press-release detail URL."""
+    return bool(DETAIL_URL_LEGACY_RE.search(href) or DETAIL_URL_MODERN_RE.search(href))
+
+
+# ---------------------------------------------------------------------------
+# Listing-page scraping
+# ---------------------------------------------------------------------------
+
+def _listing_page_url(base_url: str, page: int = 1) -> str:
+    """Build the URL for listing page N (1-indexed)."""
+    base = base_url.rstrip("/") + NEWS_RELEASES_PATH
+    if page <= 1:
+        return base
+    # InvestorRoom pagination: ?p=2, ?p=3, ...
+    return f"{base}?p={page}"
+
+
+def _year_filter_url(base_url: str, year: int) -> str:
+    """InvestorRoom supports year filtering via ?year=YYYY."""
+    base = base_url.rstrip("/") + NEWS_RELEASES_PATH
+    return f"{base}?year={year}"
+
+
+def _parse_listing_page(
+    html: str,
+    base_url: str,
+    slug: str,
+    ticker: str,
+) -> tuple[list[NewsItem], bool]:
+    """Parse one listing page.
+
+    Returns (items, has_next_page).  has_next_page is True when pagination
+    controls suggest there is a subsequent page of results.
+    """
+    soup = BeautifulSoup(html, "lxml")
+    items: list[NewsItem] = []
+
+    # InvestorRoom listing pages render press releases inside anchor tags whose
+    # href matches one of the two detail URL patterns. Walk every <a> tag and
+    # collect those that look like press-release links.
+    seen_urls: set[str] = set()
+
+    for a in soup.find_all("a", href=True):
+        href: str = a["href"].strip()
+        if not _is_detail_url(href):
+            continue
+
+        full_url = urljoin(base_url, href)
+        # Normalise: strip trailing slash for deduplication.
+        norm_url = full_url.rstrip("/")
+        if norm_url in seen_urls:
+            continue
+        seen_urls.add(norm_url)
+
+        title = a.get_text(separator=" ", strip=True)
+        if not title:
+            # Some themes wrap title text in a child span.
+            span = a.find("span")
+            title = span.get_text(strip=True) if span else ""
+        if not title:
+            logger.debug("Skipping link with no title text: %s", full_url)
+            continue
+
+        # Date extraction strategy 1: URL slug for modern URLs.
+        publish_date = _date_from_url(href)
+        raw_date_text = publish_date.isoformat() if publish_date else ""
+
+        # Date extraction strategy 2: text near the link in the card HTML.
+        if publish_date is None:
+            # Walk up to 5 ancestor elements looking for a date in their text.
+            node = a
+            for _ in range(5):
+                parent = node.parent
+                if parent is None:
+                    break
+                card_text = parent.get_text(separator=" ", strip=True)
+                publish_date, raw_date_text = _parse_date(card_text)
+                if publish_date:
+                    break
+                node = parent
+
+        items.append(
+            NewsItem(
+                slug=slug,
+                ticker=ticker,
+                title=title,
+                url=full_url,
+                publish_date=publish_date,
+                raw_date_text=raw_date_text,
+            )
+        )
+
+    # Detect pagination: InvestorRoom uses a next-page link or a page counter.
+    # Look for a link/button with text "Next" or an aria-label="Next page".
+    has_next = False
+    for candidate in soup.find_all(["a", "button"]):
+        text = candidate.get_text(strip=True).lower()
+        aria = (candidate.get("aria-label") or "").lower()
+        rel = (candidate.get("rel") or [])
+        rel_str = " ".join(rel).lower()
+        if text in ("next", "›", "»") or "next" in aria or "next" in rel_str:
+            # Only count it as a real next-page link if it has an href / isn't disabled.
+            href = candidate.get("href", "")
+            disabled = candidate.get("disabled") or "disabled" in candidate.get("class", [])
+            if href and not disabled:
+                has_next = True
+                break
+
+    return items, has_next
+
+
+# ---------------------------------------------------------------------------
+# Detail-page date fallback
+# ---------------------------------------------------------------------------
+
+def _fetch_date_from_detail_page(url: str, timeout: int = 30) -> tuple[Optional[date], str]:
+    """Fetch a detail page and extract the publish date.
+
+    InvestorRoom detail pages render the date in a <time> element or in a
+    span/div near the article headline. We try multiple selectors in priority
+    order before falling back to a full-text scan.
+    """
+    try:
+        html = _fetch_html(url, timeout=timeout)
+    except Exception as exc:
+        logger.warning("Failed to fetch detail page %s: %s", url, exc)
+        return None, ""
+
+    soup = BeautifulSoup(html, "lxml")
+
+    # Priority 1: <time datetime="YYYY-MM-DD...">
+    for time_tag in soup.find_all("time"):
+        dt_attr = time_tag.get("datetime", "")
+        if dt_attr:
+            d, raw = _parse_date(dt_attr)
+            if d:
+                return d, raw
+        # Fall through to text content of <time> tag.
+        d, raw = _parse_date(time_tag.get_text(strip=True))
+        if d:
+            return d, raw
+
+    # Priority 2: elements that commonly hold the date on InvestorRoom pages.
+    date_selectors = [
+        "span.date", "p.date", "div.date",
+        ".press-release-date", ".release-date", ".article-date",
+        ".news-date", ".pr-date", ".date-label",
+        "[class*='date']",
+    ]
+    for sel in date_selectors:
+        el = soup.select_one(sel)
+        if el:
+            d, raw = _parse_date(el.get_text(strip=True))
+            if d:
+                return d, raw
+
+    # Priority 3: full-text scan of the article body.
+    article = soup.find("article") or soup.find("main") or soup.find("body")
+    if article:
+        d, raw = _parse_date(article.get_text(separator=" ", strip=True)[:2000])
+        if d:
+            return d, raw
+
+    return None, ""
+
+
+def fetch_missing_dates(
+    items: list[NewsItem],
+    polite_delay: float,
+    timeout: int,
+) -> None:
+    """Mutate items in-place: fetch detail pages for any item still missing a date."""
+    missing = [item for item in items if item.publish_date is None]
+    if not missing:
+        return
+
+    logger.info(
+        "Fetching detail pages to resolve dates for %d item(s)...", len(missing)
+    )
+    for i, item in enumerate(missing):
+        if i > 0:
+            time.sleep(polite_delay)
+        d, raw = _fetch_date_from_detail_page(item.url, timeout=timeout)
+        if d:
+            item.publish_date = d
+            item.raw_date_text = raw
+            logger.debug("Resolved date %s for: %s", d, item.title)
+        else:
+            logger.warning("Could not resolve date for: %s | %s", item.title, item.url)
+
+    still_missing = sum(1 for item in items if item.publish_date is None)
+    if still_missing:
+        logger.warning(
+            "%d item(s) still have no date after detail-page fetch; they will be "
+            "skipped when writing CSV output.",
+            still_missing,
+        )
+
+
+# ---------------------------------------------------------------------------
+# Top-level scraping logic
+# ---------------------------------------------------------------------------
+
+def scrape_listing(
+    base_url: str,
+    slug: str,
+    ticker: str,
+    year: Optional[int] = None,
+    max_pages: int = 50,
+    polite_delay: float = 15.0,
+    timeout: int = 30,
+    debug_dump_html: Optional[Path] = None,
+) -> list[NewsItem]:
+    """Scrape one year (or the default all-years view) from an InvestorRoom site.
+
+    Returns a flat list of NewsItems.  Pages are fetched sequentially with
+    polite_delay seconds between them.
+    """
+    if year is not None:
+        start_url = _year_filter_url(base_url, year)
+    else:
+        start_url = _listing_page_url(base_url, page=1)
+
+    all_items: list[NewsItem] = []
+    seen_urls: set[str] = set()
+    page_num = 1
+
+    while page_num <= max_pages:
+        if page_num == 1:
+            url = start_url
+        else:
+            # If year filter is active InvestorRoom may use ?year=YYYY&p=N.
+            if year is not None:
+                url = f"{_year_filter_url(base_url, year)}&p={page_num}"
+            else:
+                url = _listing_page_url(base_url, page=page_num)
+
+        logger.info("Fetching listing page %d: %s", page_num, url)
+        try:
+            html = _fetch_html(url, timeout=timeout)
+        except Exception as exc:
+            logger.error("Failed to fetch listing page %s: %s", url, exc)
+            break
+
+        if debug_dump_html and page_num == 1:
+            debug_dump_html.write_text(html, encoding="utf-8")
+            logger.info("Saved HTML to %s", debug_dump_html)
+
+        page_items, has_next = _parse_listing_page(html, base_url=base_url, slug=slug, ticker=ticker)
+
+        # Deduplicate across pages (shouldn't happen, but be safe).
+        new_items = []
+        for item in page_items:
+            norm = item.url.rstrip("/")
+            if norm not in seen_urls:
+                seen_urls.add(norm)
+                new_items.append(item)
+
+        all_items.extend(new_items)
+        logger.info(
+            "Page %d: found %d item(s) (%d new after dedup)", page_num, len(page_items), len(new_items)
+        )
+
+        if not has_next:
+            break
+
+        page_num += 1
+        time.sleep(polite_delay)
+
+    return all_items
+
+
+def scrape_all_years(
+    base_url: str,
+    slug: str,
+    ticker: str,
+    years: Optional[set[int]],
+    polite_delay: float,
+    timeout: int,
+    max_pages: int,
+    debug_dump_html: Optional[Path],
+) -> list[NewsItem]:
+    """Scrape one pass per year (or a single pass for the default view)."""
+    years_to_visit: list[Optional[int]] = sorted(years) if years else [None]
+    all_items: list[NewsItem] = []
+
+    for i, year in enumerate(years_to_visit):
+        if i > 0:
+            time.sleep(polite_delay)
+
+        dump_path = debug_dump_html
+        if dump_path and len(years_to_visit) > 1 and year is not None:
+            dump_path = dump_path.with_name(f"{dump_path.stem}_{year}{dump_path.suffix}")
+
+        items = scrape_listing(
+            base_url=base_url,
+            slug=slug,
+            ticker=ticker,
+            year=year,
+            max_pages=max_pages,
+            polite_delay=polite_delay,
+            timeout=timeout,
+            debug_dump_html=dump_path,
+        )
+        all_items.extend(items)
+
+    # Global dedup (same URL from multiple year passes).
+    seen: set[str] = set()
+    deduped: list[NewsItem] = []
+    for item in all_items:
+        k = item.url.rstrip("/")
+        if k not in seen:
+            seen.add(k)
+            deduped.append(item)
+    return deduped
+
+
+# ---------------------------------------------------------------------------
+# Filtering
+# ---------------------------------------------------------------------------
+
+def filter_items(
+    items: Iterable[NewsItem],
+    years: Optional[set[int]],
+    since: Optional[date],
+    until: Optional[date],
+    limit: Optional[int],
+) -> list[NewsItem]:
+    result = []
+    for item in items:
+        if years is not None and (item.publish_date is None or item.publish_date.year not in years):
+            continue
+        if since is not None and (item.publish_date is None or item.publish_date < since):
+            continue
+        if until is not None and (item.publish_date is None or item.publish_date > until):
+            continue
+        result.append(item)
+    result.sort(key=lambda i: (i.publish_date or date.min, i.title))
+    if limit is not None:
+        result = result[:limit]
+    return result
+
+
+# ---------------------------------------------------------------------------
+# Output: daily CSVs and JSON
+# ---------------------------------------------------------------------------
+
+def csv_path_for_date(data_dir: Path, d: date) -> Path:
+    return data_dir / f"{d.year}" / f"{d.isoformat()}.csv"
+
+
+def load_csv(path: Path) -> list[dict]:
+    if not path.exists():
+        return []
+    with open(path, newline="", encoding="utf-8") as f:
+        return list(csv.DictReader(f))
+
+
+def write_csv(path: Path, rows: list[dict]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    rows = sorted(rows, key=lambda r: tuple(r.get(k, "") for k in SORT_FIELDS))
+    with open(path, "w", newline="", encoding="utf-8") as f:
+        writer = csv.DictWriter(f, fieldnames=CSV_FIELDS)
+        writer.writeheader()
+        writer.writerows(rows)
+
+
+def merge_into_daily_csvs(items: list[NewsItem], data_dir: Path, dry_run: bool) -> dict:
+    by_date: dict[date, list[NewsItem]] = {}
+    undated: list[NewsItem] = []
+    for item in items:
+        if item.publish_date is None:
+            undated.append(item)
+        else:
+            by_date.setdefault(item.publish_date, []).append(item)
+
+    summary = {"files_written": 0, "rows_added": 0, "rows_updated": 0, "undated": len(undated)}
+
+    for d, day_items in sorted(by_date.items()):
+        path = csv_path_for_date(data_dir, d)
+        existing_rows = load_csv(path)
+        existing_urls = {r["url"] for r in existing_rows}
+
+        new_count, updated_count = 0, 0
+        for item in day_items:
+            row = item.to_csv_row()
+            if row["url"] in existing_urls:
+                updated_count += 1
+            else:
+                new_count += 1
+            existing_rows = [r for r in existing_rows if r["url"] != row["url"]]
+            existing_rows.append(row)
+
+        summary["rows_added"] += new_count
+        summary["rows_updated"] += updated_count
+
+        if dry_run:
+            logger.info(
+                "[dry-run] Would write %s (%d new, %d updated, %d total rows)",
+                path.relative_to(data_dir.parent) if data_dir.parent in path.parents else path,
+                new_count, updated_count, len(existing_rows),
+            )
+            continue
+
+        write_csv(path, existing_rows)
+        summary["files_written"] += 1
+        logger.info(
+            "Wrote %s (%d new, %d updated, %d total rows)",
+            path, new_count, updated_count, len(existing_rows),
+        )
+
+    if undated:
+        logger.warning(
+            "%d item(s) had no resolvable publish date and were NOT written to any "
+            "daily CSV. Re-run with --fetch-detail-pages to attempt resolution.",
+            len(undated),
+        )
+        for item in undated:
+            logger.warning("  UNDATED: %s | %s", item.title, item.url)
+
+    return summary
+
+
+def write_json(items: list[NewsItem], path: Path, dry_run: bool) -> None:
+    payload = [item.to_json_dict() for item in items]
+    if dry_run:
+        logger.info("[dry-run] Would write %d item(s) to %s", len(payload), path)
+        return
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with open(path, "w", encoding="utf-8") as f:
+        json.dump(payload, f, indent=2, ensure_ascii=False)
+    logger.info("Wrote %d item(s) to %s", len(payload), path)
+
+
+def print_preview(items: list[NewsItem]) -> None:
+    if not items:
+        print("No items to preview.")
+        return
+    print(f"\n{len(items)} item(s):\n")
+    for item in items:
+        d = item.publish_datetime or "????-??-??"
+        print(f"  {d}  {item.title}")
+        print(f"             {item.url}")
+    print()
+
+
+# ---------------------------------------------------------------------------
+# Source resolution
+# ---------------------------------------------------------------------------
+
+def resolve_source(
+    url: Optional[str],
+    slug: Optional[str],
+    ticker: Optional[str],
+) -> tuple[str, str, str]:
+    """Resolve (base_url, slug, ticker) from args + sources.yaml.
+
+    Returns (base_url, slug, ticker).  base_url is the root of the IR site
+    (e.g. https://ir.chipotle.com), NOT the news-releases listing URL.
+    Callers append NEWS_RELEASES_PATH themselves.
+    """
+    try:
+        from sources_utils import find_source, find_source_by_ir_url, load_sources
+        sources = load_sources()
+    except Exception as exc:
+        logger.warning("Could not load sources.yaml (%s); slug/ticker lookup disabled.", exc)
+        sources = []
+
+    url = url or ""
+    slug = slug or ""
+    ticker = ticker or ""
+
+    if slug or ticker:
+        query = slug or ticker
+        record = (find_source(sources, query) if sources else None)
+        if record is None:
+            logger.warning(
+                "No sources.yaml record found for '%s'. Using provided values as-is.", query
+            )
+        else:
+            slug = slug or record.get("slug", "")
+            ticker = ticker or record.get("ticker", "")
+            if not url:
+                ir_url = record.get("ir_url", "").rstrip("/")
+                url = ir_url  # ir_url is the IR root; we'll append /news-releases
+    elif url:
+        # Strip the path so we hold only the base.
+        parsed = urlparse(url)
+        url = urlunparse((parsed.scheme, parsed.netloc, "", "", "", ""))
+        record = find_source_by_ir_url(sources, url) if sources else None
+        if record is None:
+            logger.warning(
+                "No sources.yaml record matched the host of '%s'. "
+                "Slug and ticker will be empty.", url
+            )
+        else:
+            slug = record.get("slug", "")
+            ticker = record.get("ticker", "")
+    else:
+        slug, ticker, url = DEFAULT_SLUG, DEFAULT_TICKER, DEFAULT_BASE_URL
+
+    if not slug:
+        logger.warning("Slug is empty; CSV rows will have an empty slug column.")
+    if not ticker:
+        logger.warning("Ticker is empty; CSV rows will have an empty ticker column.")
+
+    return url, slug, ticker
+
+
+# ---------------------------------------------------------------------------
+# Year argument parsing (mirrors scrape_q4_ir.py)
+# ---------------------------------------------------------------------------
+
+def parse_year_list(args: argparse.Namespace) -> Optional[set[int]]:
+    if args.start_year and args.end_year is None:
+        args.end_year = args.start_year
+    if args.end_year and args.start_year is None:
+        args.start_year = args.end_year
+
+    years: set[int] = set()
+    if args.year:
+        years.update(args.year)
+    if args.start_year or args.end_year:
+        start = args.start_year or args.end_year
+        end = args.end_year or args.start_year
+        if start > end:
+            start, end = end, start
+        years.update(range(start, end + 1))
+    return years or None
+
+
+# ---------------------------------------------------------------------------
+# CLI
+# ---------------------------------------------------------------------------
+
+def build_arg_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(
+        description=__doc__,
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+
+    source = parser.add_argument_group("source")
+    source.add_argument(
+        "--url", default=None,
+        help=(
+            "IR site base URL or news-releases page URL. If omitted, derived from "
+            "sources.yaml via --slug or --ticker. Defaults to Chipotle."
+        ),
+    )
+    source.add_argument("--slug", default=None, help="sources.yaml slug.")
+    source.add_argument("--ticker", default=None, help="Ticker symbol.")
+
+    filtering = parser.add_argument_group("filtering")
+    filtering.add_argument(
+        "--year", type=int, action="append", metavar="YYYY",
+        help="Only include press releases from YEAR. Repeatable.",
+    )
+    filtering.add_argument("--start-year", type=int, metavar="YYYY")
+    filtering.add_argument("--end-year", type=int, metavar="YYYY")
+    filtering.add_argument(
+        "--since", type=date.fromisoformat, metavar="YYYY-MM-DD",
+        help="Only include releases on or after this date.",
+    )
+    filtering.add_argument(
+        "--until", type=date.fromisoformat, metavar="YYYY-MM-DD",
+        help="Only include releases on or before this date.",
+    )
+    filtering.add_argument("--limit", type=int, default=None, metavar="N")
+
+    output = parser.add_argument_group("output")
+    output.add_argument(
+        "--format", choices=["csv", "json"], default="csv",
+        help="Output format. 'csv' writes into data/YYYY/YYYY-MM-DD.csv (default). "
+             "'json' writes a single JSON file.",
+    )
+    output.add_argument(
+        "--output", type=Path, default=None, metavar="PATH",
+        help="Output path for --format json. Required when --format json.",
+    )
+    output.add_argument(
+        "--dry-run", action="store_true",
+        help="Fetch and parse but do not write any files.",
+    )
+
+    detail = parser.add_argument_group("detail-page fetch")
+    detail.add_argument(
+        "--fetch-detail-pages", action="store_true",
+        help=(
+            "For items where no date was found on the listing page, fetch each "
+            "detail page to extract the date. Required for sites using legacy "
+            "?item=NNN URLs which do not embed the date."
+        ),
+    )
+
+    network = parser.add_argument_group("network")
+    network.add_argument(
+        "--polite-delay", type=float, default=15.0, metavar="SECONDS",
+        help="Seconds between requests (default: 15). Be courteous.",
+    )
+    network.add_argument("--timeout", type=int, default=30, metavar="SECONDS")
+    network.add_argument(
+        "--max-pages", type=int, default=50, metavar="N",
+        help="Maximum listing pages to fetch per year pass (default: 50).",
+    )
+
+    debug = parser.add_argument_group("debug")
+    debug.add_argument(
+        "--debug-dump-html", type=Path, default=None, metavar="PATH",
+        help="Save the first fetched listing page HTML to PATH.",
+    )
+    debug.add_argument(
+        "--verbose", "-v", action="store_true",
+        help="Enable DEBUG-level logging.",
+    )
+
+    return parser
+
+
+def main(argv: Optional[list[str]] = None) -> int:
+    parser = build_arg_parser()
+    args = parser.parse_args(argv)
+
+    logging.basicConfig(
+        level=logging.DEBUG if args.verbose else logging.INFO,
+        format="%(asctime)s [%(levelname)s] %(message)s",
+        datefmt="%H:%M:%S",
+    )
+
+    if args.format == "json" and args.output is None:
+        parser.error("--output PATH is required when --format json")
+
+    base_url, slug, ticker = resolve_source(args.url, args.slug, args.ticker)
+    logger.info("Scraping %s (%s) from %s", slug, ticker, base_url + NEWS_RELEASES_PATH)
+
+    years = parse_year_list(args)
+
+    # --- Scrape ---
+    all_items = scrape_all_years(
+        base_url=base_url,
+        slug=slug,
+        ticker=ticker,
+        years=years,
+        polite_delay=args.polite_delay,
+        timeout=args.timeout,
+        max_pages=args.max_pages,
+        debug_dump_html=args.debug_dump_html,
+    )
+    logger.info("Scraped %d item(s) total (before filtering).", len(all_items))
+
+    # --- Detail-page date fallback ---
+    if args.fetch_detail_pages:
+        fetch_missing_dates(all_items, polite_delay=args.polite_delay, timeout=args.timeout)
+
+    # --- Filter ---
+    filtered = filter_items(all_items, years=years, since=args.since, until=args.until, limit=args.limit)
+    logger.info("%d item(s) after filtering.", len(filtered))
+
+    if args.dry_run:
+        print_preview(filtered)
+
+    # --- Output ---
+    if args.format == "json":
+        write_json(filtered, args.output, dry_run=args.dry_run)
+    else:
+        summary = merge_into_daily_csvs(filtered, DATA_DIR, dry_run=args.dry_run)
+        undated_note = f" ({summary['undated']} undated item(s) skipped)" if summary["undated"] else ""
+        action = "Would write" if args.dry_run else "Wrote"
+        dated_count = (
+            summary["files_written"] if not args.dry_run
+            else len({i.publish_date for i in filtered if i.publish_date})
+        )
+        print(
+            f"{action} {summary['rows_added']} new + {summary['rows_updated']} updated row(s) "
+            f"across {dated_count} daily CSV file(s){undated_note}"
+        )
+
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
