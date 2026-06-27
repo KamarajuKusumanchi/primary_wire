@@ -184,7 +184,7 @@ sources:
     ir_url: https://investor.nvidia.com/news/press-releases/default.aspx
   - slug: onsemi
     name: ON Semiconductor Corporation
-    ticker: ON
+    ticker: "ON"
     ir_url: https://investor.onsemi.com/
   - slug: palantir
     name: Palantir Technologies Inc.
