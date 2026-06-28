@@ -70,7 +70,7 @@ Usage
   python src/scrape_investorroom.py --since 2024-01-01 --until 2024-12-31 --dry-run
 
   # Control items per listing page (default 100; server default without ?l= is 5)
-  python src/scrape_investorroom.py --limit 50 --dry-run
+  python src/scrape_investorroom.py --page-limit 50 --dry-run
 
   # Fetch detail pages to resolve missing dates
   python src/scrape_investorroom.py --fetch-detail-pages --dry-run
@@ -91,16 +91,15 @@ Run at most once per day. Requests are spaced by --polite-delay (default 15 s).
 from __future__ import annotations
 
 import argparse
-import json
 import logging
 import re
 import sys
 import time
 from dataclasses import dataclass
-from datetime import date, datetime
+from datetime import date
 from pathlib import Path
 from typing import Optional
-from urllib.parse import urljoin, urlparse, urlunparse, urlencode
+from urllib.parse import urlencode, urljoin, urlparse, urlunparse
 
 try:
     import requests
@@ -112,11 +111,15 @@ try:
 except ImportError:
     sys.exit("Missing dependency. Install with: pip install beautifulsoup4 lxml")
 
-from csv_utils import (
-    CSV_FIELDS,
-    SORT_FIELDS,
-    csv_path_for_date as _csv_path_for_date,
-    merge_into_daily_csvs as _csv_merge_into_daily_csvs,
+from csv_utils import merge_into_daily_csvs as _csv_merge_into_daily_csvs
+from scrape_utils import (
+    NewsItem as _BaseNewsItem,
+    add_common_args,
+    filter_items,
+    parse_date,
+    parse_year_args,
+    print_preview,
+    write_json,
 )
 
 
@@ -133,8 +136,6 @@ DEFAULT_BASE_URL = "https://ir.chipotle.com"
 
 NEWS_RELEASES_PATH = "/news-releases"
 
-# CSV_FIELDS and SORT_FIELDS are imported from csv_utils
-
 DEFAULT_PAGE_LIMIT = 100  # ?l=100 -- 100 items per page vs server default of 5
 MAX_PAGES = 50            # safety cap on pagination loops
 
@@ -144,21 +145,6 @@ DETAIL_URL_LEGACY_RE = re.compile(r"[?&]item=\d+", re.IGNORECASE)
 # gallery anchors on the same page, not press-release detail pages.
 DETAIL_URL_MODERN_RE = re.compile(r"/\d{4}-\d{2}-\d{2}-[^/#]+/?$", re.IGNORECASE)
 
-# Date parsing patterns used across listing and detail pages.
-_MONTH_NAMES = (
-    "Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec|"
-    "January|February|March|April|May|June|July|August|"
-    "September|October|November|December"
-)
-DATE_PATTERNS = [
-    # "June 18, 2026" / "Jun 18, 2026"
-    (re.compile(rf"\b(?:{_MONTH_NAMES})\.?\s+\d{{1,2}},\s*\d{{4}}\b"), ["%b %d, %Y", "%B %d, %Y"]),
-    # "06/18/2026"
-    (re.compile(r"\b\d{1,2}/\d{1,2}/\d{4}\b"), ["%m/%d/%Y"]),
-    # "2026-06-18"
-    (re.compile(r"\b\d{4}-\d{2}-\d{2}\b"), ["%Y-%m-%d"]),
-]
-
 logger = logging.getLogger("scrape_investorroom")
 
 
@@ -167,50 +153,22 @@ logger = logging.getLogger("scrape_investorroom")
 # ---------------------------------------------------------------------------
 
 @dataclass
-class NewsItem:
-    slug: str
-    ticker: str
-    title: str
-    url: str
-    publish_date: Optional[date]
-    raw_date_text: str = ""
+class NewsItem(_BaseNewsItem):
+    """InvestorRoom press-release item.
 
-    @property
-    def publish_datetime(self) -> str:
-        return self.publish_date.isoformat() if self.publish_date else ""
-
-    def to_row(self) -> dict:
-        return {
-            "slug": self.slug,
-            "ticker": self.ticker,
-            "title": self.title,
-            "url": self.url,
-            "publish_datetime": self.publish_datetime,
-        }
+    Inherits slug, ticker, title, url, publish_date, raw_date_text, and
+    publish_datetime from scrape_utils.NewsItem.  No extra fields needed for
+    this platform; subclassing keeps isinstance() checks consistent and leaves
+    room for future additions without touching shared code.
+    """
 
 
 # ---------------------------------------------------------------------------
-# Date parsing
+# Date helpers (platform-specific)
 # ---------------------------------------------------------------------------
-
-def parse_date(text: str) -> tuple[Optional[date], str]:
-    """Return the first parseable date found in ``text`` and its raw match."""
-    for pattern, formats in DATE_PATTERNS:
-        m = pattern.search(text)
-        if not m:
-            continue
-        raw = m.group(0).strip()
-        cleaned = re.sub(r"\s+", " ", raw)
-        for fmt in formats:
-            try:
-                return datetime.strptime(cleaned, fmt).date(), raw
-            except ValueError:
-                continue
-    return None, ""
-
 
 def date_from_url(url: str) -> Optional[date]:
-    """Extract date from a modern InvestorRoom URL like /2025-10-29-title."""
+    """Extract a publish date from a modern InvestorRoom URL like /2025-10-29-title."""
     m = re.search(r"/(\d{4}-\d{2}-\d{2})-", url)
     if m:
         try:
@@ -580,29 +538,7 @@ def scrape(
 
 
 # ---------------------------------------------------------------------------
-# Filtering
-# ---------------------------------------------------------------------------
-
-def filter_items(
-    items: list[NewsItem],
-    years: Optional[set[int]],
-    since: Optional[date],
-    until: Optional[date],
-    limit: Optional[int],
-) -> list[NewsItem]:
-    """Filter and sort items; apply an optional result cap."""
-    result = [
-        item for item in items
-        if (years is None or (item.publish_date and item.publish_date.year in years))
-        and (since is None or (item.publish_date and item.publish_date >= since))
-        and (until is None or (item.publish_date and item.publish_date <= until))
-    ]
-    result.sort(key=lambda i: (i.publish_date or date.min, i.title))
-    return result[:limit] if limit is not None else result
-
-
-# ---------------------------------------------------------------------------
-# Output: daily CSVs and JSON
+# Output: daily CSVs
 # ---------------------------------------------------------------------------
 
 def merge_into_daily_csvs(
@@ -632,29 +568,6 @@ def merge_into_daily_csvs(
             logger.warning("  UNDATED: %s | %s", item.title, item.url)
 
     return summary
-
-
-def write_json(items: list[NewsItem], path: Path, dry_run: bool) -> None:
-    payload = [item.to_row() for item in items]
-    if dry_run:
-        logger.info("[dry-run] Would write %d item(s) to %s", len(payload), path)
-        return
-    path.parent.mkdir(parents=True, exist_ok=True)
-    with open(path, "w", encoding="utf-8") as f:
-        json.dump(payload, f, indent=2, ensure_ascii=False)
-    logger.info("Wrote %d item(s) to %s", len(payload), path)
-
-
-def print_preview(items: list[NewsItem]) -> None:
-    if not items:
-        print("No items to preview.")
-        return
-    print(f"\n{len(items)} item(s):\n")
-    for item in items:
-        d = item.publish_datetime or "????-??-??"
-        print(f"  {d}  {item.title}")
-        print(f"             {item.url}")
-    print()
 
 
 # ---------------------------------------------------------------------------
@@ -720,29 +633,6 @@ def resolve_source(
 
 
 # ---------------------------------------------------------------------------
-# Year argument parsing
-# ---------------------------------------------------------------------------
-
-def parse_year_args(args: argparse.Namespace) -> Optional[set[int]]:
-    """Resolve --year / --start-year / --end-year into a set of years (or None for all)."""
-    if args.start_year and args.end_year is None:
-        args.end_year = args.start_year
-    if args.end_year and args.start_year is None:
-        args.start_year = args.end_year
-
-    years: set[int] = set()
-    if args.year:
-        years.update(args.year)
-    if args.start_year or args.end_year:
-        start = args.start_year or args.end_year
-        end = args.end_year or args.start_year
-        if start > end:
-            start, end = end, start
-        years.update(range(start, end + 1))
-    return years or None
-
-
-# ---------------------------------------------------------------------------
 # CLI
 # ---------------------------------------------------------------------------
 
@@ -752,46 +642,8 @@ def build_arg_parser() -> argparse.ArgumentParser:
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
 
-    source = parser.add_argument_group("source")
-    source.add_argument(
-        "--url", default=None,
-        help=(
-            "IR site base URL or news-releases page URL. If omitted, derived from "
-            "sources.yaml via --slug or --ticker. Defaults to Chipotle."
-        ),
-    )
-    source.add_argument("--slug", default=None, help="sources.yaml slug.")
-    source.add_argument("--ticker", default=None, help="Ticker symbol.")
-
-    filtering = parser.add_argument_group("filtering")
-    filtering.add_argument(
-        "--year", type=int, action="append", metavar="YYYY",
-        help="Only include press releases from YEAR. Repeatable.",
-    )
-    filtering.add_argument("--start-year", type=int, metavar="YYYY")
-    filtering.add_argument("--end-year", type=int, metavar="YYYY")
-    filtering.add_argument(
-        "--since", type=date.fromisoformat, metavar="YYYY-MM-DD",
-        help="Only include releases on or after this date.",
-    )
-    filtering.add_argument(
-        "--until", type=date.fromisoformat, metavar="YYYY-MM-DD",
-        help="Only include releases on or before this date.",
-    )
-
-    output = parser.add_argument_group("output")
-    output.add_argument(
-        "--format", choices=["csv", "json"], default="csv",
-        help="Output format: 'csv' (daily files under data/) or 'json' (single file).",
-    )
-    output.add_argument(
-        "--output", type=Path, default=None, metavar="PATH",
-        help="Output path for --format json.",
-    )
-    output.add_argument(
-        "--dry-run", action="store_true",
-        help="Fetch and parse but do not write any files.",
-    )
+    # Shared: --url/--slug/--ticker, year/date filters, --format/--output/--dry-run
+    add_common_args(parser)
 
     detail = parser.add_argument_group("detail-page fetch")
     detail.add_argument(
@@ -804,7 +656,8 @@ def build_arg_parser() -> argparse.ArgumentParser:
 
     network = parser.add_argument_group("network")
     network.add_argument(
-        "--limit", type=int, default=DEFAULT_PAGE_LIMIT, metavar="N",
+        "--page-limit", type=int, default=DEFAULT_PAGE_LIMIT, metavar="N",
+        dest="page_limit",
         help=(
             f"Items per listing page via ?l= (default: {DEFAULT_PAGE_LIMIT}). "
             "The server default without ?l= is 5, which causes many more requests."
@@ -847,7 +700,6 @@ def main(argv: Optional[list[str]] = None) -> int:
 
     years = parse_year_args(args)
 
-    # Scrape
     all_items = scrape(
         base_url=base_url,
         slug=slug,
@@ -855,16 +707,14 @@ def main(argv: Optional[list[str]] = None) -> int:
         years=years,
         polite_delay=args.polite_delay,
         timeout=args.timeout,
-        page_limit=args.limit,
+        page_limit=args.page_limit,
         debug_dump_html=args.debug_dump_html,
     )
     logger.info("Scraped %d item(s) total (before filtering).", len(all_items))
 
-    # Resolve missing dates from detail pages (opt-in)
     if args.fetch_detail_pages:
         fetch_missing_dates(all_items, polite_delay=args.polite_delay, timeout=args.timeout)
 
-    # Filter
     filtered = filter_items(
         all_items, years=years, since=args.since, until=args.until, limit=None
     )
@@ -873,7 +723,6 @@ def main(argv: Optional[list[str]] = None) -> int:
     if args.dry_run:
         print_preview(filtered)
 
-    # Output
     if args.format == "json":
         write_json(filtered, args.output, dry_run=args.dry_run)
     else:

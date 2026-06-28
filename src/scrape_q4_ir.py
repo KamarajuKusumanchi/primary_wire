@@ -81,13 +81,12 @@ fetches so the site is not hammered.
 from __future__ import annotations
 
 import argparse
-import json
 import logging
 import re
 import sys
 import time
 from dataclasses import asdict, dataclass
-from datetime import date, datetime
+from datetime import date
 from pathlib import Path
 from typing import Iterable, Optional
 from urllib.parse import urljoin
@@ -102,6 +101,17 @@ try:
 except ImportError:
     sys.exit("Missing dependency. Install with: pip install playwright")
 
+from csv_utils import merge_into_daily_csvs as _csv_merge_into_daily_csvs
+from scrape_utils import (
+    NewsItem as _BaseNewsItem,
+    add_common_args,
+    filter_items,
+    parse_date,
+    parse_year_args,
+    print_preview as _base_print_preview,
+    write_json,
+)
+
 REPO_ROOT = Path(__file__).resolve().parent.parent
 DATA_DIR = REPO_ROOT / "data"
 
@@ -111,33 +121,11 @@ DEFAULT_TICKER = "COST"
 
 NEWS_PATH = "/news/default.aspx"
 
-from csv_utils import (
-    CSV_FIELDS,
-    SORT_FIELDS,
-    csv_path_for_date,
-    load_csv,
-    write_csv,
-    merge_into_daily_csvs as _csv_merge_into_daily_csvs,
-)
-
 CATEGORY_CHOICES = ["All News", "Sales Releases", "Earnings Releases", "Other Company Releases"]
 
 # Matches /news/news-details/<year>/<slug>[/default.aspx] on any Q4 IR hostname.
 NEWS_LINK_RE = re.compile(r"/news/news-details/\d{4}/[^/]+/?(?:default\.aspx)?", re.IGNORECASE)
 NEWS_LINK_SELECTOR = "a[href*='/news/news-details/']"
-
-MONTHS = (
-    "Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec|"
-    "January|February|March|April|May|June|July|August|September|October|November|December"
-)
-DATE_PATTERNS = [
-    # "Jun 18, 2026" / "June 18, 2026"
-    (re.compile(rf"\b(?:{MONTHS})\.?\s+\d{{1,2}},\s*\d{{4}}\b"), ["%b %d, %Y", "%B %d, %Y"]),
-    # "06/18/2026"
-    (re.compile(r"\b\d{1,2}/\d{1,2}/\d{4}\b"), ["%m/%d/%Y"]),
-    # "2026-06-18"
-    (re.compile(r"\b\d{4}-\d{2}-\d{2}\b"), ["%Y-%m-%d"]),
-]
 
 logger = logging.getLogger("scrape_q4_ir")
 
@@ -147,27 +135,14 @@ logger = logging.getLogger("scrape_q4_ir")
 # ---------------------------------------------------------------------------
 
 @dataclass
-class NewsItem:
-    slug: str
-    ticker: str
-    title: str
-    url: str
-    publish_date: Optional[date]
-    category: str = ""
-    raw_date_text: str = ""
+class NewsItem(_BaseNewsItem):
+    """Q4-specific press-release item, extending the shared base with a category."""
 
-    @property
-    def publish_datetime(self) -> str:
-        return self.publish_date.isoformat() if self.publish_date else ""
+    category: str = ""
 
     def to_csv_row(self) -> dict:
-        return {
-            "slug": self.slug,
-            "ticker": self.ticker,
-            "title": self.title,
-            "url": self.url,
-            "publish_datetime": self.publish_datetime,
-        }
+        """Alias for to_row() kept for backward compatibility."""
+        return self.to_row()
 
     def to_json_dict(self) -> dict:
         d = asdict(self)
@@ -175,32 +150,16 @@ class NewsItem:
         return d
 
 
-# ---------------------------------------------------------------------------
-# Date parsing
-# ---------------------------------------------------------------------------
-
-def _parse_date_near(text: str) -> tuple[Optional[date], str]:
-    """Return the first parseable date found anywhere in `text`, plus its raw
-    matched string. Returns (None, "") if no date is found."""
-    for pattern, formats in DATE_PATTERNS:
-        match = pattern.search(text)
-        if not match:
-            continue
-        raw = match.group(0).strip()
-        cleaned = re.sub(r"\s+", " ", raw)
-        for fmt in formats:
-            try:
-                return datetime.strptime(cleaned, fmt).date(), raw
-            except ValueError:
-                continue
-    return None, ""
-
-
 def _find_category_near(text: str) -> str:
     for cat in CATEGORY_CHOICES:
         if cat != "All News" and cat in text:
             return cat
     return ""
+
+
+def print_preview(items: Iterable[NewsItem]) -> None:
+    """Print a preview of Q4 items, including the category field."""
+    _base_print_preview(items, show_category=True)
 
 
 # ---------------------------------------------------------------------------
@@ -479,7 +438,7 @@ def parse_news_items(html: str, base_url: str, slug: str, ticker: str) -> list[N
                 break
             context_text = node.get_text(" ", strip=True)
             if publish_date is None:
-                publish_date, raw_date_text = _parse_date_near(context_text)
+                publish_date, raw_date_text = parse_date(context_text)
             if not category:
                 category = _find_category_near(context_text)
             if publish_date:
@@ -523,7 +482,7 @@ def _parse_date_from_detail_html(html: str) -> Optional[date]:
     """Extract a publish date from a Q4 IR detail page.
 
     Q4 detail pages place the date as a short text node immediately after the
-    press-release <h3> title -- e.g.:
+    press-release <h3> title -- e.g.::
 
         <h3>CDW Reports First Quarter 2026 Earnings</h3>
         May 6, 2026
@@ -537,7 +496,7 @@ def _parse_date_from_detail_html(html: str) -> Optional[date]:
     # Prefer a <time> element with a datetime attribute -- some Q4 themes use it.
     for tag in soup.find_all("time"):
         dt_attr = tag.get("datetime", "")
-        d, _ = _parse_date_near(dt_attr or tag.get_text())
+        d, _ = parse_date(dt_attr or tag.get_text())
         if d:
             return d
 
@@ -545,7 +504,7 @@ def _parse_date_from_detail_html(html: str) -> Optional[date]:
     # near the top of a detail page; stopping early avoids false matches from
     # body text ("Q1 2026 results... March 31, 2026 balance sheet...").
     body_text = soup.get_text(" ", strip=True)[:4096]
-    d, _ = _parse_date_near(body_text)
+    d, _ = parse_date(body_text)
     return d
 
 
@@ -607,32 +566,6 @@ def fetch_missing_dates(
 
 
 # ---------------------------------------------------------------------------
-# Filtering
-# ---------------------------------------------------------------------------
-
-def filter_items(
-    items: Iterable[NewsItem],
-    years: Optional[set[int]],
-    since: Optional[date],
-    until: Optional[date],
-    limit: Optional[int],
-) -> list[NewsItem]:
-    result = []
-    for item in items:
-        if years is not None and (item.publish_date is None or item.publish_date.year not in years):
-            continue
-        if since is not None and (item.publish_date is None or item.publish_date < since):
-            continue
-        if until is not None and (item.publish_date is None or item.publish_date > until):
-            continue
-        result.append(item)
-    result.sort(key=lambda i: (i.publish_date or date.min, i.title))
-    if limit is not None:
-        result = result[:limit]
-    return result
-
-
-# ---------------------------------------------------------------------------
 # Output: CSV (primary_wire daily files) and JSON
 # ---------------------------------------------------------------------------
 
@@ -670,28 +603,19 @@ def merge_into_daily_csvs(items: list[NewsItem], data_dir: Path, dry_run: bool) 
     return summary
 
 
-def write_json(items: list[NewsItem], path: Path, dry_run: bool) -> None:
-    payload = [item.to_json_dict() for item in items]
-    if dry_run:
-        logger.info("[dry-run] Would write %d item(s) to %s", len(payload), path)
-        return
-    path.parent.mkdir(parents=True, exist_ok=True)
-    with open(path, "w", encoding="utf-8") as f:
-        json.dump(payload, f, indent=2, ensure_ascii=False)
-    logger.info("Wrote %d item(s) to %s", len(payload), path)
-
-
-def print_preview(items: list[NewsItem]) -> None:
-    if not items:
-        print("No items to preview.")
-        return
-    print(f"\n{len(items)} item(s):\n")
-    for item in items:
-        d = item.publish_datetime or "????-??-??"
-        cat = f" [{item.category}]" if item.category else ""
-        print(f"  {d}  {item.title}{cat}")
-        print(f"             {item.url}")
-    print()
+def print_csv_summary(summary: dict, data_dir: Path, dry_run: bool, filtered: list[NewsItem]) -> None:
+    """Print the one-line CSV write summary to stdout."""
+    action = "Would write" if dry_run else "Wrote"
+    dated_file_count = (
+        summary["files_written"]
+        if not dry_run
+        else len({i.publish_date for i in filtered if i.publish_date})
+    )
+    skipped = f" ({summary['undated']} undated item(s) skipped)" if summary["undated"] else ""
+    print(
+        f"{action} {summary['rows_added']} new + {summary['rows_updated']} updated row(s) "
+        f"across {dated_file_count} daily CSV file(s) under {data_dir}{skipped}"
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -768,30 +692,6 @@ def resolve_source(
     return url, slug, ticker
 
 
-def parse_year_list(args: argparse.Namespace) -> Optional[set[int]]:
-    """Return the set of years to scrape, or None if no year filter was given.
-
-    Normalises the three year-related args (--year, --start-year, --end-year)
-    into one set so callers don't have to reason about all three.
-    """
-    # Normalise half-specified ranges before building the set.
-    if args.start_year and args.end_year is None:
-        args.end_year = args.start_year
-    if args.end_year and args.start_year is None:
-        args.start_year = args.end_year
-
-    years: set[int] = set()
-    if args.year:
-        years.update(args.year)
-    if args.start_year or args.end_year:
-        start = args.start_year or args.end_year
-        end = args.end_year or args.start_year
-        if start > end:
-            start, end = end, start
-        years.update(range(start, end + 1))
-    return years or None
-
-
 def scrape_all_years(
     url: str,
     slug: str,
@@ -834,82 +734,29 @@ def scrape_all_years(
     return all_items
 
 
-def print_csv_summary(summary: dict, data_dir: Path, dry_run: bool, filtered: list[NewsItem]) -> None:
-    """Print the one-line CSV write summary to stdout."""
-    action = "Would write" if dry_run else "Wrote"
-    dated_file_count = (
-        summary["files_written"]
-        if not dry_run
-        else len({i.publish_date for i in filtered if i.publish_date})
-    )
-    skipped = f" ({summary['undated']} undated item(s) skipped)" if summary["undated"] else ""
-    print(
-        f"{action} {summary['rows_added']} new + {summary['rows_updated']} updated row(s) "
-        f"across {dated_file_count} daily CSV file(s) under {data_dir}{skipped}"
-    )
-
-
 def build_arg_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description=__doc__,
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
 
-    source = parser.add_argument_group("source")
-    source.add_argument(
-        "--url", default=None,
-        help=(
-            "IR news page URL. If omitted, derived from sources.yaml via --slug or --ticker. "
-            f"Falls back to {DEFAULT_URL} if none of the three are given."
-        ),
-    )
-    source.add_argument(
-        "--slug", default=None,
-        help="sources.yaml slug. Looked up from sources.yaml when --url or --ticker is given.",
-    )
-    source.add_argument(
-        "--ticker", default=None,
-        help="Ticker symbol. Looked up from sources.yaml when --url or --slug is given.",
-    )
+    # Shared: --url/--slug/--ticker, year/date filters, --format/--output/--dry-run
+    add_common_args(parser)
 
-    filt = parser.add_argument_group("filtering")
-    filt.add_argument(
-        "--year", type=int, action="append",
-        help="Year to scrape. Repeatable: --year 2024 --year 2025",
-    )
-    filt.add_argument("--start-year", type=int, help="Start of an inclusive year range")
-    filt.add_argument("--end-year", type=int, help="End of an inclusive year range")
-    filt.add_argument(
-        "--since", type=lambda s: date.fromisoformat(s),
-        help="Only keep items on/after this date (YYYY-MM-DD)",
-    )
-    filt.add_argument(
-        "--until", type=lambda s: date.fromisoformat(s),
-        help="Only keep items on/before this date (YYYY-MM-DD)",
-    )
+    # Q4-specific filtering
+    filt = parser.add_argument_group("filtering (q4-specific)")
     filt.add_argument(
         "--category", default="All News", choices=CATEGORY_CHOICES,
         help="Category filter to apply on the page (default: All News)",
     )
     filt.add_argument("--limit", type=int, help="Keep at most this many items (after sorting by date)")
 
-    out = parser.add_argument_group("output")
-    out.add_argument(
-        "--format", choices=["csv", "json", "both"], default="csv",
-        help="csv = merge into data/YYYY/YYYY-MM-DD.csv files (default); "
-             "json = single combined file",
-    )
+    # Override --data-dir default (csv_utils default is fine for investorroom, but
+    # q4 script historically exposed it explicitly)
+    out = parser.add_argument_group("output (q4-specific)")
     out.add_argument(
         "--data-dir", type=Path, default=DATA_DIR,
         help=f"Root of the data/ tree for --format csv (default: {DATA_DIR})",
-    )
-    out.add_argument(
-        "--output", type=Path, default=REPO_ROOT / "q4_ir_news.json",
-        help="Output path for --format json",
-    )
-    out.add_argument(
-        "--dry-run", action="store_true",
-        help="Scrape and show what would be written, but write nothing",
     )
 
     browser = parser.add_argument_group("browser")
@@ -973,8 +820,9 @@ def main(argv: Optional[list[str]] = None) -> int:
     parser = build_arg_parser()
     args = parser.parse_args(argv)
 
-    level = {0: logging.WARNING, 1: logging.INFO}.get(args.verbose, logging.DEBUG)
-    logging.basicConfig(level=level, format="%(levelname)s: %(message)s")
+    import logging as _logging
+    level = {0: _logging.WARNING, 1: _logging.INFO}.get(args.verbose, _logging.DEBUG)
+    _logging.basicConfig(level=level, format="%(levelname)s: %(message)s")
 
     url, slug, ticker = resolve_source(args.url, args.slug, args.ticker)
     if not url:
@@ -982,7 +830,7 @@ def main(argv: Optional[list[str]] = None) -> int:
         return 1
     logger.info("slug=%s  ticker=%s  url=%s", slug, ticker, url)
 
-    years = parse_year_list(args)
+    years = parse_year_args(args)
     all_items = scrape_all_years(url, slug, ticker, years, args)
 
     if args.fallback_to_visible and args.headless and not all_items:
@@ -1021,7 +869,8 @@ def main(argv: Optional[list[str]] = None) -> int:
         print_csv_summary(summary, args.data_dir, args.dry_run, filtered)
 
     if args.format in ("json", "both"):
-        write_json(filtered, args.output, args.dry_run)
+        output = args.output or REPO_ROOT / "q4_ir_news.json"
+        write_json(filtered, output, args.dry_run)
 
     return 0
 
