@@ -1,0 +1,11 @@
+-------------------------------------------------------------------------------
+Commands are run in
+(primary_wire) (base)
+raju@DESKTOP-CRLPVE5 MINGW64 ~/work/github/primary_wire (master)
+
+$ python src/scrape_q4_ir.py --slug costco --year 2026 --fallback-to-visible
+
+$ python src/scrape_q4_ir.py --slug cdw --year 2026 --fetch-detail-pages
+
+$ python src/scrape_investorroom.py --slug chipotle --year 2026
+-------------------------------------------------------------------------------

@@ -83,7 +83,7 @@ Usage
 
 Requires
 --------
-  pip install requests beautifulsoup4 lxml pandas ruamel.yaml
+  pip install requests beautifulsoup4 lxml ruamel.yaml
 
 Run at most once per day. Requests are spaced by --polite-delay (default 15 s).
 """
@@ -112,10 +112,12 @@ try:
 except ImportError:
     sys.exit("Missing dependency. Install with: pip install beautifulsoup4 lxml")
 
-try:
-    import pandas as pd
-except ImportError:
-    sys.exit("Missing dependency. Install with: pip install pandas")
+from csv_utils import (
+    CSV_FIELDS,
+    SORT_FIELDS,
+    csv_path_for_date as _csv_path_for_date,
+    merge_into_daily_csvs as _csv_merge_into_daily_csvs,
+)
 
 
 # ---------------------------------------------------------------------------
@@ -131,8 +133,7 @@ DEFAULT_BASE_URL = "https://ir.chipotle.com"
 
 NEWS_RELEASES_PATH = "/news-releases"
 
-CSV_FIELDS = ["slug", "ticker", "title", "url", "publish_datetime"]
-SORT_FIELDS = ["publish_datetime", "slug", "ticker", "title", "url"]
+# CSV_FIELDS and SORT_FIELDS are imported from csv_utils
 
 DEFAULT_PAGE_LIMIT = 100  # ?l=100 -- 100 items per page vs server default of 5
 MAX_PAGES = 50            # safety cap on pagination loops
@@ -604,72 +605,22 @@ def filter_items(
 # Output: daily CSVs and JSON
 # ---------------------------------------------------------------------------
 
-def csv_path_for_date(d: date, data_dir: Path = DATA_DIR) -> Path:
-    return data_dir / str(d.year) / f"{d.isoformat()}.csv"
-
-
-def load_csv(path: Path) -> pd.DataFrame:
-    """Load an existing daily CSV, or return an empty DataFrame with the right columns."""
-    if not path.exists():
-        return pd.DataFrame(columns=CSV_FIELDS)
-    return pd.read_csv(path, dtype=str).fillna("")
-
-
-def write_csv(df: pd.DataFrame, path: Path) -> None:
-    """Write a daily CSV, sorted by SORT_FIELDS."""
-    path.parent.mkdir(parents=True, exist_ok=True)
-    df_sorted = df.sort_values(by=SORT_FIELDS, na_position="last")
-    df_sorted.to_csv(path, index=False, columns=CSV_FIELDS)
-
-
 def merge_into_daily_csvs(
     items: list[NewsItem], dry_run: bool, data_dir: Path = DATA_DIR
 ) -> dict:
     """Merge scraped items into per-date CSV files under data_dir.
 
-    Uses pandas to load, upsert by URL, sort, and write each file.
+    Files are only written when there is at least one new or updated row.
     """
     dated = [item for item in items if item.publish_date is not None]
     undated = [item for item in items if item.publish_date is None]
 
-    summary = {"files_written": 0, "rows_added": 0, "rows_updated": 0, "undated": len(undated)}
+    rows_by_date: dict[date, list[dict]] = {}
+    for item in dated:
+        rows_by_date.setdefault(item.publish_date, []).append(item.to_row())
 
-    if dated:
-        df_all = pd.DataFrame([item.to_row() for item in dated], columns=CSV_FIELDS)
-        df_all["_date"] = pd.to_datetime(df_all["publish_datetime"]).dt.date
-
-        for d, df_new in df_all.groupby("_date"):
-            df_new = df_new.drop(columns=["_date"])
-            path = csv_path_for_date(d, data_dir)
-            df_existing = load_csv(path)
-
-            # Upsert: drop existing rows whose URLs appear in the new batch, then concat.
-            new_count = len(df_new[~df_new["url"].isin(set(df_existing["url"]))])
-            updated_count = len(df_new) - new_count
-
-            df_kept = df_existing[~df_existing["url"].isin(set(df_new["url"]))]
-            df_merged = pd.concat([df_kept, df_new], ignore_index=True)
-
-            summary["rows_added"] += new_count
-            summary["rows_updated"] += updated_count
-
-            rel_path = (
-                path.relative_to(data_dir.parent)
-                if data_dir.parent in path.parents else path
-            )
-            if dry_run:
-                logger.info(
-                    "[dry-run] Would write %s (%d new, %d updated, %d total rows)",
-                    rel_path, new_count, updated_count, len(df_merged),
-                )
-                continue
-
-            write_csv(df_merged, path)
-            summary["files_written"] += 1
-            logger.info(
-                "Wrote %s (%d new, %d updated, %d total rows)",
-                path, new_count, updated_count, len(df_merged),
-            )
+    summary = _csv_merge_into_daily_csvs(rows_by_date, data_dir, dry_run)
+    summary["undated"] = len(undated)
 
     if undated:
         logger.warning(

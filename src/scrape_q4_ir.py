@@ -81,7 +81,6 @@ fetches so the site is not hammered.
 from __future__ import annotations
 
 import argparse
-import csv
 import json
 import logging
 import re
@@ -112,8 +111,14 @@ DEFAULT_TICKER = "COST"
 
 NEWS_PATH = "/news/default.aspx"
 
-CSV_FIELDS = ["slug", "ticker", "title", "url", "publish_datetime"]
-SORT_FIELDS = ["publish_datetime", "slug", "ticker", "title", "url"]
+from csv_utils import (
+    CSV_FIELDS,
+    SORT_FIELDS,
+    csv_path_for_date,
+    load_csv,
+    write_csv,
+    merge_into_daily_csvs as _csv_merge_into_daily_csvs,
+)
 
 CATEGORY_CHOICES = ["All News", "Sales Releases", "Earnings Releases", "Other Company Releases"]
 
@@ -631,31 +636,11 @@ def filter_items(
 # Output: CSV (primary_wire daily files) and JSON
 # ---------------------------------------------------------------------------
 
-def csv_path_for_date(data_dir: Path, d: date) -> Path:
-    return data_dir / f"{d.year}" / f"{d.isoformat()}.csv"
-
-
-def load_csv(path: Path) -> list[dict]:
-    if not path.exists():
-        return []
-    with open(path, newline="", encoding="utf-8") as f:
-        return list(csv.DictReader(f))
-
-
-def write_csv(path: Path, rows: list[dict]) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    rows = sorted(rows, key=lambda r: tuple(r.get(k, "") for k in SORT_FIELDS))
-    with open(path, "w", newline="", encoding="utf-8") as f:
-        writer = csv.DictWriter(f, fieldnames=CSV_FIELDS)
-        writer.writeheader()
-        writer.writerows(rows)
-
-
 def merge_into_daily_csvs(items: list[NewsItem], data_dir: Path, dry_run: bool) -> dict:
     """Group items by publish date and merge into data/YYYY/YYYY-MM-DD.csv.
 
-    Items with no resolvable date are skipped (date-keyed file layout requires
-    one). Returns a summary dict for the final status line.
+    Items with no resolvable date are skipped. Files are only written when
+    there is at least one new or updated row. Returns a summary dict.
     """
     by_date: dict[date, list[NewsItem]] = {}
     undated: list[NewsItem] = []
@@ -665,40 +650,12 @@ def merge_into_daily_csvs(items: list[NewsItem], data_dir: Path, dry_run: bool) 
         else:
             by_date.setdefault(item.publish_date, []).append(item)
 
-    summary = {"files_written": 0, "rows_added": 0, "rows_updated": 0, "undated": len(undated)}
-
-    for d, day_items in sorted(by_date.items()):
-        path = csv_path_for_date(data_dir, d)
-        existing_rows = load_csv(path)
-        existing_urls = {r["url"] for r in existing_rows}
-
-        new_count, updated_count = 0, 0
-        for item in day_items:
-            row = item.to_csv_row()
-            if row["url"] in existing_urls:
-                updated_count += 1
-            else:
-                new_count += 1
-            existing_rows = [r for r in existing_rows if r["url"] != row["url"]]
-            existing_rows.append(row)
-
-        summary["rows_added"] += new_count
-        summary["rows_updated"] += updated_count
-
-        if dry_run:
-            logger.info(
-                "[dry-run] Would write %s (%d new, %d updated, %d total rows)",
-                path.relative_to(data_dir.parent) if data_dir.parent in path.parents else path,
-                new_count, updated_count, len(existing_rows),
-            )
-            continue
-
-        write_csv(path, existing_rows)
-        summary["files_written"] += 1
-        logger.info(
-            "Wrote %s (%d new, %d updated, %d total rows)",
-            path, new_count, updated_count, len(existing_rows),
-        )
+    rows_by_date = {
+        d: [item.to_csv_row() for item in day_items]
+        for d, day_items in by_date.items()
+    }
+    summary = _csv_merge_into_daily_csvs(rows_by_date, data_dir, dry_run)
+    summary["undated"] = len(undated)
 
     if undated:
         logger.warning(
