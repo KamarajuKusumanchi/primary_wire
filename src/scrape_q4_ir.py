@@ -51,6 +51,23 @@ Examples:
     # Watch the browser and save rendered HTML for debugging
     python src/scrape_q4_ir.py --show-browser --debug-dump-html /tmp/page.html --dry-run
 
+    # Headless-first with automatic fallback to a visible browser if blocked
+    #
+    # Q4 IR sites are sometimes fronted by Cloudflare or a similar bot-detection
+    # layer that fingerprints headless Chrome and serves a challenge page instead
+    # of real content. The symptom is a timeout waiting for news-detail links
+    # followed by zero items scraped. A visible browser window passes the check
+    # because it presents the same fingerprint as a normal user session.
+    #
+    # --fallback-to-visible detects this automatically: if the headless pass
+    # returns zero items it logs a warning and retries with a visible window.
+    # Use it as the default for any site that intermittently blocks headless
+    # requests; leave it off when you know the site is clean (faster, no GUI).
+    #
+    # Not suitable for headless CI environments -- the fallback opens a real
+    # desktop window and will fail or hang on a machine with no display.
+    python src/scrape_q4_ir.py --slug costco --year 2026 --fallback-to-visible
+
 Requires:
     pip install playwright beautifulsoup4
 Chrome is assumed to already be installed. channel="chrome" reuses it directly;
@@ -944,6 +961,14 @@ def build_arg_parser() -> argparse.ArgumentParser:
         help="Show the browser window instead of running headless (useful for debugging)",
     )
     browser.add_argument(
+        "--fallback-to-visible", action="store_true", default=False,
+        help=(
+            "If the headless run finds zero items (likely blocked by Cloudflare or the IR "
+            "server), automatically retry with a visible browser window. Has no effect when "
+            "--show-browser is already set. Not suitable for headless CI environments."
+        ),
+    )
+    browser.add_argument(
         "--browser-channel", default="chrome",
         help="Playwright browser channel: chrome, chromium, msedge (default: chrome, reuses system install)",
     )
@@ -1002,6 +1027,14 @@ def main(argv: Optional[list[str]] = None) -> int:
 
     years = parse_year_list(args)
     all_items = scrape_all_years(url, slug, ticker, years, args)
+
+    if args.fallback_to_visible and args.headless and not all_items:
+        logger.warning(
+            "Headless run returned zero items -- likely blocked by Cloudflare or the IR server. "
+            "Retrying with a visible browser window (--fallback-to-visible)."
+        )
+        args.headless = False
+        all_items = scrape_all_years(url, slug, ticker, years, args)
 
     if args.fetch_detail_pages:
         fetch_missing_dates(
