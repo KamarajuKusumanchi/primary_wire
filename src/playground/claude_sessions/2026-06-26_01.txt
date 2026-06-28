@@ -1,0 +1,51 @@
+2026-06-26 7:30 AM
+
+Prompt:
+Please review
+https://github.com/KamarajuKusumanchi/primary_wire/archive/refs/heads/master.zip
+and tell me what you think? What are the next steps to improve the scrape coverage
+
+Response:
+Now I have a clear picture. Here's my unvarnished take:
+
+---
+
+## What it is
+
+A press-release URL aggregator focused on S&P 500 IR pages, with a clean design philosophy (primary sources only, no noise) and a reasonable data format. The motivation and framing in README.txt are solid — the critique of Business Wire, PR Newswire, and EDGAR is accurate.
+
+## Honest assessment of where it stands
+
+**The data is almost nothing.** 33 press releases total across 9 slugs. Of those, 19 (CDW + Costco) came from the scraper, and the other 14 look manually added. 63 sources are registered but 54 of them have zero data. This isn't a criticism — it's exactly what the README says — but it's important context.
+
+**The scraper is a one-trick pony.** `scrape_q4_ir.py` (1,039 lines, well-written) handles Q4-powered IR sites. But looking at all 63 IR URLs in sources.yaml, only a handful actually use Q4/aspx URLs (Costco, CDW, Qualcomm, Corning, ONSemi, NVIDIA). The other ~55 sources are on completely different platforms with no scraper at all. The scraper is disproportionately large relative to its actual coverage.
+
+**No automation / scheduling.** There's nothing to run scrapers on a schedule. This is a manual-collection project masquerading as a scraping project.
+
+**The `onsemi` entry has a YAML parsing issue** — the ticker field shows `1` instead of `ON`, suggesting a quoting problem in sources.yaml.
+
+---
+
+## Next steps to improve scrape coverage
+
+The highest-leverage move is identifying which IR platforms your 63 sources actually use and writing one scraper per platform — each scraper can then cover many companies. Here's the priority order:
+
+**1. Platform fingerprint your existing sources (1–2 days)**
+Visit ~20 IR URLs and check their network requests. Most S&P 500 companies cluster around 4–5 IR platforms: Q4 Inc (already done), Nasdaq IR (formerly Business Wire IR), Notified (formerly PR Newswire IR), Cision, and in-house builds (Apple, Google, Netflix). Knowing which platform each of your 63 sources uses tells you exactly where to invest.
+
+**2. Write a Nasdaq IR / Notified scraper (highest ROI)**
+A very large portion of the S&P 500 — easily 100+ companies — uses Nasdaq's IR platform or Notified. They share URL patterns like `/news-releases/news-release-details/`. One scraper covers all of them. This is the single highest-leverage thing you can do.
+
+**3. Fix the onsemi ticker YAML bug**
+The `ON` ticker needs quoting in sources.yaml — `ON` is being parsed as a boolean `true` (or similar) by the YAML parser. Use `ticker: "ON"`.
+
+**4. Add a scheduler / runner script**
+Right now there's nothing to run all scrapers in sequence. A simple `run_all_scrapers.py` that iterates sources.yaml, matches each to a scraper by platform, and runs it would turn this from manual-ish into genuinely automated.
+
+**5. Detect Q4 sites programmatically**
+Rather than hardcoding which companies use Q4, you could add a `platform: q4` field to sources.yaml and have `scrape_q4_ir.py` iterate all Q4-tagged sources automatically. Right now you need a separate wrapper script per company (scrape_costco.py, scrape_cdw.py), which doesn't scale.
+
+**6. Don't expand the source list until you can scrape them**
+You have 63 sources and scrapers for maybe 6. Adding more sources without scraping infrastructure just grows the gap. Better to get automated coverage on the existing 63 first.
+
+The `missing_tickers.py` script is useful but it surfaces the wrong bottleneck right now — the constraint isn't knowing which tickers are missing, it's having no way to scrape the ones already in the list.

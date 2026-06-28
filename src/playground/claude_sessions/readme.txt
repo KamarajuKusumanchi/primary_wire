@@ -20,12 +20,8 @@ These are scratch notes from Claude sessions. Clean them up aggressively once th
 
 ===== File Content Layout =====
 
-  Date: 2026-06-28
-  Time: 8:32 am
-  Model: claude-sonnet-4.6
-
-  ==== PROMPT ====
+  2026-06-28 8:32 am
+  Prompt:
   <your prompt here>
-
-  ==== RESPONSE ====
+  Response:
   <Claude's response here>
