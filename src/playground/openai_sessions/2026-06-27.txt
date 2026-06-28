@@ -1,0 +1,275 @@
+2026-06-27 10:15 pm
+
+Prompt:
+Please review the attached zip file and tell me what you think? What are the next steps? How to improve the scraper coverage?
+
+Response:
+I reviewed the ZIP and my overall impression is that this is a solid proof-of-concept with a clean architecture, but it's still in the "framework established, data acquisition incomplete" phase.
+
+### What I like
+
+The project already has several good design decisions:
+
+* A central `sources/sources.yaml` registry of companies.
+* Scrapers grouped by platform rather than by company (`Q4 IR`, `InvestorRoom`).
+* Daily CSV output structure that makes downstream analysis straightforward.
+* A configuration layer (`scraper_config.yaml`) that maps sources to scraper implementations.
+* Documentation that is honest about the current state and contribution model.
+
+The strongest architectural choice is scraping **IR platforms** instead of writing one scraper per company. That scales much better.
+
+---
+
+## Current coverage assessment
+
+From the repository:
+
+* ~63 organizations are defined in `sources.yaml`.
+* README mentions a target universe of roughly 500 S&P 500 companies plus agencies.
+* Actual collected data currently appears to come from only about 10 organizations.
+* The scraper configuration only contains two platform families:
+
+  * Q4 IR
+  * InvestorRoom
+
+The biggest bottleneck is not scraper quality—it's platform coverage.
+
+---
+
+## Where the missing coverage is coming from
+
+Most large-cap companies use a relatively small number of investor-relations/newsroom vendors.
+
+You already cover:
+
+* Q4
+* InvestorRoom
+
+The next major platforms I'd target are:
+
+| Priority | Platform                                                | Coverage Potential |
+| -------- | ------------------------------------------------------- | ------------------ |
+| 1        | Notified / GlobeNewswire IR                             | Very high          |
+| 2        | Business Wire newsroom pages                            | Very high          |
+| 3        | PR Newswire newsroom pages                              | Very high          |
+| 4        | Nasdaq IR Insight                                       | High               |
+| 5        | Investor Relations Solutions (formerly OTC/IR websites) | Medium             |
+| 6        | Cision newsroom pages                                   | Medium             |
+| 7        | West Corporation IR                                     | Medium             |
+| 8        | Alpha IR Group client sites                             | Medium             |
+| 9        | Corporate newsroom custom CMS sites                     | Long tail          |
+
+If you add the top 3–4 platform families, you could probably move from ~10 actively scraped companies to well over 150 without changing the core architecture.
+
+---
+
+## I would change the source model
+
+Currently a source looks roughly like:
+
+```yaml
+- slug: costco
+  ticker: COST
+  ir_url: https://...
+```
+
+I would extend it:
+
+```yaml
+- slug: costco
+  ticker: COST
+
+  platform: q4_ir
+
+  ir_url: https://...
+
+  press_release_url: https://...
+
+  tags:
+    - retail
+    - sp500
+```
+
+Then `scraper_config.yaml` can be generated automatically from source metadata.
+
+Right now there is duplication between:
+
+* `sources.yaml`
+* `scraper_config.yaml`
+
+That duplication becomes painful once you have hundreds of companies.
+
+---
+
+## Biggest improvement for scraper coverage
+
+### Build platform detection
+
+Create a command:
+
+```bash
+python detect_platform.py COST
+```
+
+or
+
+```bash
+python detect_platform.py https://investor.costco.com
+```
+
+that automatically identifies:
+
+```yaml
+platform: q4_ir
+```
+
+using heuristics such as:
+
+```html
+news-details/default.aspx
+```
+
+or
+
+```html
+powered by Q4
+```
+
+or URL signatures.
+
+Then onboarding becomes:
+
+1. Add ticker.
+2. Auto-discover IR page.
+3. Auto-detect platform.
+4. Assign scraper.
+
+That turns source expansion into a mostly automated process.
+
+---
+
+## Add source discovery automation
+
+You already have `ddg_search.py`.
+
+I'd push much further.
+
+For each S&P 500 constituent:
+
+1. Search:
+
+   ```
+   COMPANY investor relations
+   ```
+2. Extract IR URL.
+3. Detect platform.
+4. Generate candidate source entry.
+5. Queue for human review.
+
+A pipeline like this could generate hundreds of source candidates in a few hours.
+
+---
+
+## Improve resilience
+
+Many IR platforms break because of frontend redesigns.
+
+I would add:
+
+### Snapshot tests
+
+For each platform:
+
+```python
+tests/fixtures/q4/
+tests/fixtures/investorroom/
+```
+
+Store example HTML.
+
+Then test:
+
+```python
+parse_q4(html)
+```
+
+independently from network access.
+
+This catches parser regressions immediately.
+
+---
+
+## Add monitoring
+
+Right now coverage failures are likely silent.
+
+Track:
+
+* Last successful scrape
+* Number of releases found
+* Number of new releases
+* HTTP failures
+* Parse failures
+
+Example:
+
+```yaml
+costco:
+  last_success: 2026-06-27
+  releases_found: 183
+```
+
+Then generate a dashboard.
+
+A company producing zero releases for 90 days is usually a scraper issue, not reality.
+
+---
+
+## Data model improvements
+
+Current CSVs are simple, which is good.
+
+I would eventually include:
+
+```csv
+date
+slug
+ticker
+title
+url
+source_platform
+release_id
+scraped_at
+```
+
+The important additions are:
+
+* `source_platform`
+* `scraped_at`
+* stable `release_id`
+
+These help with deduplication and auditing.
+
+---
+
+## Longer-term coverage strategy
+
+If your goal is eventually:
+
+> All S&P 500 companies + major agencies
+
+I would estimate the highest-return sequence is:
+
+1. Finish Q4 coverage completely.
+2. Add GlobeNewswire/Notified.
+3. Add Business Wire.
+4. Add PR Newswire.
+5. Build automatic platform detection.
+6. Build automated source discovery.
+7. Add validation/monitoring.
+
+That order will increase coverage far faster than adding individual company scrapers.
+
+### My overall assessment
+
+The project has a good foundation and the right abstraction (platform scrapers instead of company scrapers). The limiting factor is source onboarding and platform diversity, not the scraper implementation itself. If I were prioritizing work, I'd spend about **80% of effort on discovering and supporting additional IR/newsroom platforms** and only **20% on improving existing scrapers**, because that's where the coverage gains will come from.
