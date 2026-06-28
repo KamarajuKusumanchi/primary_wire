@@ -8,4 +8,6 @@ $ python src/scrape_q4_ir.py --slug costco --year 2026 --fallback-to-visible
 $ python src/scrape_q4_ir.py --slug cdw --year 2026 --fetch-detail-pages
 
 $ python src/scrape_investorroom.py --slug chipotle --year 2026
+
+$ python src/scrape_notified.py --year 2026
 -------------------------------------------------------------------------------
