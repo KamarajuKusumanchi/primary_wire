@@ -75,10 +75,11 @@ Requires
 --------
   pip install curl_cffi beautifulsoup4 lxml ruamel.yaml
 
-  curl_cffi is strongly preferred over plain requests for this platform:
-  it impersonates Chrome's TLS fingerprint, which this site requires.
-  If curl_cffi is unavailable the script falls back to requests, but
-  connections will likely time out.
+  curl_cffi is *required* (not optional).  This site enforces TLS
+  fingerprinting and silently drops connections from the standard Python
+  requests stack.  curl_cffi impersonates Chrome's JA3/JA4 fingerprint,
+  which is the only way to get through.  The script will exit immediately
+  with a clear error if curl_cffi is not installed.
 
 Run at most once per day. Requests are spaced by --polite-delay (default 15 s).
 """
@@ -100,11 +101,11 @@ try:
     from curl_cffi import requests
     _HTTP_BACKEND = "curl_cffi"
 except ImportError:
-    try:
-        import requests  # type: ignore[no-redef]
-        _HTTP_BACKEND = "requests"
-    except ImportError:
-        sys.exit("Missing dependency. Install with: pip install curl_cffi")
+    sys.exit(
+        "Missing dependency: curl_cffi is required (plain requests does not work -- "
+        "the server enforces TLS fingerprinting and will reject connections from it).\n"
+        "Install with: pip install curl_cffi"
+    )
 
 try:
     from bs4 import BeautifulSoup
@@ -247,28 +248,15 @@ _SESSION = None
 def get_session():
     """Return a persistent HTTP session.
 
-    When curl_cffi is available the session impersonates Chrome at the TLS
-    level (JA3/JA4 fingerprint), which is necessary for sites that silently
-    drop connections from the standard Python TLS stack.  Falls back to a
-    plain requests.Session with browser-like headers when curl_cffi is absent.
+    Uses curl_cffi to impersonate Chrome's TLS fingerprint (JA3/JA4), which
+    is required for Notified/Drupal IR sites that reject the standard Python
+    TLS stack.
     """
     global _SESSION
     if _SESSION is None:
-        if _HTTP_BACKEND == "curl_cffi":
-            # impersonate="chrome124" sets the TLS fingerprint + HTTP/2 SETTINGS
-            # to match a real Chrome 124 client, bypassing TLS-fingerprint blocks.
-            _SESSION = requests.Session(impersonate="chrome124")
-        else:
-            _SESSION = requests.Session()
-            _SESSION.headers.update({
-                "User-Agent": (
-                    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
-                    "AppleWebKit/537.36 (KHTML, like Gecko) "
-                    "Chrome/124.0.0.0 Safari/537.36"
-                ),
-                "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-                "Accept-Language": "en-US,en;q=0.9",
-            })
+        # impersonate="chrome124" sets the TLS fingerprint + HTTP/2 SETTINGS
+        # to match a real Chrome 124 client, bypassing TLS-fingerprint blocks.
+        _SESSION = requests.Session(impersonate="chrome124")
     return _SESSION
 
 
@@ -456,6 +444,92 @@ def fetch_missing_dates(items: list[NewsItem], polite_delay: float, timeout: int
 # Scraping
 # ---------------------------------------------------------------------------
 
+def page_year_range(
+    listing_url: str, page: int, slug: str, ticker: str, timeout: int
+) -> tuple[Optional[int], Optional[int]]:
+    """Fetch page ``page`` and return (min_year, max_year) of items on it.
+
+    Returns (None, None) if the page is empty or no dates can be parsed.
+    """
+    url = listing_page_url(listing_url, page=page)
+    try:
+        html = fetch_html(url, timeout=timeout)
+    except Exception as exc:
+        logger.debug("Failed to probe page %d: %s", page, exc)
+        return None, None
+    items = parse_listing_page(html, listing_url=listing_url, slug=slug, ticker=ticker)
+    years_on_page = [item.publish_date.year for item in items if item.publish_date]
+    if not years_on_page:
+        return None, None
+    return min(years_on_page), max(years_on_page)
+
+
+def find_start_page(
+    listing_url: str,
+    slug: str,
+    ticker: str,
+    last_page: int,
+    target_years: set[int],
+    timeout: int,
+) -> int:
+    """Binary-search for the first page that might contain items from ``target_years``.
+
+    Pages are in reverse-chronological order: page 0 has the newest items and
+    page ``last_page`` has the oldest.  We want the lowest-numbered page whose
+    date range overlaps the target year range (i.e. whose *oldest* item is not
+    yet older than min(target_years)).
+
+    Returns 0 if the search fails or the answer is ambiguous.
+    """
+    min_target = min(target_years)
+    max_target = max(target_years)
+
+    lo, hi = 0, last_page
+    result = 0  # conservative default: start from the beginning
+
+    # Quick sanity probe: if page 0 already only has items older than
+    # max_target, there is nothing to fetch at all.
+    min_yr, max_yr = page_year_range(listing_url, 0, slug, ticker, timeout)
+    if max_yr is not None and max_yr < min_target:
+        logger.info(
+            "Page 0 newest item is %d, which is older than target year %d -- nothing to fetch.",
+            max_yr, min_target,
+        )
+        return last_page + 1  # sentinel: nothing to fetch
+
+    while lo < hi:
+        mid = (lo + hi) // 2
+        min_yr, max_yr = page_year_range(listing_url, mid, slug, ticker, timeout)
+        logger.debug(
+            "Binary search: page %d year range %s–%s (target %d–%d)",
+            mid, min_yr, max_yr, min_target, max_target,
+        )
+        if min_yr is None:
+            # Empty / unreadable page -- treat it like we're past the end.
+            hi = mid
+            continue
+
+        if min_yr > max_target:
+            # Entire page is newer than our range; go deeper (higher page numbers).
+            lo = mid + 1
+            result = mid + 1
+        elif max_yr < min_target:
+            # Entire page is older than our range; go shallower (lower page numbers).
+            hi = mid
+            result = mid
+        else:
+            # Page overlaps our range; it's a candidate -- try to find an even
+            # later start by looking shallower.
+            result = mid
+            hi = mid
+
+    logger.info(
+        "Binary search complete: starting scrape from page %d (of %d total).",
+        result, last_page + 1,
+    )
+    return result
+
+
 def scrape_one_pass(
     listing_url: str,
     slug: str,
@@ -464,12 +538,17 @@ def scrape_one_pass(
     polite_delay: float,
     timeout: int,
     debug_dump_html: Optional[Path] = None,
+    end_page: Optional[int] = None,
+    target_years: Optional[set[int]] = None,
 ) -> list[NewsItem]:
-    """Fetch all listing pages starting from ``start_page``, walking ?page=N.
+    """Fetch listing pages from ``start_page`` through ``end_page``.
 
-    Reads the 'last »' link on the first page to know the total page count,
-    then iterates page-by-page.  Falls back to stopping when a page yields
-    no new items.
+    When ``target_years`` is provided, stops as soon as all items on a page are
+    older than the earliest target year (pages are reverse-chronological, so
+    once we've gone past our window there is nothing left to find).
+
+    Reads the 'last »' link on the first page to know the total page count.
+    Falls back to stopping when a page yields no new items.
 
     Returns a deduplicated list of NewsItems.
     """
@@ -477,8 +556,16 @@ def scrape_one_pass(
     seen_urls: set[str] = set()
     last_page: Optional[int] = None  # discovered from first page
 
+    min_target_year = min(target_years) if target_years else None
+
+    stop_at = end_page  # may be refined once we know last_page
+
     for page_num_offset in range(MAX_PAGES):
         page_idx = start_page + page_num_offset
+        if stop_at is not None and page_idx > stop_at:
+            logger.info("Reached end page %d. Done.", stop_at)
+            break
+
         url = listing_page_url(listing_url, page=page_idx)
 
         logger.info("Fetching listing page %d (page=%d): %s", page_num_offset + 1, page_idx, url)
@@ -500,6 +587,8 @@ def scrape_one_pass(
             last_page = find_last_page(soup)
             if last_page is not None:
                 logger.info("Last page index: %d (%d total pages)", last_page, last_page + 1)
+                if stop_at is None:
+                    stop_at = last_page
             else:
                 logger.warning("Could not determine last page; will stop on first empty page.")
 
@@ -515,9 +604,20 @@ def scrape_one_pass(
             page_num_offset + 1, page_idx, len(page_items), len(new_items),
         )
 
+        # Early exit: if we have a year filter and every dated item on this page
+        # is older than the earliest target year, we've passed our window.
+        if min_target_year is not None and page_items:
+            dated_years = [item.publish_date.year for item in page_items if item.publish_date]
+            if dated_years and max(dated_years) < min_target_year:
+                logger.info(
+                    "Page %d newest item year (%d) is older than target year %d -- stopping early.",
+                    page_idx, max(dated_years), min_target_year,
+                )
+                break
+
         # Stop conditions.
-        if last_page is not None and page_idx >= last_page:
-            logger.info("Reached last page (page=%d). Done.", last_page)
+        if stop_at is not None and page_idx >= stop_at:
+            logger.info("Reached last page (page=%d). Done.", stop_at)
             break
 
         if not page_items:
@@ -536,6 +636,8 @@ def scrape_one_pass(
     return all_items
 
 
+
+
 def scrape(
     listing_url: str,
     slug: str,
@@ -545,12 +647,86 @@ def scrape(
     timeout: int,
     debug_dump_html: Optional[Path],
 ) -> list[NewsItem]:
-    """Scrape all pages.
+    """Scrape listing pages, using binary search when a year filter is active.
 
-    Unlike InvestorRoom, Notified/Drupal does NOT expose a server-side year
-    filter in the URL, so we always scrape all pages and filter client-side.
-    This is slightly wasteful but correct, and mirrors how the site works.
+    Without a year filter, scrapes all pages (pages are in reverse-chronological
+    order; the site provides no server-side year parameter).
+
+    With a year filter, binary-searches across page numbers to find the first
+    page that overlaps the target years, then walks forward from there and stops
+    as soon as a page's newest item is older than the target range.  This avoids
+    fetching the entire archive when only recent years are needed.
+
+    Note: the binary search itself fetches O(log N) pages for probing.  Those
+    probes are lightweight (parse only, no delay between them) but do count
+    against the server.  Total pages fetched = O(log N) probes + K data pages,
+    where K is the number of pages that actually contain the target years.
     """
+    if years:
+        # Step 1: fetch page 0 to learn last_page.
+        url0 = listing_page_url(listing_url, page=0)
+        logger.info("Fetching page 0 to determine pagination: %s", url0)
+        try:
+            html0 = fetch_html(url0, timeout=timeout)
+        except Exception as exc:
+            logger.error("Failed to fetch page 0: %s", exc)
+            return []
+
+        if debug_dump_html:
+            debug_dump_html.write_text(html0, encoding="utf-8")
+            logger.info("Saved HTML to %s", debug_dump_html)
+
+        soup0 = BeautifulSoup(html0, "lxml")
+        last_page = find_last_page(soup0)
+
+        if last_page is None or last_page == 0:
+            logger.warning(
+                "Could not determine last page index; falling back to full scan."
+            )
+            # Fall through to full scan below.
+            years = None
+        else:
+            logger.info("Last page index: %d (%d total pages)", last_page, last_page + 1)
+
+            # Step 2: binary search for the start page.
+            start_page = find_start_page(
+                listing_url=listing_url,
+                slug=slug,
+                ticker=ticker,
+                last_page=last_page,
+                target_years=years,
+                timeout=timeout,
+            )
+
+            if start_page > last_page:
+                logger.info("Binary search determined no pages contain target years. Done.")
+                return []
+
+            # Step 3: walk forward from start_page, stopping when we pass the window.
+            # Page 0 was already fetched; if start_page == 0, reuse that HTML.
+            items = scrape_one_pass(
+                listing_url=listing_url,
+                slug=slug,
+                ticker=ticker,
+                start_page=start_page,
+                polite_delay=polite_delay,
+                timeout=timeout,
+                debug_dump_html=None,  # already dumped above
+                end_page=last_page,
+                target_years=years,
+            )
+
+            # Global dedup.
+            seen: set[str] = set()
+            deduped: list[NewsItem] = []
+            for item in items:
+                k = item.url.rstrip("/")
+                if k not in seen:
+                    seen.add(k)
+                    deduped.append(item)
+            return deduped
+
+    # No year filter (or fallback): scrape everything.
     items = scrape_one_pass(
         listing_url=listing_url,
         slug=slug,
