@@ -1,0 +1,64 @@
+Date: 2026-06-28
+Time: 8:32 am
+Model: claude-sonnet-4.6
+
+==== Prompt ====
+Read python src/scrape_q4_ir.py in https://github.com/KamarajuKusumanchi/primary_wire/archive/refs/heads/master.zip . It usually fails in the headless environment due to blocking from Cloudflare
+
+"python src/scrape_q4_ir.py --slug costco --year 2026"
+but works in the --show-browser mode.
+
+""python src/scrape_q4_ir.py --slug costco --year 2026 --show-browser".
+The problem is that I can't run the latter on a headless machine. Is there a way you can enhance
+"python src/scrape_q4_ir.py --slug costco --year 2026"
+to get around the blocking from Cloudflare?
+
+==== Response ====
+
+Now I have a full picture of the code. Let me give you a direct assessment.
+
+**The honest answer: there's no reliable, complete solution that runs headlessly on a machine you control.**
+
+Here's why, and what the real options are:
+
+### What Cloudflare is actually detecting
+
+In headless mode, Chrome leaks dozens of signals: `navigator.webdriver = true`, missing plugins, unusual `window.chrome` shape, no GPU, different canvas fingerprints, and TLS/HTTP2 fingerprints that match known bot tooling. Playwright headless hits all of these. `--show-browser` passes because it's a real Chrome process presenting a normal fingerprint.
+
+### What you can actually do, in honest order of likelihood to work
+
+**1. playwright-stealth / `playwright-extra` with stealth plugin** — patches ~20 of the JS fingerprint leaks. Works on *some* CF-protected sites, especially older CF configurations. Costco's Q4 IR is likely on CF Managed Challenge or Bot Fight Mode, which checks more signals than just `navigator.webdriver`. This might work, might not, and could break without warning when CF updates its ruleset.
+
+```python
+# In _launch_browser, replace the plain launch with:
+from playwright_stealth import stealth_sync
+# ...
+page = browser.new_page()
+stealth_sync(page)
+```
+
+**2. `rebrowser-playwright`** — a fork of Playwright that patches the binary-level headless signals (the ones JS patching can't reach, like `HeadlessChrome` in the UA, or missing `Runtime.enable` CDP events). More effective than stealth alone. Drop-in replacement.
+
+**3. Browserless / Steel / Bright Data Scraping Browser** — managed cloud browsers that handle the fingerprinting for you. Costs money. Reliable.
+
+**4. Virtual display (`Xvfb`) + real `--show-browser`** — run a fake X11 display on the headless machine. Chrome thinks it has a display, presents a full non-headless fingerprint, and Cloudflare sees exactly what a normal browser looks like. **This is the most reliable option that doesn't require a paid service**, because you're not spoofing anything — you're actually running a visible browser, just with a virtual screen.
+
+```bash
+apt-get install xvfb
+Xvfb :99 -screen 0 1280x1024x24 &
+export DISPLAY=:99
+python src/scrape_q4_ir.py --slug costco --year 2026 --show-browser
+```
+
+Or use `xvfb-run`:
+```bash
+xvfb-run --auto-servernum python src/scrape_q4_ir.py --slug costco --year 2026 --show-browser
+```
+
+No code changes needed. The script already works in `--show-browser` mode; Xvfb just gives it a fake monitor to use. This works on any Linux headless server.
+
+### My recommendation
+
+**Use Xvfb** if this is a Linux machine (likely, given it's headless). It's a 2-minute install and zero code changes. If the machine doesn't have X11 at all (e.g., a stripped Docker container), you need to install `xvfb` and the font/X11 libs Chrome needs.
+
+If Xvfb isn't viable, try `playwright-stealth` as a code change — it's low-effort and *might* be enough for the current CF configuration on that IR site, but don't rely on it long-term.
