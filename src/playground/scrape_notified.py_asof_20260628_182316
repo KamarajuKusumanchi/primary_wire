@@ -84,13 +84,9 @@ Usage
 
 Requires
 --------
-  pip install playwright beautifulsoup4 lxml ruamel.yaml
-  playwright install chrome   (or: playwright install chromium)
+  pip install requests beautifulsoup4 lxml ruamel.yaml
 
 Run at most once per day. Requests are spaced by --polite-delay (default 15 s).
-
-Note: --timeout is in milliseconds (e.g. 30000 = 30 s), consistent with
-scrape_q4_ir.py and the Playwright API.
 """
 
 from __future__ import annotations
@@ -107,14 +103,14 @@ from typing import Optional
 from urllib.parse import urlencode, urljoin, urlparse, urlunparse
 
 try:
+    import requests
+except ImportError:
+    sys.exit("Missing dependency. Install with: pip install requests")
+
+try:
     from bs4 import BeautifulSoup
 except ImportError:
     sys.exit("Missing dependency. Install with: pip install beautifulsoup4 lxml")
-
-try:
-    from playwright.sync_api import sync_playwright
-except ImportError:
-    sys.exit("Missing dependency. Install with: pip install playwright")
 
 from csv_utils import merge_into_daily_csvs as _csv_merge_into_daily_csvs
 from scrape_utils import (
@@ -202,25 +198,30 @@ def date_from_url(url: str) -> Optional[date]:
 # HTTP helpers
 # ---------------------------------------------------------------------------
 
-def _launch_browser(p, headless: bool, browser_channel: str, timeout_ms: int):
-    """Launch a Chromium browser and return a configured (browser, page) pair."""
-    launch_kwargs: dict = {"headless": headless}
-    if browser_channel:
-        launch_kwargs["channel"] = browser_channel
-    browser = p.chromium.launch(**launch_kwargs)
-    page = browser.new_page()
-    page.set_default_timeout(timeout_ms)
-    return browser, page
+_SESSION: Optional[requests.Session] = None
 
 
-def fetch_html_with_page(page, url: str, timeout_ms: int = 30_000) -> str:
-    """Navigate *page* to *url* and return the fully rendered HTML.
+def get_session() -> requests.Session:
+    global _SESSION
+    if _SESSION is None:
+        _SESSION = requests.Session()
+        _SESSION.headers.update({
+            "User-Agent": (
+                "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
+                "AppleWebKit/537.36 (KHTML, like Gecko) "
+                "Chrome/124.0.0.0 Safari/537.36"
+            ),
+            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+            "Accept-Language": "en-US,en;q=0.9",
+        })
+    return _SESSION
 
-    Uses Playwright so JavaScript-rendered content and bot-detection challenges
-    (Cloudflare, etc.) are handled the same way as a real browser session.
-    """
-    page.goto(url, wait_until="domcontentloaded", timeout=timeout_ms)
-    return page.content()
+
+def fetch_html(url: str, timeout: int = 30) -> str:
+    """Fetch a URL and return its HTML. Raises on HTTP errors."""
+    resp = get_session().get(url, timeout=timeout)
+    resp.raise_for_status()
+    return resp.text
 
 
 def is_detail_url(href: str) -> bool:
@@ -382,14 +383,14 @@ def parse_listing_page(
 # Detail-page date fallback
 # ---------------------------------------------------------------------------
 
-def fetch_date_from_detail_page(url: str, page, timeout_ms: int = 30_000) -> tuple[Optional[date], str]:
+def fetch_date_from_detail_page(url: str, timeout: int = 30) -> tuple[Optional[date], str]:
     """Fetch a detail page and extract its publish date.
 
     Tries multiple selectors in priority order before falling back to a
     full-text scan of the article body.
     """
     try:
-        html = fetch_html_with_page(page, url, timeout_ms=timeout_ms)
+        html = fetch_html(url, timeout=timeout)
     except Exception as exc:
         logger.warning("Failed to fetch detail page %s: %s", url, exc)
         return None, ""
@@ -431,7 +432,7 @@ def fetch_date_from_detail_page(url: str, page, timeout_ms: int = 30_000) -> tup
     return None, ""
 
 
-def fetch_missing_dates(items: list[NewsItem], polite_delay: float, timeout_ms: int, page) -> None:
+def fetch_missing_dates(items: list[NewsItem], polite_delay: float, timeout: int) -> None:
     """Mutate *items* in-place: fetch detail pages for items with no date."""
     missing = [item for item in items if item.publish_date is None]
     if not missing:
@@ -441,7 +442,7 @@ def fetch_missing_dates(items: list[NewsItem], polite_delay: float, timeout_ms: 
     for i, item in enumerate(missing):
         if i > 0:
             time.sleep(polite_delay)
-        d, raw = fetch_date_from_detail_page(item.url, page=page, timeout_ms=timeout_ms)
+        d, raw = fetch_date_from_detail_page(item.url, timeout=timeout)
         if d:
             item.publish_date = d
             item.raw_date_text = raw
@@ -469,9 +470,7 @@ def scrape_one_pass(
     ticker: str,
     start_url: str,
     polite_delay: float,
-    timeout_ms: int,
-    headless: bool,
-    browser_channel: str,
+    timeout: int,
     debug_dump_html: Optional[Path] = None,
 ) -> list[NewsItem]:
     """Fetch all listing pages starting from *start_url*, following Next links.
@@ -480,68 +479,59 @@ def scrape_one_pass(
     from each page rather than constructing URLs ourselves -- that way we handle
     any site-specific page-size variations automatically.
 
-    Opens a single Playwright browser session for the entire pass so that
-    bot-detection cookies/state are preserved across pages.
-
     Returns a deduplicated list of NewsItems.
     """
+    next_url: Optional[str] = start_url
     all_items: list[NewsItem] = []
     seen_urls: set[str] = set()
 
-    with sync_playwright() as p:
-        browser, pw_page = _launch_browser(p, headless, browser_channel, timeout_ms)
+    for page_num in range(0, MAX_PAGES):
+        url = next_url
+        logger.info("Fetching listing page %d: %s", page_num, url)
+
         try:
-            next_url: Optional[str] = start_url
+            html = fetch_html(url, timeout=timeout)
+        except Exception as exc:
+            logger.error("Failed to fetch listing page %s: %s", url, exc)
+            break
 
-            for page_num in range(0, MAX_PAGES):
-                url = next_url
-                logger.info("Fetching listing page %d: %s", page_num, url)
+        if debug_dump_html and page_num == 0:
+            debug_dump_html.write_text(html, encoding="utf-8")
+            logger.info("Saved HTML to %s", debug_dump_html)
 
-                try:
-                    html = fetch_html_with_page(pw_page, url, timeout_ms=timeout_ms)
-                except Exception as exc:
-                    logger.error("Failed to fetch listing page %s: %s", url, exc)
-                    break
+        page_items, next_url = parse_listing_page(
+            html,
+            base_url=base_url,
+            listing_path=listing_path,
+            slug=slug,
+            ticker=ticker,
+        )
 
-                if debug_dump_html and page_num == 0:
-                    debug_dump_html.write_text(html, encoding="utf-8")
-                    logger.info("Saved HTML to %s", debug_dump_html)
+        new_items = [
+            item for item in page_items
+            if item.url.rstrip("/") not in seen_urls
+        ]
+        for item in new_items:
+            seen_urls.add(item.url.rstrip("/"))
+        all_items.extend(new_items)
 
-                page_items, next_url = parse_listing_page(
-                    html,
-                    base_url=base_url,
-                    listing_path=listing_path,
-                    slug=slug,
-                    ticker=ticker,
-                )
+        logger.info(
+            "Page %d: %d item(s) found, %d new%s",
+            page_num, len(page_items), len(new_items),
+            f"; next → {next_url}" if next_url else " [last page]",
+        )
 
-                new_items = [
-                    item for item in page_items
-                    if item.url.rstrip("/") not in seen_urls
-                ]
-                for item in new_items:
-                    seen_urls.add(item.url.rstrip("/"))
-                all_items.extend(new_items)
+        if not new_items and page_items:
+            logger.warning(
+                "Page %d: all %d item(s) already seen -- stopping to avoid loop.",
+                page_num, len(page_items),
+            )
+            break
 
-                logger.info(
-                    "Page %d: %d item(s) found, %d new%s",
-                    page_num, len(page_items), len(new_items),
-                    f"; next → {next_url}" if next_url else " [last page]",
-                )
+        if not next_url:
+            break
 
-                if not new_items and page_items:
-                    logger.warning(
-                        "Page %d: all %d item(s) already seen -- stopping to avoid loop.",
-                        page_num, len(page_items),
-                    )
-                    break
-
-                if not next_url:
-                    break
-
-                time.sleep(polite_delay)
-        finally:
-            browser.close()
+        time.sleep(polite_delay)
 
     return all_items
 
@@ -553,9 +543,7 @@ def scrape(
     ticker: str,
     years: Optional[set[int]],
     polite_delay: float,
-    timeout_ms: int,
-    headless: bool,
-    browser_channel: str,
+    timeout: int,
     debug_dump_html: Optional[Path],
 ) -> list[NewsItem]:
     """Scrape all years (or the default all-years view).
@@ -586,9 +574,7 @@ def scrape(
             ticker=ticker,
             start_url=start_url,
             polite_delay=polite_delay,
-            timeout_ms=timeout_ms,
-            headless=headless,
-            browser_channel=browser_channel,
+            timeout=timeout,
             debug_dump_html=dump_path,
         )
         all_items.extend(items)
@@ -728,33 +714,12 @@ def build_arg_parser() -> argparse.ArgumentParser:
         ),
     )
 
-    browser = parser.add_argument_group("browser")
-    browser.add_argument(
-        "--show-browser", dest="headless", action="store_false", default=True,
-        help="Show the browser window instead of running headless (useful for debugging).",
-    )
-    browser.add_argument(
-        "--fallback-to-visible", action="store_true", default=False,
-        help=(
-            "If the headless run finds zero items (likely blocked by Cloudflare or the IR "
-            "server), automatically retry with a visible browser window. Has no effect when "
-            "--show-browser is already set."
-        ),
-    )
-    browser.add_argument(
-        "--browser-channel", default="chrome",
-        help="Playwright browser channel: chrome, chromium, msedge (default: chrome).",
-    )
-
     network = parser.add_argument_group("network")
     network.add_argument(
         "--polite-delay", type=float, default=15.0, metavar="SECONDS",
         help="Seconds between page requests (default: 15).",
     )
-    network.add_argument(
-        "--timeout", type=int, default=30_000, metavar="MS",
-        help="Timeout in milliseconds for page navigation (default: 30000).",
-    )
+    network.add_argument("--timeout", type=int, default=30, metavar="SECONDS")
 
     debug = parser.add_argument_group("debug")
     debug.add_argument(
@@ -796,45 +761,13 @@ def main(argv: Optional[list[str]] = None) -> int:
         ticker=ticker,
         years=years,
         polite_delay=args.polite_delay,
-        timeout_ms=args.timeout,
-        headless=args.headless,
-        browser_channel=args.browser_channel,
+        timeout=args.timeout,
         debug_dump_html=args.debug_dump_html,
     )
     logger.info("Scraped %d item(s) total (before filtering).", len(all_items))
 
-    # If headless was blocked (zero items) and fallback is enabled, retry visibly.
-    if not all_items and args.headless and args.fallback_to_visible:
-        logger.warning(
-            "Headless run returned zero items -- retrying with a visible browser window."
-        )
-        all_items = scrape(
-            base_url=base_url,
-            listing_path=listing_path,
-            slug=slug,
-            ticker=ticker,
-            years=years,
-            polite_delay=args.polite_delay,
-            timeout_ms=args.timeout,
-            headless=False,
-            browser_channel=args.browser_channel,
-            debug_dump_html=args.debug_dump_html,
-        )
-        logger.info("Visible-browser retry scraped %d item(s).", len(all_items))
-
     if args.fetch_detail_pages:
-        # Open a fresh browser session just for detail-page resolution.
-        with sync_playwright() as p:
-            browser, pw_page = _launch_browser(p, args.headless, args.browser_channel, args.timeout)
-            try:
-                fetch_missing_dates(
-                    all_items,
-                    polite_delay=args.polite_delay,
-                    timeout_ms=args.timeout,
-                    page=pw_page,
-                )
-            finally:
-                browser.close()
+        fetch_missing_dates(all_items, polite_delay=args.polite_delay, timeout=args.timeout)
 
     filtered = filter_items(
         all_items, years=years, since=args.since, until=args.until, limit=None
