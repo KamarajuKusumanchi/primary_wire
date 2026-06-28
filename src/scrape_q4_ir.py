@@ -5,8 +5,8 @@ scrape_q4_ir.py
 Scrape press-release listings from any Q4 Inc. investor relations "News" page
 and merge them into primary_wire's daily data/YYYY/YYYY-MM-DD.csv files.
 
-Q4-powered IR sites (Costco, CDW, Qualcomm, Corning, ON Semiconductor,
-and many more in sources.yaml) share the same news-details URL shape:
+Q4-powered IR sites (Costco, CDW, and many more in sources.yaml) share
+the same news-details URL shape:
 
     /news/news-details/<year>/<slug>/default.aspx
 
