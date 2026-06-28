@@ -7,9 +7,8 @@ platform (sold by Notified, formerly Intrado/West) and merge them into
 primary_wire's daily data/YYYY/YYYY-MM-DD.csv files.
 
 InvestorRoom is a server-side-rendered IR platform used by a large number of
-S&P 500 companies, including Chipotle, Charter, Expedia, Fox, and many others.
-Unlike Q4 Inc. sites (which require a headless browser), these pages return full
-HTML to a plain HTTP request, so no Playwright is needed.
+S&P 500 companies. Unlike Q4 Inc. sites (which require a headless browser),
+these pages return full HTML to a plain HTTP request, so no Playwright is needed.
 
 Platform fingerprints
 ---------------------
@@ -20,9 +19,6 @@ You can identify an InvestorRoom site by any of:
     e.g. /2025-10-29-chipotle-announces-q3-results
   * Static assets / PDFs served from filecache.investorroom.com
   * Page footer or source contains "investorroom" or "Notified"
-
-In sources.yaml, tag these sites with  platform: investorroom  so
-scrape_investorroom.py can self-discover them (optional but recommended).
 
 URL structure
 -------------
@@ -60,11 +56,11 @@ Usage
   python src/scrape_investorroom.py
 
   # Scrape any InvestorRoom site by slug or ticker
-  python src/scrape_investorroom.py --slug charter --dry-run
-  python src/scrape_investorroom.py --ticker CHTR --dry-run
+  python src/scrape_investorroom.py --slug chipotle --dry-run
+  python src/scrape_investorroom.py --ticker CMG --dry-run
 
   # Scrape by URL directly
-  python src/scrape_investorroom.py --url https://ir.charter.com/news-releases --dry-run
+  python src/scrape_investorroom.py --url https://ir.chipotle.com/news-releases --dry-run
 
   # Restrict to a year or range
   python src/scrape_investorroom.py --year 2025 --dry-run
