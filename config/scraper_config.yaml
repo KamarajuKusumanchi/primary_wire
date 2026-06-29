@@ -20,7 +20,7 @@ investorroom:
     - slug: chipotle
 
 # Todo: Not working. Find out why and fix it.
-# notified:
-#   scraper: scrape_notified
-#   sources:
-#     - slug: abbvie
+notified:
+  scraper: scrape_notified
+  sources:
+    - slug: abbvie

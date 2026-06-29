@@ -24,10 +24,10 @@ You can identify a Notified/Drupal IR site by any of:
 URL structure
 -------------
 Listing page (paginated by 0-based page index):
-  {listing_url}                 (same as ?page=0, the first page)
-  {listing_url}?page=0          first page (explicit)
-  {listing_url}?page=1          second page
-  {listing_url}?page=N          N+1-th page
+  {base_url}{news_releases_path}                 (same as ?page=0, the first page)
+  {base_url}{news_releases_path}?page=0          first page (explicit)
+  {base_url}{news_releases_path}?page=1          second page
+  {base_url}{news_releases_path}?page=N          N+1-th page
 
 The last page index can be read from the "last »" pagination link.
 
@@ -35,7 +35,7 @@ There is NO server-side ?year= or ?l= parameter; page size is fixed
 server-side (10 items/page for AbbVie).
 
 Press release detail pages:
-  {ir_base}/news-releases/news-release-details/<slug>
+  {base_url}/news-releases/news-release-details/<slug>
 
 Dates appear in the listing table's first column in M/D/YY format
 (e.g. "6/26/26" = June 26, 2026).  Two-digit years are assumed to be
@@ -52,7 +52,7 @@ Usage
   python src/scrape_notified.py
 
   # Scrape any Notified/Drupal IR site by URL
-  python src/scrape_notified.py --url https://investors.abbvie.com/news-releases --dry-run
+  python src/scrape_notified.py --url https://investors.abbvie.com --dry-run
 
   # Scrape by slug or ticker (looked up in sources.yaml)
   python src/scrape_notified.py --slug abbvie --dry-run
@@ -133,7 +133,9 @@ DATA_DIR = REPO_ROOT / "data"
 
 DEFAULT_SLUG = "abbvie"
 DEFAULT_TICKER = "ABBV"
-DEFAULT_LISTING_URL = "https://investors.abbvie.com/news-releases"
+DEFAULT_BASE_URL = "https://investors.abbvie.com"
+
+NEWS_RELEASES_PATH = "/news-releases"
 
 MAX_PAGES = 100  # safety cap on pagination loops
 
@@ -276,13 +278,13 @@ def is_detail_url(href: str) -> bool:
 # URL building
 # ---------------------------------------------------------------------------
 
-def listing_page_url(listing_url: str, page: int = 0) -> str:
+def listing_page_url(base_url: str, page: int = 0) -> str:
     """Build a paginated listing URL using Notified/Drupal's ?page= parameter.
 
     page=0 is the first page (also reachable without the parameter, but
     we always include it for explicitness).
     """
-    base = listing_url.rstrip("/")
+    base = base_url.rstrip("/") + NEWS_RELEASES_PATH
     return base + "?" + urlencode({"page": page})
 
 
@@ -314,11 +316,11 @@ def find_last_page(soup: BeautifulSoup) -> Optional[int]:
 
 
 def parse_listing_page(
-    html: str, listing_url: str, slug: str, ticker: str
+    html: str, base_url: str, slug: str, ticker: str
 ) -> list[NewsItem]:
     """Parse one listing page; return list of NewsItems found."""
-    # Derive the site root from the listing URL for urljoin.
-    parsed = urlparse(listing_url)
+    # Derive the site root from base_url for urljoin.
+    parsed = urlparse(base_url)
     site_root = urlunparse((parsed.scheme, parsed.netloc, "", "", "", ""))
 
     soup = BeautifulSoup(html, "lxml")
@@ -445,19 +447,19 @@ def fetch_missing_dates(items: list[NewsItem], polite_delay: float, timeout: int
 # ---------------------------------------------------------------------------
 
 def page_year_range(
-    listing_url: str, page: int, slug: str, ticker: str, timeout: int
+    base_url: str, page: int, slug: str, ticker: str, timeout: int
 ) -> tuple[Optional[int], Optional[int]]:
     """Fetch page ``page`` and return (min_year, max_year) of items on it.
 
     Returns (None, None) if the page is empty or no dates can be parsed.
     """
-    url = listing_page_url(listing_url, page=page)
+    url = listing_page_url(base_url, page=page)
     try:
         html = fetch_html(url, timeout=timeout)
     except Exception as exc:
         logger.debug("Failed to probe page %d: %s", page, exc)
         return None, None
-    items = parse_listing_page(html, listing_url=listing_url, slug=slug, ticker=ticker)
+    items = parse_listing_page(html, base_url=base_url, slug=slug, ticker=ticker)
     years_on_page = [item.publish_date.year for item in items if item.publish_date]
     if not years_on_page:
         return None, None
@@ -465,7 +467,7 @@ def page_year_range(
 
 
 def find_start_page(
-    listing_url: str,
+    base_url: str,
     slug: str,
     ticker: str,
     last_page: int,
@@ -489,7 +491,7 @@ def find_start_page(
 
     # Quick sanity probe: if page 0 already only has items older than
     # max_target, there is nothing to fetch at all.
-    min_yr, max_yr = page_year_range(listing_url, 0, slug, ticker, timeout)
+    min_yr, max_yr = page_year_range(base_url, 0, slug, ticker, timeout)
     if max_yr is not None and max_yr < min_target:
         logger.info(
             "Page 0 newest item is %d, which is older than target year %d -- nothing to fetch.",
@@ -499,7 +501,7 @@ def find_start_page(
 
     while lo < hi:
         mid = (lo + hi) // 2
-        min_yr, max_yr = page_year_range(listing_url, mid, slug, ticker, timeout)
+        min_yr, max_yr = page_year_range(base_url, mid, slug, ticker, timeout)
         logger.debug(
             "Binary search: page %d year range %s–%s (target %d–%d)",
             mid, min_yr, max_yr, min_target, max_target,
@@ -531,7 +533,7 @@ def find_start_page(
 
 
 def scrape_one_pass(
-    listing_url: str,
+    base_url: str,
     slug: str,
     ticker: str,
     start_page: int,
@@ -566,7 +568,7 @@ def scrape_one_pass(
             logger.info("Reached end page %d. Done.", stop_at)
             break
 
-        url = listing_page_url(listing_url, page=page_idx)
+        url = listing_page_url(base_url, page=page_idx)
 
         logger.info("Fetching listing page %d (page=%d): %s", page_num_offset + 1, page_idx, url)
 
@@ -592,7 +594,7 @@ def scrape_one_pass(
             else:
                 logger.warning("Could not determine last page; will stop on first empty page.")
 
-        page_items = parse_listing_page(html, listing_url=listing_url, slug=slug, ticker=ticker)
+        page_items = parse_listing_page(html, base_url=base_url, slug=slug, ticker=ticker)
 
         new_items = [item for item in page_items if item.url.rstrip("/") not in seen_urls]
         for item in new_items:
@@ -639,7 +641,7 @@ def scrape_one_pass(
 
 
 def scrape(
-    listing_url: str,
+    base_url: str,
     slug: str,
     ticker: str,
     years: Optional[set[int]],
@@ -664,7 +666,7 @@ def scrape(
     """
     if years:
         # Step 1: fetch page 0 to learn last_page.
-        url0 = listing_page_url(listing_url, page=0)
+        url0 = listing_page_url(base_url, page=0)
         logger.info("Fetching page 0 to determine pagination: %s", url0)
         try:
             html0 = fetch_html(url0, timeout=timeout)
@@ -690,7 +692,7 @@ def scrape(
 
             # Step 2: binary search for the start page.
             start_page = find_start_page(
-                listing_url=listing_url,
+                base_url=base_url,
                 slug=slug,
                 ticker=ticker,
                 last_page=last_page,
@@ -705,7 +707,7 @@ def scrape(
             # Step 3: walk forward from start_page, stopping when we pass the window.
             # Page 0 was already fetched; if start_page == 0, reuse that HTML.
             items = scrape_one_pass(
-                listing_url=listing_url,
+                base_url=base_url,
                 slug=slug,
                 ticker=ticker,
                 start_page=start_page,
@@ -728,7 +730,7 @@ def scrape(
 
     # No year filter (or fallback): scrape everything.
     items = scrape_one_pass(
-        listing_url=listing_url,
+        base_url=base_url,
         slug=slug,
         ticker=ticker,
         start_page=0,
@@ -787,13 +789,15 @@ def resolve_source(
     slug: Optional[str],
     ticker: Optional[str],
 ) -> tuple[str, str, str]:
-    """Resolve (listing_url, slug, ticker) from CLI args and sources.yaml.
+    """Resolve (base_url, slug, ticker) from CLI args and sources.yaml.
 
-    Returns (listing_url, slug, ticker).  listing_url is the full listing
-    page URL (e.g. https://investors.abbvie.com/financial-releases), not just
-    the site root.  Unlike scrape_investorroom.py, this scraper takes the
-    listing URL directly because the path varies by company
-    (e.g. /financial-releases vs /news-releases).
+    Returns (base_url, slug, ticker).  base_url is the IR site root
+    (e.g. https://investors.abbvie.com), NOT the news-releases listing URL.
+    Callers append NEWS_RELEASES_PATH themselves via listing_page_url().
+
+    When --url is provided with a path (e.g. https://investors.abbvie.com/news-releases),
+    the path is stripped so only the site root is retained, matching the
+    convention used by scrape_investorroom.py.
     """
     try:
         from sources_utils import find_source, find_source_by_ir_url, load_sources
@@ -819,16 +823,10 @@ def resolve_source(
             if not url:
                 url = record.get("ir_url", "").rstrip("/")
     elif url:
-        # Keep the full listing URL (including path) -- don't strip to root.
-        record = None
+        # Strip path so we hold only the site root (scheme + netloc).
         parsed = urlparse(url)
-        site_root = urlunparse((parsed.scheme, parsed.netloc, "", "", "", ""))
-        if sources:
-            try:
-                from sources_utils import find_source_by_ir_url
-                record = find_source_by_ir_url(sources, site_root)
-            except Exception:
-                pass
+        url = urlunparse((parsed.scheme, parsed.netloc, "", "", "", ""))
+        record = find_source_by_ir_url(sources, url) if sources else None
         if record is None:
             logger.warning(
                 "No sources.yaml record matched the host of '%s'. "
@@ -838,7 +836,7 @@ def resolve_source(
             slug = record.get("slug", "")
             ticker = record.get("ticker", "")
     else:
-        slug, ticker, url = DEFAULT_SLUG, DEFAULT_TICKER, DEFAULT_LISTING_URL
+        slug, ticker, url = DEFAULT_SLUG, DEFAULT_TICKER, DEFAULT_BASE_URL
 
     if not slug:
         logger.warning("Slug is empty; CSV rows will have an empty slug column.")
@@ -903,13 +901,13 @@ def main(argv: Optional[list[str]] = None) -> int:
     if args.format == "json" and args.output is None:
         parser.error("--output PATH is required when --format json")
 
-    listing_url, slug, ticker = resolve_source(args.url, args.slug, args.ticker)
-    logger.info("Scraping %s (%s) from %s", slug, ticker, listing_url)
+    base_url, slug, ticker = resolve_source(args.url, args.slug, args.ticker)
+    logger.info("Scraping %s (%s) from %s", slug, ticker, base_url + NEWS_RELEASES_PATH)
 
     years = parse_year_args(args)
 
     all_items = scrape(
-        listing_url=listing_url,
+        base_url=base_url,
         slug=slug,
         ticker=ticker,
         years=years,
