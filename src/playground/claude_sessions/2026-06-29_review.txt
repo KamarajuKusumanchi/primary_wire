@@ -1,0 +1,53 @@
+2026-06-29 12:31 AM
+
+Prompt:
+Please review
+https://github.com/KamarajuKusumanchi/primary_wire/archive/refs/heads/master.zip
+and tell me what you think? What are the next steps to improve the scraper coverage? Ignore src/playground/scrape_costco.py from your review.
+
+Response:
+Good — I now have full context, including the prior June 26th review. Let me look at what's actually changed since then.Here's my full assessment:
+
+---
+
+## What's changed since the June 26th review
+
+Meaningfully: **three new scrapers** (`scrape_investorroom.py`, `scrape_notified.py`) and a runner (`scrape_all.py`) were added, and 4 sources now have automated scraping (costco, cdw, chipotle, abbvie). The data grew from ~33 to 67 press releases across 11 slugs. There's also the `--fallback-to-visible` Cloudflare workaround from the June 28th session.
+
+That's real progress, but the fundamentals haven't shifted much. Here's the honest state:
+
+---
+
+## What's good
+
+**The new scrapers are well-written.** `scrape_notified.py` is the most sophisticated — it handles TLS fingerprinting via `curl_cffi`, does binary search across paginated pages to avoid scraping the entire archive when you only need recent years, and has early-exit logic. That's non-trivial work done correctly. `scrape_investorroom.py` handles both legacy `?item=NNNNN` and modern date-slug URLs. Both follow the same shared pattern as `scrape_q4_ir.py`.
+
+**`scrape_all.py` is the right abstraction.** Config-driven orchestration via `scraper_config.yaml` is the correct way to scale. The `scrape_utils.py` / `csv_utils.py` shared layer is clean.
+
+---
+
+## What still needs work
+
+**Coverage is still thin.** 67 entries across 11 slugs out of 63 registered sources. 52 sources still have zero automation. The scraper infrastructure now exists for 3 platforms (Q4, InvestorRoom, Notified/Drupal), but most sources haven't been classified into one of them yet.
+
+**`scraper_config.yaml` is nearly empty.** Only 4 sources are wired up. Of your 63 sources.yaml entries, many are almost certainly on InvestorRoom or Notified already — they just haven't been added to the config. This is the biggest near-term gap: you have working scrapers that aren't being used.
+
+**No platform classification in sources.yaml.** There's no `platform:` field. You can't tell which scraper to use for a given source without manually inspecting the IR URL. This makes `scrape_all.py` brittle — you have to manually classify each source in `scraper_config.yaml` rather than having the system derive it.
+
+---
+
+## Prioritized next steps
+
+**1. Classify your existing 63 sources by platform and wire them into scraper_config.yaml.** This is the highest-leverage move. Visit each IR URL and check if it's InvestorRoom (`/news-releases`, `filecache.investorroom.com`), Notified/Drupal (`Generator: Drupal 10`, `?page=0`), or Q4 (`.aspx`, `/news/news-details/`). Many of your sources almost certainly fall into one of these three buckets. Wiring even 20 more sources into the config would triple your automated coverage with zero new code.
+
+Specific candidates from sources.yaml that are likely already on platforms you support:
+- Notified/Drupal: NVIDIA (`investor.nvidia.com` — uses `?page=`), many others
+- InvestorRoom: Palantir, Datadog, ServiceNow, Robinhood, DoorDash, Coinbase — these are venture-era companies that commonly use Notified/InvestorRoom
+
+**2. Add a `platform:` field to sources.yaml.** Even just `platform: q4`, `platform: investorroom`, `platform: notified`, `platform: unknown`. Then `scrape_all.py` could auto-select the right scraper without needing manual `scraper_config.yaml` entries. The `update_source.py` interactive tool should prompt for this.
+
+**3. Write a platform-detection script.** Given the URL patterns are deterministic (`/news-releases` → InvestorRoom, `.aspx` → Q4, `Drupal 10` meta tag → Notified), a `classify_sources.py` that fetches each IR URL and tries to fingerprint the platform would let you classify all 63 sources semi-automatically rather than doing it by hand.
+
+**4. Expand government/macro sources.** BLS is there but unused (no scraper). Fed, Census Bureau (retail sales), and Treasury press releases are high-value for the stated research use case (press release → market impact) and are static HTML with no bot protection. These would be easy wins with a simple `requests` + BeautifulSoup scraper.
+
+**5. Handle the sources with no IR platform.** About 10–15 of your sources (Apple, Google/Alphabet, Netflix, SpaceX, IBM, Verizon) have custom IR pages that don't match any of the 3 platforms. These need individual scrapers. Lower priority — do the platform-matching ones first for better ROI.
