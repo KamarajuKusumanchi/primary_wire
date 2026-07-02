@@ -114,6 +114,10 @@ sources:
     name: DoorDash, Inc.
     ticker: DASH
     ir_url: https://ir.doordash.com/
+  - slug: equifax
+    name: Equifax Inc.
+    ticker: EFX
+    ir_url: https://investor.equifax.com/
   - slug: expedia
     name: Expedia Group, Inc.
     ticker: EXPE
@@ -146,10 +150,18 @@ sources:
     name: Gen Digital Inc.
     ticker: GEN
     ir_url: https://investor.gendigital.com/
+  - slug: genuine-parts
+    name: Genuine Parts Company
+    ticker: GPC
+    ir_url: https://www.genpt.com/overview
   - slug: google
     name: Alphabet Inc.
     ticker: GOOGL
     ir_url: https://abc.xyz/investor/
+  - slug: honeywell
+    name: Honeywell Aerospace Inc.
+    ticker: HONA
+    ir_url: https://investor.honeywell.com/investor-relations
   - slug: ibm
     name: International Business Machines Corporation
     ticker: IBM
@@ -262,6 +274,10 @@ sources:
     name: Verizon Communications Inc.
     ticker: VZ
     ir_url: https://www.verizon.com/about/investors
+  - slug: vertex-pharmaceuticals
+    name: Vertex Pharmaceuticals Incorporated
+    ticker: VRTX
+    ir_url: https://investors.vrtx.com/
   - slug: vertiv
     name: Vertiv Holdings Co
     ticker: VRT
