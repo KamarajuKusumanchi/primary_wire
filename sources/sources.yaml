@@ -158,6 +158,14 @@ sources:
     name: IQVIA Holdings Inc.
     ticker: IQV
     ir_url: https://ir.iqvia.com/
+  - slug: kla
+    name: KLA Corporation
+    ticker: KLAC
+    ir_url: https://ir.kla.com/
+  - slug: lam-research
+    name: Lam Research Corporation
+    ticker: LRCX
+    ir_url: https://investor.lamresearch.com/
   - slug: micron
     name: Micron Technology, Inc.
     ticker: MU
@@ -226,6 +234,14 @@ sources:
     name: Super Micro Computer, Inc.
     ticker: SMCI
     ir_url: https://ir.supermicro.com/
+  - slug: teradyne
+    name: Teradyne, Inc.
+    ticker: TER
+    ir_url: https://investors.teradyne.com/
+  - slug: tesla
+    name: Tesla, Inc.
+    ticker: TSLA
+    ir_url: https://ir.tesla.com/
   - slug: tjx
     name: The TJX Companies, Inc.
     ticker: TJX
@@ -234,6 +250,10 @@ sources:
     name: United Airlines Holdings, Inc.
     ticker: UAL
     ir_url: https://ir.united.com/
+  - slug: universal-health-services
+    name: Universal Health Services, Inc.
+    ticker: UHS
+    ir_url: https://ir.uhs.com/
   - slug: verisign
     name: VeriSign, Inc.
     ticker: VRSN
