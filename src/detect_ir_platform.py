@@ -54,7 +54,9 @@ Column widths auto-size to content. Header + separator on the first two lines.
 
 Requires
 --------
-  pip install requests beautifulsoup4 lxml pandas ruamel.yaml
+  pip install curl_cffi beautifulsoup4 lxml pandas ruamel.yaml
+  (requests is used as a fallback if curl_cffi is not available, but curl_cffi
+  is required for sites with TLS fingerprinting such as AbbVie/Notified.)
 """
 
 from __future__ import annotations
@@ -69,8 +71,19 @@ from typing import Optional
 from urllib.parse import urlparse
 
 import pandas as pd
-import requests
 from bs4 import BeautifulSoup
+
+# curl_cffi impersonates Chrome's TLS fingerprint (JA3/JA4), which is required
+# for IR sites that enforce TLS fingerprinting (Notified/Drupal sites like
+# AbbVie silently drop or timeout connections from the standard Python stack).
+# scrape_notified.py documents this explicitly and mandates curl_cffi.
+# We use it for all fetches here — it handles all three platform types fine.
+try:
+    from curl_cffi import requests
+    _HTTP_BACKEND = "curl_cffi"
+except ImportError:
+    import requests  # type: ignore[no-redef]
+    _HTTP_BACKEND = "requests"
 
 # ---------------------------------------------------------------------------
 # Logging
@@ -116,32 +129,51 @@ NOTIFIED_DETAIL_RE = re.compile(
 # HTTP fetch
 # ---------------------------------------------------------------------------
 
-_SESSION: Optional[requests.Session] = None
+_SESSION = None
 
 
-def get_session() -> requests.Session:
-    """Return a shared requests.Session with a browser-like User-Agent."""
+def get_session():
+    """Return a shared HTTP session.
+
+    Uses curl_cffi with Chrome impersonation when available — required for
+    IR sites (particularly Notified/Drupal) that enforce TLS fingerprinting
+    and silently drop or time out connections from the standard Python stack.
+    scrape_notified.py documents this requirement explicitly.
+    Falls back to a plain requests.Session if curl_cffi is not installed,
+    which works for sites without TLS fingerprint checks.
+    """
     global _SESSION
     if _SESSION is None:
-        _SESSION = requests.Session()
-        _SESSION.headers.update({
-            "User-Agent": (
-                "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
-                "AppleWebKit/537.36 (KHTML, like Gecko) "
-                "Chrome/124.0.0.0 Safari/537.36"
-            ),
-            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-            "Accept-Language": "en-US,en;q=0.9",
-        })
+        if _HTTP_BACKEND == "curl_cffi":
+            # impersonate="chrome124" sets JA3/JA4 + HTTP/2 SETTINGS to match
+            # a real Chrome 124 client, bypassing TLS-fingerprint blocks.
+            _SESSION = requests.Session(impersonate="chrome124")
+            logger.debug("HTTP backend: curl_cffi (Chrome impersonation)")
+        else:
+            logger.warning(
+                "curl_cffi not installed — falling back to plain requests. "
+                "Sites with TLS fingerprinting (e.g. AbbVie/Notified) may "
+                "timeout or be misclassified. Install with: pip install curl_cffi"
+            )
+            _SESSION = requests.Session()
+            _SESSION.headers.update({
+                "User-Agent": (
+                    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
+                    "AppleWebKit/537.36 (KHTML, like Gecko) "
+                    "Chrome/124.0.0.0 Safari/537.36"
+                ),
+                "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+                "Accept-Language": "en-US,en;q=0.9",
+            })
     return _SESSION
 
 
 def fetch_html(url: str, timeout: int) -> tuple[str, str]:
     """GET *url* and return (final_url, html).
 
-    Follows redirects; raises requests.RequestException on failure.
-    Returns the final URL after redirects alongside the page HTML so callers
-    can log where the request actually landed.
+    Follows redirects. Returns the final URL after redirects alongside the
+    page HTML so callers can log where the request actually landed.
+    Raises on HTTP errors.
     """
     resp = get_session().get(url, timeout=timeout, allow_redirects=True)
     resp.raise_for_status()
