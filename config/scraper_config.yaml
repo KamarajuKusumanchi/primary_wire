@@ -6,6 +6,11 @@
 # Each entry requires a 'slug' matching sources/sources.yaml.
 # 'args' is an optional list of extra CLI flags passed verbatim to that scraper.
 # --slug and --year are always passed automatically by scrape_all.py.
+#
+# Note: per-source URL structure (e.g. news_releases_path) belongs in
+# sources.yaml, not here as an 'args' override -- it's a durable fact about
+# the source's site, not a per-run scraper behavior flag, and scripts run
+# directly (outside scrape_all.py) still need to pick it up.
 
 q4_ir:
   scraper: scrape_q4_ir
@@ -26,3 +31,4 @@ notified:
   scraper: scrape_notified
   sources:
     - slug: abbvie
+    - slug: teradyne

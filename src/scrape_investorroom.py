@@ -62,6 +62,12 @@ Usage
   # Scrape by URL directly
   python src/scrape_investorroom.py --url https://ir.chipotle.com/news-releases --dry-run
 
+  # Override the news-releases listing path for an InvestorRoom site that
+  # doesn't use the default (rare -- most InvestorRoom sites use
+  # /news-releases). Normally set once in sources.yaml's news_releases_path
+  # field instead of passing this every time.
+  python src/scrape_investorroom.py --slug SLUG --news-releases-path /press-releases --dry-run
+
   # Restrict to a year or range
   python src/scrape_investorroom.py --year 2025 --dry-run
   python src/scrape_investorroom.py --start-year 2023 --end-year 2025 --dry-run
@@ -134,7 +140,13 @@ DEFAULT_SLUG = "chipotle"
 DEFAULT_TICKER = "CMG"
 DEFAULT_BASE_URL = "https://ir.chipotle.com"
 
-NEWS_RELEASES_PATH = "/news-releases"
+DEFAULT_NEWS_RELEASES_PATH = "/news-releases"
+# Actual path used for a given source resolves as (highest wins):
+#   --news-releases-path CLI flag
+#   > sources.yaml "news_releases_path" field for the matched source
+#   > DEFAULT_NEWS_RELEASES_PATH
+# See resolve_source(). All InvestorRoom sites currently in sources.yaml use
+# the default; this exists for when a future one doesn't.
 
 DEFAULT_PAGE_LIMIT = 100  # ?l=100 -- 100 items per page vs server default of 5
 MAX_PAGES = 50            # safety cap on pagination loops
@@ -217,13 +229,21 @@ def is_detail_url(href: str) -> bool:
 # URL building
 # ---------------------------------------------------------------------------
 
-def listing_page_url(base_url: str, offset: int = 0, page_limit: int = DEFAULT_PAGE_LIMIT) -> str:
+def listing_page_url(
+    base_url: str,
+    offset: int = 0,
+    page_limit: int = DEFAULT_PAGE_LIMIT,
+    news_releases_path: str = DEFAULT_NEWS_RELEASES_PATH,
+) -> str:
     """Build a paginated listing URL using InvestorRoom's ?l= / ?o= parameters.
 
     ?l=<limit>   items per page (server default is 5 when omitted; always pass explicitly)
     ?o=<offset>  skip this many items (0-based; omit on the first page)
+
+    news_releases_path defaults to "/news-releases"; callers resolve the
+    right value via resolve_source() / sources.yaml before calling this.
     """
-    base = base_url.rstrip("/") + NEWS_RELEASES_PATH
+    base = base_url.rstrip("/") + news_releases_path
     params: dict[str, int] = {"l": page_limit}
     if offset > 0:
         params["o"] = offset
@@ -231,10 +251,14 @@ def listing_page_url(base_url: str, offset: int = 0, page_limit: int = DEFAULT_P
 
 
 def year_filter_url(
-    base_url: str, year: int, offset: int = 0, page_limit: int = DEFAULT_PAGE_LIMIT
+    base_url: str,
+    year: int,
+    offset: int = 0,
+    page_limit: int = DEFAULT_PAGE_LIMIT,
+    news_releases_path: str = DEFAULT_NEWS_RELEASES_PATH,
 ) -> str:
-    """Build a year-filtered listing URL."""
-    base = base_url.rstrip("/") + NEWS_RELEASES_PATH
+    """Build a year-filtered listing URL. See listing_page_url() for news_releases_path."""
+    base = base_url.rstrip("/") + news_releases_path
     params: dict[str, object] = {"year": year, "l": page_limit}
     if offset > 0:
         params["o"] = offset
@@ -493,6 +517,7 @@ def scrape(
     timeout: int,
     page_limit: int,
     debug_dump_html: Optional[Path],
+    news_releases_path: str = DEFAULT_NEWS_RELEASES_PATH,
 ) -> list[NewsItem]:
     """Scrape all years (or the default all-years view).
 
@@ -507,9 +532,13 @@ def scrape(
             time.sleep(polite_delay)
 
         if year is not None:
-            start_url = year_filter_url(base_url, year, page_limit=page_limit)
+            start_url = year_filter_url(
+                base_url, year, page_limit=page_limit, news_releases_path=news_releases_path
+            )
         else:
-            start_url = listing_page_url(base_url, page_limit=page_limit)
+            start_url = listing_page_url(
+                base_url, page_limit=page_limit, news_releases_path=news_releases_path
+            )
 
         dump_path = debug_dump_html
         if dump_path and len(years_to_visit) > 1 and year is not None:
@@ -578,12 +607,19 @@ def resolve_source(
     url: Optional[str],
     slug: Optional[str],
     ticker: Optional[str],
-) -> tuple[str, str, str]:
-    """Resolve (base_url, slug, ticker) from CLI args and sources.yaml.
+    news_releases_path: Optional[str] = None,
+) -> tuple[str, str, str, str]:
+    """Resolve (base_url, slug, ticker, news_releases_path) from CLI args and sources.yaml.
 
-    Returns (base_url, slug, ticker).  base_url is the IR site root
-    (e.g. https://ir.chipotle.com), NOT the news-releases listing URL.
-    Callers append NEWS_RELEASES_PATH themselves.
+    Returns (base_url, slug, ticker, news_releases_path).  base_url is the IR
+    site root (e.g. https://ir.chipotle.com), NOT the news-releases listing
+    URL.  Callers append news_releases_path themselves via listing_page_url()
+    / year_filter_url().
+
+    news_releases_path precedence (highest wins):
+      1. the news_releases_path argument (i.e. --news-releases-path on the CLI)
+      2. the "news_releases_path" field on the matched sources.yaml record
+      3. DEFAULT_NEWS_RELEASES_PATH ("/news-releases")
     """
     try:
         from sources_utils import find_source, find_source_by_ir_url, load_sources
@@ -595,6 +631,7 @@ def resolve_source(
     url = url or ""
     slug = slug or ""
     ticker = ticker or ""
+    record: Optional[dict] = None
 
     if slug or ticker:
         query = slug or ticker
@@ -629,7 +666,13 @@ def resolve_source(
     if not ticker:
         logger.warning("Ticker is empty; CSV rows will have an empty ticker column.")
 
-    return url, slug, ticker
+    # news_releases_path precedence: explicit CLI arg > sources.yaml field > default.
+    if not news_releases_path:
+        news_releases_path = (record.get("news_releases_path") if record else None) or (
+            DEFAULT_NEWS_RELEASES_PATH
+        )
+
+    return url, slug, ticker, news_releases_path
 
 
 # ---------------------------------------------------------------------------
@@ -644,6 +687,16 @@ def build_arg_parser() -> argparse.ArgumentParser:
 
     # Shared: --url/--slug/--ticker, year/date filters, --format/--output/--dry-run
     add_common_args(parser)
+
+    source = parser.add_argument_group("source")
+    source.add_argument(
+        "--news-releases-path", default=None, metavar="PATH",
+        help=(
+            "Listing path appended to the IR site root, e.g. /press-releases "
+            "(default: /news-releases). Overrides sources.yaml's "
+            "news_releases_path field for this run; most sites don't need this."
+        ),
+    )
 
     detail = parser.add_argument_group("detail-page fetch")
     detail.add_argument(
@@ -695,8 +748,10 @@ def main(argv: Optional[list[str]] = None) -> int:
     if args.format == "json" and args.output is None:
         parser.error("--output PATH is required when --format json")
 
-    base_url, slug, ticker = resolve_source(args.url, args.slug, args.ticker)
-    logger.info("Scraping %s (%s) from %s", slug, ticker, base_url + NEWS_RELEASES_PATH)
+    base_url, slug, ticker, news_releases_path = resolve_source(
+        args.url, args.slug, args.ticker, args.news_releases_path
+    )
+    logger.info("Scraping %s (%s) from %s", slug, ticker, base_url + news_releases_path)
 
     years = parse_year_args(args)
 
@@ -709,6 +764,7 @@ def main(argv: Optional[list[str]] = None) -> int:
         timeout=args.timeout,
         page_limit=args.page_limit,
         debug_dump_html=args.debug_dump_html,
+        news_releases_path=news_releases_path,
     )
     logger.info("Scraped %d item(s) total (before filtering).", len(all_items))
 

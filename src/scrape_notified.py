@@ -58,6 +58,13 @@ Usage
   python src/scrape_notified.py --slug abbvie --dry-run
   python src/scrape_notified.py --ticker ABBV --dry-run
 
+  # Override the news-releases listing path and/or starting page number
+  # (most sites use /news-releases starting at page 0; some, e.g. Teradyne,
+  # use a different path and start at page 1 instead). Normally set once in
+  # sources.yaml's news_releases_path / first_page_index fields instead of
+  # passing these every time.
+  python src/scrape_notified.py --slug teradyne --news-releases-path /news-events/press-releases --first-page-index 1 --dry-run
+
   # Restrict to a year or range
   python src/scrape_notified.py --year 2025 --dry-run
   python src/scrape_notified.py --start-year 2023 --end-year 2025 --dry-run
@@ -135,7 +142,24 @@ DEFAULT_SLUG = "abbvie"
 DEFAULT_TICKER = "ABBV"
 DEFAULT_BASE_URL = "https://investors.abbvie.com"
 
-NEWS_RELEASES_PATH = "/news-releases"
+DEFAULT_NEWS_RELEASES_PATH = "/news-releases"
+# Actual path used for a given source resolves as (highest wins):
+#   --news-releases-path CLI flag
+#   > sources.yaml "news_releases_path" field for the matched source
+#   > DEFAULT_NEWS_RELEASES_PATH
+# See resolve_source(). Most Notified/Drupal sites use the default; some
+# (e.g. Teradyne, at /news-events/press-releases) use a different path.
+
+DEFAULT_FIRST_PAGE_INDEX = 0
+# Index of this site's first pagination page (the value in its own ?page=
+# scheme, not necessarily 0). Resolves the same way as news_releases_path
+# (highest wins):
+#   --first-page-index CLI flag
+#   > sources.yaml "first_page_index" field for the matched source
+#   > DEFAULT_FIRST_PAGE_INDEX
+# See resolve_source(). Most Notified/Drupal sites are 0-indexed (their
+# first page is ?page=0); some (e.g. Teradyne) are 1-indexed instead
+# (?page=0 404s; the first page is ?page=1).
 
 MAX_PAGES = 100  # safety cap on pagination loops
 
@@ -278,13 +302,19 @@ def is_detail_url(href: str) -> bool:
 # URL building
 # ---------------------------------------------------------------------------
 
-def listing_page_url(base_url: str, page: int = 0) -> str:
+def listing_page_url(
+    base_url: str, page: int = 0, news_releases_path: str = DEFAULT_NEWS_RELEASES_PATH
+) -> str:
     """Build a paginated listing URL using Notified/Drupal's ?page= parameter.
 
     page=0 is the first page (also reachable without the parameter, but
     we always include it for explicitness).
+
+    news_releases_path defaults to "/news-releases" but some sites (e.g.
+    Teradyne) use "/press-releases" instead; callers resolve the right value
+    via resolve_source() / sources.yaml before calling this.
     """
-    base = base_url.rstrip("/") + NEWS_RELEASES_PATH
+    base = base_url.rstrip("/") + news_releases_path
     return base + "?" + urlencode({"page": page})
 
 
@@ -447,13 +477,18 @@ def fetch_missing_dates(items: list[NewsItem], polite_delay: float, timeout: int
 # ---------------------------------------------------------------------------
 
 def page_year_range(
-    base_url: str, page: int, slug: str, ticker: str, timeout: int
+    base_url: str,
+    page: int,
+    slug: str,
+    ticker: str,
+    timeout: int,
+    news_releases_path: str = DEFAULT_NEWS_RELEASES_PATH,
 ) -> tuple[Optional[int], Optional[int]]:
     """Fetch page ``page`` and return (min_year, max_year) of items on it.
 
     Returns (None, None) if the page is empty or no dates can be parsed.
     """
-    url = listing_page_url(base_url, page=page)
+    url = listing_page_url(base_url, page=page, news_releases_path=news_releases_path)
     try:
         html = fetch_html(url, timeout=timeout)
     except Exception as exc:
@@ -473,35 +508,41 @@ def find_start_page(
     last_page: int,
     target_years: set[int],
     timeout: int,
+    news_releases_path: str = DEFAULT_NEWS_RELEASES_PATH,
+    first_page_index: int = DEFAULT_FIRST_PAGE_INDEX,
 ) -> int:
     """Binary-search for the first page that might contain items from ``target_years``.
 
-    Pages are in reverse-chronological order: page 0 has the newest items and
-    page ``last_page`` has the oldest.  We want the lowest-numbered page whose
-    date range overlaps the target year range (i.e. whose *oldest* item is not
-    yet older than min(target_years)).
+    Pages are in reverse-chronological order: page ``first_page_index`` has
+    the newest items and page ``last_page`` has the oldest.  We want the
+    lowest-numbered page whose date range overlaps the target year range
+    (i.e. whose *oldest* item is not yet older than min(target_years)).
 
-    Returns 0 if the search fails or the answer is ambiguous.
+    Returns first_page_index if the search fails or the answer is ambiguous.
     """
     min_target = min(target_years)
     max_target = max(target_years)
 
-    lo, hi = 0, last_page
-    result = 0  # conservative default: start from the beginning
+    lo, hi = first_page_index, last_page
+    result = first_page_index  # conservative default: start from the beginning
 
-    # Quick sanity probe: if page 0 already only has items older than
-    # max_target, there is nothing to fetch at all.
-    min_yr, max_yr = page_year_range(base_url, 0, slug, ticker, timeout)
+    # Quick sanity probe: if the first page already only has items older
+    # than max_target, there is nothing to fetch at all.
+    min_yr, max_yr = page_year_range(
+        base_url, first_page_index, slug, ticker, timeout, news_releases_path=news_releases_path
+    )
     if max_yr is not None and max_yr < min_target:
         logger.info(
-            "Page 0 newest item is %d, which is older than target year %d -- nothing to fetch.",
-            max_yr, min_target,
+            "Page %d newest item is %d, which is older than target year %d -- nothing to fetch.",
+            first_page_index, max_yr, min_target,
         )
         return last_page + 1  # sentinel: nothing to fetch
 
     while lo < hi:
         mid = (lo + hi) // 2
-        min_yr, max_yr = page_year_range(base_url, mid, slug, ticker, timeout)
+        min_yr, max_yr = page_year_range(
+            base_url, mid, slug, ticker, timeout, news_releases_path=news_releases_path
+        )
         logger.debug(
             "Binary search: page %d year range %s–%s (target %d–%d)",
             mid, min_yr, max_yr, min_target, max_target,
@@ -526,8 +567,8 @@ def find_start_page(
             hi = mid
 
     logger.info(
-        "Binary search complete: starting scrape from page %d (of %d total).",
-        result, last_page + 1,
+        "Binary search complete: starting scrape from page %d (of %d total, first=%d).",
+        result, last_page + 1, first_page_index,
     )
     return result
 
@@ -542,6 +583,7 @@ def scrape_one_pass(
     debug_dump_html: Optional[Path] = None,
     end_page: Optional[int] = None,
     target_years: Optional[set[int]] = None,
+    news_releases_path: str = DEFAULT_NEWS_RELEASES_PATH,
 ) -> list[NewsItem]:
     """Fetch listing pages from ``start_page`` through ``end_page``.
 
@@ -568,7 +610,7 @@ def scrape_one_pass(
             logger.info("Reached end page %d. Done.", stop_at)
             break
 
-        url = listing_page_url(base_url, page=page_idx)
+        url = listing_page_url(base_url, page=page_idx, news_releases_path=news_releases_path)
 
         logger.info("Fetching listing page %d (page=%d): %s", page_num_offset + 1, page_idx, url)
 
@@ -648,6 +690,8 @@ def scrape(
     polite_delay: float,
     timeout: int,
     debug_dump_html: Optional[Path],
+    news_releases_path: str = DEFAULT_NEWS_RELEASES_PATH,
+    first_page_index: int = DEFAULT_FIRST_PAGE_INDEX,
 ) -> list[NewsItem]:
     """Scrape listing pages, using binary search when a year filter is active.
 
@@ -663,15 +707,21 @@ def scrape(
     probes are lightweight (parse only, no delay between them) but do count
     against the server.  Total pages fetched = O(log N) probes + K data pages,
     where K is the number of pages that actually contain the target years.
+
+    first_page_index is the site's own starting page number (0 for most
+    Notified/Drupal sites; 1 for e.g. Teradyne). All page-number math below
+    is relative to it -- nothing assumes the first page is literally 0.
     """
     if years:
-        # Step 1: fetch page 0 to learn last_page.
-        url0 = listing_page_url(base_url, page=0)
-        logger.info("Fetching page 0 to determine pagination: %s", url0)
+        # Step 1: fetch the first page to learn last_page.
+        url0 = listing_page_url(
+            base_url, page=first_page_index, news_releases_path=news_releases_path
+        )
+        logger.info("Fetching first page (page=%d) to determine pagination: %s", first_page_index, url0)
         try:
             html0 = fetch_html(url0, timeout=timeout)
         except Exception as exc:
-            logger.error("Failed to fetch page 0: %s", exc)
+            logger.error("Failed to fetch first page: %s", exc)
             return []
 
         if debug_dump_html:
@@ -681,14 +731,17 @@ def scrape(
         soup0 = BeautifulSoup(html0, "lxml")
         last_page = find_last_page(soup0)
 
-        if last_page is None or last_page == 0:
+        if last_page is None or last_page == first_page_index:
             logger.warning(
                 "Could not determine last page index; falling back to full scan."
             )
             # Fall through to full scan below.
             years = None
         else:
-            logger.info("Last page index: %d (%d total pages)", last_page, last_page + 1)
+            logger.info(
+                "Last page index: %d (%d total pages, first=%d)",
+                last_page, last_page - first_page_index + 1, first_page_index,
+            )
 
             # Step 2: binary search for the start page.
             start_page = find_start_page(
@@ -698,6 +751,8 @@ def scrape(
                 last_page=last_page,
                 target_years=years,
                 timeout=timeout,
+                news_releases_path=news_releases_path,
+                first_page_index=first_page_index,
             )
 
             if start_page > last_page:
@@ -705,7 +760,8 @@ def scrape(
                 return []
 
             # Step 3: walk forward from start_page, stopping when we pass the window.
-            # Page 0 was already fetched; if start_page == 0, reuse that HTML.
+            # The first page was already fetched above; if start_page ==
+            # first_page_index, scrape_one_pass will simply re-fetch it.
             items = scrape_one_pass(
                 base_url=base_url,
                 slug=slug,
@@ -716,6 +772,7 @@ def scrape(
                 debug_dump_html=None,  # already dumped above
                 end_page=last_page,
                 target_years=years,
+                news_releases_path=news_releases_path,
             )
 
             # Global dedup.
@@ -733,10 +790,11 @@ def scrape(
         base_url=base_url,
         slug=slug,
         ticker=ticker,
-        start_page=0,
+        start_page=first_page_index,
         polite_delay=polite_delay,
         timeout=timeout,
         debug_dump_html=debug_dump_html,
+        news_releases_path=news_releases_path,
     )
 
     # Global dedup (should already be clean from scrape_one_pass, but be safe).
@@ -788,16 +846,31 @@ def resolve_source(
     url: Optional[str],
     slug: Optional[str],
     ticker: Optional[str],
-) -> tuple[str, str, str]:
-    """Resolve (base_url, slug, ticker) from CLI args and sources.yaml.
+    news_releases_path: Optional[str] = None,
+    first_page_index: Optional[int] = None,
+) -> tuple[str, str, str, str, int]:
+    """Resolve (base_url, slug, ticker, news_releases_path, first_page_index)
+    from CLI args and sources.yaml.
 
-    Returns (base_url, slug, ticker).  base_url is the IR site root
-    (e.g. https://investors.abbvie.com), NOT the news-releases listing URL.
-    Callers append NEWS_RELEASES_PATH themselves via listing_page_url().
+    base_url is the IR site root (e.g. https://investors.abbvie.com), NOT the
+    news-releases listing URL.  Callers append news_releases_path themselves
+    via listing_page_url().
 
     When --url is provided with a path (e.g. https://investors.abbvie.com/news-releases),
     the path is stripped so only the site root is retained, matching the
     convention used by scrape_investorroom.py.
+
+    news_releases_path precedence (highest wins):
+      1. the news_releases_path argument (i.e. --news-releases-path on the CLI)
+      2. the "news_releases_path" field on the matched sources.yaml record
+      3. DEFAULT_NEWS_RELEASES_PATH ("/news-releases")
+
+    first_page_index precedence (highest wins). Note 0 is a valid,
+    meaningful value here (most sites), so this is resolved with explicit
+    "is not None" checks rather than truthiness:
+      1. the first_page_index argument (i.e. --first-page-index on the CLI)
+      2. the "first_page_index" field on the matched sources.yaml record
+      3. DEFAULT_FIRST_PAGE_INDEX (0)
     """
     try:
         from sources_utils import find_source, find_source_by_ir_url, load_sources
@@ -809,6 +882,7 @@ def resolve_source(
     url = url or ""
     slug = slug or ""
     ticker = ticker or ""
+    record: Optional[dict] = None
 
     if slug or ticker:
         query = slug or ticker
@@ -843,7 +917,20 @@ def resolve_source(
     if not ticker:
         logger.warning("Ticker is empty; CSV rows will have an empty ticker column.")
 
-    return url, slug, ticker
+    # news_releases_path precedence: explicit CLI arg > sources.yaml field > default.
+    if not news_releases_path:
+        news_releases_path = (record.get("news_releases_path") if record else None) or (
+            DEFAULT_NEWS_RELEASES_PATH
+        )
+
+    # first_page_index precedence: explicit CLI arg > sources.yaml field > default.
+    # 0 is a meaningful value, so use "is not None" checks throughout, not truthiness.
+    if first_page_index is None:
+        record_value = record.get("first_page_index") if record else None
+        first_page_index = record_value if record_value is not None else DEFAULT_FIRST_PAGE_INDEX
+    first_page_index = int(first_page_index)
+
+    return url, slug, ticker, news_releases_path, first_page_index
 
 
 # ---------------------------------------------------------------------------
@@ -858,6 +945,26 @@ def build_arg_parser() -> argparse.ArgumentParser:
 
     # Shared: --url/--slug/--ticker, year/date filters, --format/--output/--dry-run
     add_common_args(parser)
+
+    source = parser.add_argument_group("source")
+    source.add_argument(
+        "--news-releases-path", default=None, metavar="PATH",
+        help=(
+            "Listing path appended to the IR site root, e.g. /press-releases "
+            "(default: /news-releases). Overrides sources.yaml's "
+            "news_releases_path field for this run; most sites don't need this."
+        ),
+    )
+    source.add_argument(
+        "--first-page-index", type=int, default=None, metavar="N",
+        help=(
+            "Index of this site's first pagination page, i.e. the value used "
+            "in its own ?page= parameter (default: 0). Most Notified/Drupal "
+            "sites are 0-indexed; some (e.g. Teradyne) are 1-indexed. "
+            "Overrides sources.yaml's first_page_index field for this run; "
+            "most sites don't need this."
+        ),
+    )
 
     detail = parser.add_argument_group("detail-page fetch")
     detail.add_argument(
@@ -901,8 +1008,13 @@ def main(argv: Optional[list[str]] = None) -> int:
     if args.format == "json" and args.output is None:
         parser.error("--output PATH is required when --format json")
 
-    base_url, slug, ticker = resolve_source(args.url, args.slug, args.ticker)
-    logger.info("Scraping %s (%s) from %s", slug, ticker, base_url + NEWS_RELEASES_PATH)
+    base_url, slug, ticker, news_releases_path, first_page_index = resolve_source(
+        args.url, args.slug, args.ticker, args.news_releases_path, args.first_page_index
+    )
+    logger.info(
+        "Scraping %s (%s) from %s (first page index=%d)",
+        slug, ticker, base_url + news_releases_path, first_page_index,
+    )
 
     years = parse_year_args(args)
 
@@ -914,6 +1026,8 @@ def main(argv: Optional[list[str]] = None) -> int:
         polite_delay=args.polite_delay,
         timeout=args.timeout,
         debug_dump_html=args.debug_dump_html,
+        news_releases_path=news_releases_path,
+        first_page_index=first_page_index,
     )
     logger.info("Scraped %d item(s) total (before filtering).", len(all_items))
 

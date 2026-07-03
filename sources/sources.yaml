@@ -2,11 +2,22 @@
 # This is the master list of organizations tracked by primary_wire.
 #
 # Format:
-#   slug:         short unique identifier used in CSV data files
-#   name:         full display name of the organization
-#   ticker:       stock ticker symbol (omit for non-public sources)
-#   ir_url:       investor relations or official newsroom page
-#   notes:        any useful context about finding press releases
+#   slug:                short unique identifier used in CSV data files
+#   name:                full display name of the organization
+#   ticker:              stock ticker symbol (omit for non-public sources)
+#   ir_url:               investor relations or official newsroom page
+#   news_releases_path:  path appended to ir_url's host for the press-release
+#                         listing page, e.g. "/press-releases". Optional --
+#                         omit to use the scraper's default ("/news-releases").
+#                         Only meaningful for scrape_investorroom.py and
+#                         scrape_notified.py; other scrapers ignore it.
+#   first_page_index:    the site's own starting page number for its ?page=
+#                         pagination parameter. Optional -- omit to use the
+#                         default (0). Only meaningful for
+#                         scrape_notified.py; scrape_investorroom.py paginates
+#                         by item offset (?o=), which has no equivalent
+#                         starting-index quirk, and other scrapers ignore it.
+#   notes:                any useful context about finding press releases
 
 sources:
 
@@ -250,6 +261,8 @@ sources:
     name: Teradyne, Inc.
     ticker: TER
     ir_url: https://investors.teradyne.com/
+    news_releases_path: /news-events/press-releases
+    first_page_index: 1
   - slug: tesla
     name: Tesla, Inc.
     ticker: TSLA
