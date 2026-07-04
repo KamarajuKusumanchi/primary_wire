@@ -24,10 +24,10 @@ You can identify a Notified/Drupal IR site by any of:
 URL structure
 -------------
 Listing page (paginated by 0-based page index):
-  {base_url}{news_releases_path}                 (same as ?page=0, the first page)
-  {base_url}{news_releases_path}?page=0          first page (explicit)
-  {base_url}{news_releases_path}?page=1          second page
-  {base_url}{news_releases_path}?page=N          N+1-th page
+  {base_url}/{news_releases_path}                 (same as ?page=0, the first page)
+  {base_url}/{news_releases_path}?page=0          first page (explicit)
+  {base_url}/{news_releases_path}?page=1          second page
+  {base_url}/{news_releases_path}?page=N          N+1-th page
 
 The last page index can be read from the "last »" pagination link.
 
@@ -63,7 +63,7 @@ Usage
   # use a different path and start at page 1 instead). Normally set once in
   # sources.yaml's news_releases_path / first_page_index fields instead of
   # passing these every time.
-  python src/scrape_notified.py --slug teradyne --news-releases-path /news-events/press-releases --first-page-index 1 --dry-run
+  python src/scrape_notified.py --slug teradyne --news-releases-path news-events/press-releases --first-page-index 1 --dry-run
 
   # Restrict to a year or range
   python src/scrape_notified.py --year 2025 --dry-run
@@ -147,13 +147,13 @@ DEFAULT_SLUG = "abbvie"
 DEFAULT_TICKER = "ABBV"
 DEFAULT_BASE_URL = "https://investors.abbvie.com"
 
-DEFAULT_NEWS_RELEASES_PATH = "/news-releases"
+DEFAULT_NEWS_RELEASES_PATH = "news-releases"
 # Actual path used for a given source resolves as (highest wins):
 #   --news-releases-path CLI flag
 #   > sources.yaml "news_releases_path" field for the matched source
 #   > DEFAULT_NEWS_RELEASES_PATH
 # See resolve_source(). Most Notified/Drupal sites use the default; some
-# (e.g. Teradyne, at /news-events/press-releases) use a different path.
+# (e.g. Teradyne, at news-events/press-releases) use a different path.
 
 DEFAULT_FIRST_PAGE_INDEX = 0
 # Index of this site's first pagination page (the value in its own ?page=
@@ -315,9 +315,9 @@ def listing_page_url(
     page=0 is the first page (also reachable without the parameter, but
     we always include it for explicitness).
 
-    news_releases_path defaults to "/news-releases" but some sites (e.g.
-    Teradyne) use "/press-releases" instead; callers resolve the right value
-    via resolve_source() / sources.yaml before calling this.
+    news_releases_path defaults to "news-releases" but some sites (e.g.
+    Teradyne) use "news-events/press-releases" instead; callers resolve the
+    right value via resolve_source() / sources.yaml before calling this.
     """
     base = join_url_path(base_url, news_releases_path)
     return base + "?" + urlencode({"page": page})
@@ -784,7 +784,7 @@ def resolve_source(
     news_releases_path precedence (highest wins):
       1. the news_releases_path argument (i.e. --news-releases-path on the CLI)
       2. the "news_releases_path" field on the matched sources.yaml record
-      3. DEFAULT_NEWS_RELEASES_PATH ("/news-releases")
+      3. DEFAULT_NEWS_RELEASES_PATH ("news-releases")
 
     first_page_index precedence (highest wins). Note 0 is a valid,
     meaningful value here (most sites), so this is resolved with explicit
@@ -834,8 +834,8 @@ def build_arg_parser() -> argparse.ArgumentParser:
     source.add_argument(
         "--news-releases-path", default=None, metavar="PATH",
         help=(
-            "Listing path appended to the IR site root, e.g. /press-releases "
-            "(default: /news-releases). Overrides sources.yaml's "
+            "Listing path appended to the IR site root, e.g. press-releases "
+            "(default: news-releases). Overrides sources.yaml's "
             "news_releases_path field for this run; most sites don't need this."
         ),
     )

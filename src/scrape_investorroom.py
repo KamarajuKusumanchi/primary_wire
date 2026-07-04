@@ -64,9 +64,9 @@ Usage
 
   # Override the news-releases listing path for an InvestorRoom site that
   # doesn't use the default (rare -- most InvestorRoom sites use
-  # /news-releases). Normally set once in sources.yaml's news_releases_path
+  # news-releases). Normally set once in sources.yaml's news_releases_path
   # field instead of passing this every time.
-  python src/scrape_investorroom.py --slug SLUG --news-releases-path /press-releases --dry-run
+  python src/scrape_investorroom.py --slug SLUG --news-releases-path press-releases --dry-run
 
   # Restrict to a year or range
   python src/scrape_investorroom.py --year 2025 --dry-run
@@ -145,7 +145,7 @@ DEFAULT_SLUG = "chipotle"
 DEFAULT_TICKER = "CMG"
 DEFAULT_BASE_URL = "https://ir.chipotle.com"
 
-DEFAULT_NEWS_RELEASES_PATH = "/news-releases"
+DEFAULT_NEWS_RELEASES_PATH = "news-releases"
 # Actual path used for a given source resolves as (highest wins):
 #   --news-releases-path CLI flag
 #   > sources.yaml "news_releases_path" field for the matched source
@@ -245,7 +245,7 @@ def listing_page_url(
     ?l=<limit>   items per page (server default is 5 when omitted; always pass explicitly)
     ?o=<offset>  skip this many items (0-based; omit on the first page)
 
-    news_releases_path defaults to "/news-releases"; callers resolve the
+    news_releases_path defaults to "news-releases"; callers resolve the
     right value via resolve_source() / sources.yaml before calling this.
     """
     base = join_url_path(base_url, news_releases_path)
@@ -538,7 +538,7 @@ def resolve_source(
     news_releases_path precedence (highest wins):
       1. the news_releases_path argument (i.e. --news-releases-path on the CLI)
       2. the "news_releases_path" field on the matched sources.yaml record
-      3. DEFAULT_NEWS_RELEASES_PATH ("/news-releases")
+      3. DEFAULT_NEWS_RELEASES_PATH ("news-releases")
     """
     from sources_utils import resolve_source_identity
 
@@ -574,8 +574,8 @@ def build_arg_parser() -> argparse.ArgumentParser:
     source.add_argument(
         "--news-releases-path", default=None, metavar="PATH",
         help=(
-            "Listing path appended to the IR site root, e.g. /press-releases "
-            "(default: /news-releases). Overrides sources.yaml's "
+            "Listing path appended to the IR site root, e.g. press-releases "
+            "(default: news-releases). Overrides sources.yaml's "
             "news_releases_path field for this run; most sites don't need this."
         ),
     )
