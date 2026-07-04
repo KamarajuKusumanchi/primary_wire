@@ -1,0 +1,422 @@
+2026-07-04 1:31 AM
+
+Prompt:
+Please review the attached zip file and tell me what you think? What are the next steps? How to improve the scraper coverage? Ignore files in src/playground , src/scrape_costco.py, src/scrape_cdw.py, src/prototypes from your review.
+
+Response:
+I reviewed the project structure, configuration, and scraper architecture (excluding `src/playground`, `src/prototypes`, `src/scrape_costco.py`, and `src/scrape_cdw.py` as requested).
+
+## Overall impression
+
+This is a solid foundation for a press-release aggregation system. The strongest aspects are:
+
+* Clear separation between source metadata (`sources.yaml`) and scraper behavior (`scraper_config.yaml`).
+* Platform-oriented scraping model (Q4, Notified, InvestorRoom, etc.) instead of writing one scraper per company.
+* Coverage auditing tooling (`check_scraper_coverage.py`).
+* Reusable utility modules instead of duplicating scraping logic.
+* Explicit support for source-specific overrides.
+
+The architecture is already pointing in the right direction: platform detection → platform scraper → normalized CSV output.
+
+The biggest challenge now is not scraper quality but **coverage expansion and maintenance at scale**.
+
+---
+
+# Current coverage situation
+
+From the repository:
+
+* ~72 companies currently configured in `sources.yaml`
+* README mentions S&P 500 coverage is still sparse
+* Only a handful of scraper families are implemented:
+
+  * Q4
+  * InvestorRoom
+  * Notified
+
+That means coverage growth is currently bottlenecked by:
+
+1. discovering companies
+2. identifying their IR platform
+3. creating source entries
+4. validating scraper compatibility
+
+not by scraping logic itself.
+
+---
+
+# What I would do next
+
+I would prioritize the following roadmap.
+
+## Phase 1 — Automate source discovery
+
+Right now source onboarding appears mostly manual.
+
+Build a pipeline:
+
+```text
+Ticker
+  ↓
+IR page discovery
+  ↓
+Platform detection
+  ↓
+Auto-generate source entry
+  ↓
+Human review
+```
+
+You already have:
+
+* `detect_ir_platform.py`
+* source metadata structure
+
+The missing piece is a bulk onboarding workflow.
+
+For example:
+
+```bash
+python discover_sources.py sp500.csv
+```
+
+Output:
+
+```yaml
+- ticker: AAPL
+  ir_url: ...
+  platform: q4
+  confidence: 0.96
+```
+
+Then review and merge.
+
+This would likely increase coverage 10× faster than hand-maintaining YAML.
+
+---
+
+## Phase 2 — Create a platform registry
+
+Right now platform support seems implemented as separate scripts.
+
+I'd formalize it:
+
+```python
+SCRAPER_REGISTRY = {
+    "q4": Q4Scraper,
+    "notified": NotifiedScraper,
+    "investorroom": InvestorRoomScraper,
+}
+```
+
+Each scraper exposes:
+
+```python
+detect()
+scrape()
+validate()
+```
+
+Benefits:
+
+* easier testing
+* easier onboarding new platforms
+* easier metrics
+
+---
+
+## Phase 3 — Add coverage analytics
+
+You already have coverage checks.
+
+I'd add:
+
+```text
+Total tracked companies
+Platform detected
+Platform supported
+Platform unsupported
+Last successful scrape
+Last scrape failure
+```
+
+Example report:
+
+```text
+S&P500 Companies: 503
+
+Supported:      321
+Unsupported:    182
+
+Q4:             142
+Notified:        61
+InvestorRoom:    39
+Unknown:        182
+```
+
+This immediately tells you where to invest effort.
+
+---
+
+# Biggest opportunity: improve scraper coverage
+
+This is where I'd spend most development time.
+
+## 1. Add more IR platform scrapers
+
+Most public companies are concentrated on a surprisingly small number of vendors.
+
+After Q4, InvestorRoom and Notified, I'd target:
+
+### High priority
+
+* GlobeNewswire newsroom pages
+* Business Wire newsroom pages
+* PR Newswire newsroom pages
+* Nasdaq IR Insight
+* EQ / Equiniti
+* Alpha IR
+* Investor Relations Solutions (formerly Q4 competitors)
+
+A single new platform scraper can unlock dozens of companies.
+
+---
+
+## 2. Build platform fingerprinting
+
+Instead of manually assigning companies to scrapers.
+
+Detect platform using:
+
+### HTML signatures
+
+Examples:
+
+```html
+<meta content="Q4 Inc.">
+```
+
+```html
+<script src="...q4api...">
+```
+
+```html
+<div class="module-news">
+```
+
+### JS bundles
+
+```text
+q4api
+investorroom
+notified
+```
+
+### DNS / hosting clues
+
+```text
+investorroom.com
+q4web.com
+notified.com
+```
+
+Score them.
+
+Example:
+
+```python
+{
+  "platform": "q4",
+  "confidence": 0.98
+}
+```
+
+This enables fully automated onboarding.
+
+---
+
+## 3. Create a generic fallback scraper
+
+Many IR pages are simple.
+
+A generic scraper could:
+
+1. Find links matching:
+
+```text
+press release
+news release
+newsroom
+media
+announcements
+```
+
+2. Extract article links
+
+3. Extract dates
+
+4. Return normalized records
+
+Even if precision is imperfect, it can serve as:
+
+```text
+coverage before perfection
+```
+
+and identify new platform patterns.
+
+---
+
+## 4. Store unknown sites for clustering
+
+When detection fails:
+
+Save:
+
+```json
+{
+  "ticker": "XYZ",
+  "ir_url": "...",
+  "html_hash": "...",
+  "candidate_selectors": [...]
+}
+```
+
+Then cluster unknown sites.
+
+You'll often discover:
+
+```text
+40 companies using the same vendor
+```
+
+which means one scraper unlocks all 40.
+
+This is probably the highest ROI improvement you can make.
+
+---
+
+# Engineering improvements
+
+## Add integration tests
+
+Current architecture would benefit from:
+
+```text
+tests/
+  test_q4.py
+  test_notified.py
+  test_investorroom.py
+```
+
+Each test:
+
+```python
+assert release_count > 0
+assert dates parse
+assert URLs valid
+```
+
+This catches platform changes early.
+
+---
+
+## Add scraper snapshots
+
+Store sample HTML responses.
+
+Example:
+
+```text
+tests/fixtures/q4/
+```
+
+Then test parsers without hitting live sites.
+
+Benefits:
+
+* deterministic tests
+* faster CI
+* easier debugging
+
+---
+
+## Add structured scrape metrics
+
+Instead of only CSV output:
+
+```json
+{
+  "company": "ABBV",
+  "platform": "notified",
+  "pages_scanned": 12,
+  "releases_found": 241,
+  "duration_seconds": 3.2
+}
+```
+
+Useful for monitoring regressions.
+
+---
+
+# Architecture risk I noticed
+
+Your current model assumes:
+
+```text
+Company
+   → Platform
+      → Scraper
+```
+
+That's good.
+
+The long-term risk is adding company-specific exceptions inside platform scrapers.
+
+Avoid patterns like:
+
+```python
+if slug == "xyz":
+    ...
+```
+
+or
+
+```python
+if slug == "abc":
+    special selector
+```
+
+Once those accumulate, scraper maintenance becomes difficult.
+
+Prefer:
+
+```yaml
+source:
+  overrides:
+      listing_selector: ...
+```
+
+or
+
+```python
+platform plugin + source config
+```
+
+so platform code stays generic.
+
+---
+
+# My priority order
+
+If I were continuing this project, I'd work in this order:
+
+1. Automated IR discovery pipeline
+2. Stronger platform detection/fingerprinting
+3. Generic fallback scraper
+4. Coverage analytics dashboard/report
+5. New platform scrapers (GlobeNewswire, Business Wire, PR Newswire, EQ)
+6. Integration tests and fixtures
+7. Unknown-site clustering
+
+The project already has a good architecture for scraping. The next major leap in value comes from turning onboarding from a manual process into an automated pipeline that can classify and ingest hundreds of companies with minimal human intervention. That will improve coverage far more than incremental improvements to the existing Q4/InvestorRoom/Notified scrapers.
