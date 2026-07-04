@@ -35,8 +35,10 @@ Usage
   python src/detect_ir_platform.py --ticker CMG
   python src/detect_ir_platform.py --url https://investors.abbvie.com/
 
-  # Scan everything in sources.yaml (parallel fetches)
+  # Scan everything in sources.yaml (parallel fetches).
+  # This is also the default behavior when no target flag is given.
   python src/detect_ir_platform.py --all
+  python src/detect_ir_platform.py
 
   # Custom sources file
   python src/detect_ir_platform.py --all --sources /path/to/sources.yaml
@@ -434,7 +436,8 @@ def build_arg_parser() -> argparse.ArgumentParser:
     )
     target.add_argument(
         "--all", action="store_true",
-        help="Detect the platform for every entry in --sources.",
+        help="Detect the platform for every entry in --sources. "
+             "This is the default when --slug/--ticker/--url are omitted.",
     )
 
     parser.add_argument(
@@ -467,9 +470,9 @@ def main(argv: Optional[list[str]] = None) -> int:
     )
 
     if not any([args.slug, args.ticker, args.url, args.all]):
-        parser.error(
-            "Specify one of: --slug SLUG, --ticker TICKER, --url URL, or --all"
-        )
+        # No target specified — default to scanning every entry in sources.
+        logger.info("No target specified; defaulting to --all")
+        args.all = True
 
     # Load sources.yaml (needed for slug/ticker/url lookups and --all)
     if not args.sources.exists():
