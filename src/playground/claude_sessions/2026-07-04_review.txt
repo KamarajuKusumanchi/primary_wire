@@ -1,0 +1,67 @@
+2026-07-04 11:25 AM
+
+Prompt:
+Please review
+https://github.com/KamarajuKusumanchi/primary_wire/archive/refs/heads/master.zip and tell me what you think? What are the next steps? How to improve the scraper coverage? Ignore files in src/playground , src/scrape_costco.py, src/scrape_cdw.py, src/prototypes from your review.
+
+Response:
+# primary_wire — Code Review
+
+Scope: full repo except `src/playground/`, `src/scrape_costco.py`, `src/scrape_cdw.py`, `src/prototypes/` (excluded per request).
+
+## Bottom line
+
+Solid engineering for an early-stage project, sitting on top of very thin content. The scraper core (`scrape_utils.py`, `csv_utils.py`, `sources_utils.py`, and the three platform scrapers) is disciplined, well-documented, and clearly iterated on against real broken websites. The human-facing maintenance tools (`update_release.py`, `update_source.py`, `ddg_search.py`) were not put through the same refactor pass and have drifted out of sync with the shared modules. The single biggest gap is that **zero tests exist** despite `pytest` being a listed dependency and a `tests/` dir being promised in the README. The single biggest bottleneck on "coverage" is **not scraper capability** — it's that only ~14% of the S&P 500 is even entered in `sources.yaml` yet.
+
+---
+
+## Strengths
+
+- **Shared-code architecture is genuinely good.** Date parsing, CSV upsert/merge, and source resolution are factored once into `scrape_utils.py` / `csv_utils.py` / `sources_utils.py` and reused across `scrape_q4_ir.py`, `scrape_investorroom.py`, `scrape_notified.py` instead of being copy-pasted three times.
+- **`detect_ir_platform.py` is the smartest file in the repo.** Evidence-based fingerprinting (Q4 URL shape, InvestorRoom's `filecache.investorroom.com`, Notified's Drupal meta tag) instead of a hardcoded hostname list — it tells you what to build next, not just what's broken.
+- **`check_scraper_coverage.py`** treats `scraper_config.yaml` as source of truth and catches config drift (typo'd slugs, a slug configured under two scraper groups at once) — solid defensive tooling for this stage of a project.
+- **CSV merge logic is correctly idempotent** (upsert by URL; re-running a scraper won't duplicate rows), and every scraper supports `--dry-run`.
+- **`scrape_q4_ir.py`'s browser-automation logic reflects real debugging against a live site**: the headless→visible Cloudflare fallback, polling for "has the link set changed" instead of relying on unreliable `networkidle`, and the "climb up to 5 ancestors, stop if you cross into a sibling item" date-extraction heuristic are hard-won, not textbook.
+- **Ethical/scope framing is sound**: primary sources only, URLs-only storage (no scraped content cached), explicit politeness rules (10–30s spacing, back off on errors, run at most once/day), MIT-licensed intent.
+- Docs (`setup.txt`, `contributing.txt`, `sources.txt`, `tasks.txt`) are usable, not decorative.
+
+---
+
+## Problems, in priority order
+
+### 1. No tests, anywhere
+`pytest` is a declared dev dependency, README promises a `tests/` directory as "forthcoming," and there isn't a single test file. This is the highest-leverage gap in the repo: the riskiest logic — date regexes, platform-fingerprint regexes (duplicated *by comment* between each scraper and `detect_ir_platform.py`), URL classification — has no safety net. A subtle change breaks silently and shows up as data-quality drift months later, not as a failing CI check.
+
+### 2. Coverage is bottlenecked upstream of scraping
+Only 68–72 of 500 S&P 500 companies are in `sources.yaml` (~14%). Of those, only 7 have an automated scraper wired up in `scraper_config.yaml`. Building a fourth or fifth platform scraper doesn't move the needle if nothing in `sources.yaml` yet uses that platform — curation is the actual constraint right now, not scraping capacity.
+
+### 3. No CI
+No `.github/workflows`, nothing. `check_scraper_coverage.py --strict` and (once written) pytest are built to be CI gates and currently just aren't wired to anything. PR correctness — CSV schema, no duplicate URLs, slug exists in `sources.yaml` — is enforced by asking the human contributor to run `csvlook` by hand, per the contributing guide.
+
+### 4. Maintenance-tool code has drifted from the shared modules
+- **`update_release.py` reimplements `csv_utils.py`** instead of importing it — its own `CSV_FIELDS`/`SORT_FIELDS`/`csv_path_for_date()`/`load_csv()`/`write_csv()`, and it writes via `pandas.to_csv()` while every scraper writes via `csv.DictWriter`. Two different serialization paths touching the same files is exactly the kind of thing that produces a quoting/escaping mismatch nobody notices until a diff looks wrong.
+- **`find_source_by_url()` in `update_release.py` duplicates `sources_utils.find_source_by_ir_url()` with different matching logic** (prefix-match-then-hostname vs. hostname-only). Two heuristics for one concept, living in two files, will diverge silently over time.
+- **`ddg_search.py` is dead code.** `pyproject.toml` justifies the `ddgs` dependency as "to get the IR URL" (implying it should help `update_source.py`'s manual "IR URL" prompt), but nothing in the repo imports or calls it. It's a disconnected, unpolished 24-line script sitting next to production tooling.
+
+### 5. No enforced retry/backoff
+The "back off if rate-limited" rule in the README is a human instruction, not code — no scraper handles 429/5xx responses specially. Worth enforcing in code rather than trusting contributors to read the docs.
+
+### 6. Missing LICENSE file
+README claims MIT; there's no `LICENSE` file in the repo. Five-minute fix, but a real gap for anyone trying to legally reuse the project.
+
+### 7. Q4 has a heavier onboarding cost
+Requires a real Chrome + Playwright locally, vs. plain HTTP for the other two platforms — worth being upfront about, since Q4 is described as the "main" scraper.
+
+---
+
+## Concrete next steps, in order
+
+1. **Write tests for the shared regex/parsing logic first** (`scrape_utils.parse_date`, `extract_date_from_detail_html`, the platform-fingerprint regexes), using saved HTML fixtures — `--debug-dump-html` already gives you a way to capture them. Best ROI in the repo: shared code, regex-heavy, currently invisible when it silently degrades.
+2. **Wire up CI**: pytest + `check_scraper_coverage.py --strict` on every PR, plus validation of any touched `data/*.csv` (schema, no duplicate URLs, date matches filename) so the contributing-guide rules are enforced rather than merely documented.
+3. **Fix the maintenance-tool drift**: make `update_release.py` import from `csv_utils.py` instead of reimplementing it, and either finish wiring `ddg_search.py` into `update_source.py` or delete it.
+4. **Run `detect_ir_platform.py --all` against the full S&P 500 list**, not just the ~72 already curated. Right now the platform breakdown is only known for companies already in `sources.yaml` — there may be a 4th major platform worth a shared scraper hiding in the other 430 companies.
+5. **Attack the curation bottleneck directly**, since it's the real limiter right now, not scraper capability. `missing_tickers.py` already generates the exact gap list — turning batches of it into "add these 20 tickers to sources.yaml" issues needs no scraping skill and is the easiest possible on-ramp for new contributors.
+6. **Add a scheduled canary job** (respecting the politeness rules) that runs `scrape_all.py --dry-run` periodically and flags any scraper returning suspiciously zero items — usually the first sign a site changed its markup, and currently invisible until someone happens to run it manually.
+7. **Decide explicitly on scope for "unknown"-platform companies** (Apple, Nike, IBM, Netflix, etc. — likely custom-built IR sites, not one of the three supported platforms). Bespoke per-company scrapers don't scale the way platform scrapers do; state the tradeoff in the README so contributors don't over-invest there before the platform-based approach is closer to saturated.
+
+Net: the architecture doesn't need more investment relative to tests and closing the `sources.yaml` curation gap — those two are where the next real leverage is.
