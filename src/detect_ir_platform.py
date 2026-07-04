@@ -44,7 +44,7 @@ Usage
   python src/detect_ir_platform.py --all --sources /path/to/sources.yaml
 
   # Redirect-friendly: output is plain fixed-width text, no ANSI
-  python src/detect_ir_platform.py --all > platforms.tsv
+  python src/detect_ir_platform.py --all > platforms.txt
 
   # Control concurrency and per-request timeout
   python src/detect_ir_platform.py --all --workers 8 --timeout 15
