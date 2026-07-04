@@ -26,6 +26,7 @@ investorroom:
   scraper: scrape_investorroom
   sources:
     - slug: chipotle
+    - slug: axon
 
 notified:
   scraper: scrape_notified

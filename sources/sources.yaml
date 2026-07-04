@@ -49,6 +49,7 @@ sources:
     name: Axon Enterprise, Inc.
     ticker: AXON
     ir_url: https://investor.axon.com/
+    news_releases_path: /press-releases
   - slug: bio-techne
     name: Bio-Techne Corporation
     ticker: TECH
