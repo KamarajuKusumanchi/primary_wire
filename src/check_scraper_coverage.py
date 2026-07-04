@@ -32,6 +32,8 @@ import argparse
 import sys
 from pathlib import Path
 
+import pandas as pd
+
 try:
     from ruamel.yaml import YAML
 except ImportError:
@@ -59,22 +61,29 @@ def configured_slugs(config: dict) -> tuple[dict[str, list[str]], list[str]]:
     A slug appearing under more than one group is recorded in `problems`
     since scrape_all.py would run it twice.
     """
-    groups_by_slug: dict[str, list[str]] = {}
     problems: list[str] = []
+    entries: list[dict] = []
     for group_name, group in config.items():
         for entry in group.get("sources", []):
             slug = entry.get("slug")
             if not slug:
                 problems.append(f"config group '{group_name}' has an entry with no slug")
                 continue
-            groups_by_slug.setdefault(slug, []).append(group_name)
+            entries.append({"slug": slug, "group": group_name})
 
-    for slug, groups in groups_by_slug.items():
-        if len(groups) > 1:
-            problems.append(
-                f"slug '{slug}' is configured under multiple groups: {', '.join(groups)} "
-                "(scrape_all.py would run it more than once)"
-            )
+    if not entries:
+        return {}, problems
+
+    # sort=False keeps slugs in first-appearance order, so output/problem
+    # ordering matches what a hand-written dict accumulation would give.
+    grouped = pd.DataFrame(entries).groupby("slug", sort=False)["group"].apply(list)
+    groups_by_slug = grouped.to_dict()
+
+    for slug, group_names in grouped[grouped.apply(len) > 1].items():
+        problems.append(
+            f"slug '{slug}' is configured under multiple groups: {', '.join(group_names)} "
+            "(scrape_all.py would run it more than once)"
+        )
 
     return groups_by_slug, problems
 
