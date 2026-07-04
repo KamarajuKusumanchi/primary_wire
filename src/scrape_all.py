@@ -5,12 +5,14 @@ scrape_all.py
 Orchestrate scraping across all sources configured in config/scraper_config.yaml.
 
 Usage:
-    python src/scrape_all.py                             # current year (default)
+    python src/scrape_all.py                                   # current year (default)
     python src/scrape_all.py --year 2024
-    python src/scrape_all.py --all-years                 # full history, every source
+    python src/scrape_all.py --all-years                       # full history, every source
     python src/scrape_all.py --year 2026 --dry-run
-    python src/scrape_all.py --year 2026 --slug cdw      # single source
-    python src/scrape_all.py --year 2026 --dry-run -v    # verbose
+    python src/scrape_all.py --year 2026 --slug cdw            # single source
+    python src/scrape_all.py --year 2026 --platform investorroom  # single platform
+    python src/scrape_all.py --year 2026 --platform notified --slug abbvie  # both (ANDed)
+    python src/scrape_all.py --year 2026 --dry-run -v          # verbose
 """
 
 from __future__ import annotations
@@ -65,6 +67,30 @@ def run_scraper(module_name: str, argv: list[str]) -> int:
     return mod.main(argv)
 
 
+def iter_selected_sources(config: dict, platform: str | None, slug: str | None):
+    """Yield (group_name, module_name, entry) for every source that matches
+    the optional --platform and --slug filters.
+
+    group_name is the platform key in scraper_config.yaml (e.g. 'investorroom');
+    module_name is that platform's scraper module (e.g. 'scrape_investorroom').
+
+    If both platform and slug are given, they are ANDed together: a source
+    must be under that platform group AND have that slug to be yielded. This
+    is mainly useful for disambiguating a slug that happens to exist under
+    more than one platform (e.g. --platform notified --slug abbvie). If the
+    slug isn't actually under that platform, nothing is yielded for it.
+    """
+    for group_name, group in config.items():
+        if platform and group_name.lower() != platform.lower():
+            continue
+
+        module_name = group["scraper"]
+        for entry in group["sources"]:
+            if slug and entry["slug"].lower() != slug.lower():
+                continue
+            yield group_name, module_name, entry
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__,
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -73,6 +99,9 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--all-years", action="store_true",
                         help="Scrape full history for every source, ignoring --year")
     parser.add_argument("--slug", help="Scrape only this slug (omit for all configured)")
+    parser.add_argument("--platform",
+                        help="Scrape only sources under this IR platform group in "
+                             "scraper_config.yaml, e.g. 'investorroom' (omit for all)")
     parser.add_argument("--dry-run", action="store_true", help="Pass --dry-run to every scraper")
     parser.add_argument("--between-delay", type=float, default=5.0,
                         help="Seconds to wait between sources (default: 5)")
@@ -94,28 +123,26 @@ def main(argv: list[str] | None = None) -> int:
     failures: list[str] = []
     ran = 0
 
-    for group_name, group in config.items():
-        module_name = group["scraper"]
-        for entry in group["sources"]:
-            slug = entry["slug"]
-            if args.slug and slug.lower() != args.slug.lower():
-                continue
+    for _group_name, module_name, entry in iter_selected_sources(config, args.platform, args.slug):
+        slug = entry["slug"]
+        extra_args = list(entry.get("args", []))
+        scraper_argv = build_argv(slug, year, extra_args, args.dry_run)
 
-            extra_args = list(entry.get("args", []))
-            scraper_argv = build_argv(slug, year, extra_args, args.dry_run)
+        logger.info("=== %s  [%s]  argv: %s ===", slug, module_name, scraper_argv)
+        if ran > 0:
+            time.sleep(args.between_delay)
 
-            logger.info("=== %s  [%s]  argv: %s ===", slug, module_name, scraper_argv)
-            if ran > 0:
-                time.sleep(args.between_delay)
-
-            rc = run_scraper(module_name, scraper_argv)
-            ran += 1
-            if rc != 0:
-                logger.error("%s: scraper exited with code %d", slug, rc)
-                failures.append(slug)
+        rc = run_scraper(module_name, scraper_argv)
+        ran += 1
+        if rc != 0:
+            logger.error("%s: scraper exited with code %d", slug, rc)
+            failures.append(slug)
 
     if ran == 0:
-        logger.error("No matching entries found in scraper_config.yaml for slug=%r", args.slug)
+        logger.error(
+            "No matching entries found in scraper_config.yaml for platform=%r slug=%r",
+            args.platform, args.slug,
+        )
         return 1
 
     if failures:
