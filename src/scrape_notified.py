@@ -316,8 +316,8 @@ def listing_page_url(
     we always include it for explicitness).
 
     news_releases_path defaults to "news-releases" but some sites (e.g.
-    Teradyne) use "news-events/press-releases" instead; callers resolve the
-    right value via resolve_source() / sources.yaml before calling this.
+    Teradyne) use "news-events/press-releases" instead; callers resolve
+    the right value via resolve_source() / sources.yaml before calling this.
     """
     base = join_url_path(base_url, news_releases_path)
     return base + "?" + urlencode({"page": page})
