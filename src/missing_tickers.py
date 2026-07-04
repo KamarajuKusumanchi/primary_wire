@@ -11,6 +11,7 @@ Usage:
 
 import argparse
 import io
+import sys
 from pathlib import Path
 
 import pandas as pd
@@ -19,7 +20,6 @@ import requests
 try:
     from ruamel.yaml import YAML
 except ImportError:
-    import sys
     sys.exit("Missing dependency. Install with: pip install ruamel.yaml")
 
 
@@ -67,10 +67,10 @@ def main():
     if not args.sources.exists():
         raise FileNotFoundError(f"sources.yaml not found at {args.sources}")
 
-    print("Fetching S&P 500 tickers from Wikipedia...")
+    print("Fetching S&P 500 tickers from Wikipedia...", file=sys.stderr)
     sp500 = get_sp500_tickers()
 
-    print(f"Loading sources from {args.sources}...")
+    print(f"Loading sources from {args.sources}...", file=sys.stderr)
     covered = get_sources_tickers(args.sources)
 
     missing = sorted(sp500 - covered)

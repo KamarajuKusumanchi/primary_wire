@@ -221,16 +221,24 @@ functional but not yet complete, and more tooling is planned.
     data/
       2026/
         2026-06-01.csv
+    reports/
+      latest/             Generated reports (see below); regenerate with `invoke reports`
     pyproject.toml
+    tasks.py              Invoke task definitions (see docs/tasks.txt)
     README.txt
 
 To see which S&P 500 companies are not yet covered, run:
 
   python src/missing_tickers.py
 
+To regenerate all of reports/latest/ in one step, run:
+
+  invoke reports
+
 ===== Getting started =====
 
 See [[docs/setup.txt]] for installation instructions.
+See [[docs/tasks.txt]] to learn about the `invoke` task runner.
 See [[docs/contributing.txt]] to learn how to add new press release links.
 
 ===== License =====

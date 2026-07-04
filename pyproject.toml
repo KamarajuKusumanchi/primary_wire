@@ -57,6 +57,10 @@ dependencies = [
 # Testing framework (for future Python scripts)
 dev = [
     "pytest",
+
+    # Task runner for tasks.py (e.g. `invoke reports` to regenerate
+    # reports/latest/*.txt). See docs/tasks.txt.
+    "invoke",
 ]
 
 # ======= Workflow Commands =======

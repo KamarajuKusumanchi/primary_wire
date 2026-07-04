@@ -1,0 +1,86 @@
+"""
+tasks.py - task automation for primary_wire, using Invoke (https://www.pyinvoke.org/)
+
+Regenerates the files under reports/latest/ by running the report scripts in
+src/ and capturing their stdout, replacing the old manual workflow of:
+
+    python.exe src/detect_ir_platform.py      > reports/latest/ir_platform.txt
+    python.exe src/missing_tickers.py         > reports/latest/missing_tickers.txt
+    python.exe src/check_scraper_coverage.py  > reports/latest/scraper_coverage.txt
+
+Usage
+-----
+    invoke --list              # show all available tasks
+    invoke reports              # regenerate all three reports (default task)
+    invoke ir-platform           # regenerate just reports/latest/ir_platform.txt
+    invoke missing-tickers       # regenerate just reports/latest/missing_tickers.txt
+    invoke scraper-coverage      # regenerate just reports/latest/scraper_coverage.txt
+
+Each script is invoked as "uv run python <script>" (using an absolute path to
+the script, so this works no matter which directory you run `invoke` from),
+so this works whether or not a virtual environment is currently activated.
+"""
+
+from pathlib import Path
+
+from invoke import task
+
+ROOT = Path(__file__).resolve().parent
+REPORTS_DIR = ROOT / "reports" / "latest"
+
+# name -> (script path relative to ROOT, output filename in reports/latest/)
+REPORT_SPECS = {
+    "ir-platform": ("src/detect_ir_platform.py", "ir_platform.txt"),
+    "missing-tickers": ("src/missing_tickers.py", "missing_tickers.txt"),
+    "scraper-coverage": ("src/check_scraper_coverage.py", "scraper_coverage.txt"),
+}
+
+
+def _run_report(c, name):
+    """Run one report script with uv and write its stdout to reports/latest/."""
+    script, output_filename = REPORT_SPECS[name]
+    script_path = ROOT / script
+    REPORTS_DIR.mkdir(parents=True, exist_ok=True)
+    out_path = REPORTS_DIR / output_filename
+
+    print(f"[{name}] running: uv run python {script_path}")
+    result = c.run(f'uv run python "{script_path}"', hide=True, warn=True)
+
+    out_path.write_text(result.stdout)
+
+    if result.stderr:
+        print(f"[{name}] stderr:\n{result.stderr}")
+
+    if not result.ok:
+        print(f"[{name}] WARNING: exited with code {result.return_code}; "
+              f"{out_path.relative_to(ROOT)} was still written with whatever "
+              f"stdout was produced before the failure.")
+    else:
+        n_lines = len(result.stdout.splitlines())
+        print(f"[{name}] wrote {out_path.relative_to(ROOT)} ({n_lines} lines)")
+
+    return result.ok
+
+
+@task
+def ir_platform(c):
+    """Regenerate reports/latest/ir_platform.txt (detect_ir_platform.py --all)."""
+    _run_report(c, "ir-platform")
+
+
+@task
+def missing_tickers(c):
+    """Regenerate reports/latest/missing_tickers.txt (missing_tickers.py)."""
+    _run_report(c, "missing-tickers")
+
+
+@task
+def scraper_coverage(c):
+    """Regenerate reports/latest/scraper_coverage.txt (check_scraper_coverage.py)."""
+    _run_report(c, "scraper-coverage")
+
+
+@task(pre=[ir_platform, missing_tickers, scraper_coverage], default=True)
+def reports(c):
+    """Regenerate all three reports under reports/latest/."""
+    print("Done: reports/latest/ is up to date.")

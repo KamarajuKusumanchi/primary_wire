@@ -80,6 +80,8 @@ Filter by slug:
 
 ===== Next Steps =====
 
+See [[tasks.txt]] to learn about the `invoke` task runner (e.g. regenerating
+the reports under reports/latest/).
 See [[contributing.txt]] to learn how to add new press release links.
 See [[sources.txt]] to learn how to add new sources.
 
