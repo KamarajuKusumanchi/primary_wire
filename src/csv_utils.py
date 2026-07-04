@@ -15,6 +15,8 @@ csv_path_for_date(data_dir, d) -> Path
 load_csv(path)                 -> list[dict]
 write_csv(path, rows)          -- sorts then writes
 merge_into_daily_csvs(rows_by_date, data_dir, dry_run) -> dict
+merge_items_into_daily_csvs(items, data_dir, dry_run)  -> dict
+print_merge_summary(summary, dry_run, filtered, data_dir=None)
 """
 
 from __future__ import annotations
@@ -23,7 +25,7 @@ import csv
 import logging
 from datetime import date
 from pathlib import Path
-from typing import Iterable
+from typing import Iterable, Optional
 
 logger = logging.getLogger(__name__)
 
@@ -142,3 +144,77 @@ def merge_into_daily_csvs(
         )
 
     return summary
+
+
+# ---------------------------------------------------------------------------
+# NewsItem-level convenience wrappers
+# ---------------------------------------------------------------------------
+# The two helpers below sit on top of merge_into_daily_csvs() and are shared
+# by scrape_q4_ir.py, scrape_investorroom.py, and scrape_notified.py, whose
+# per-scraper merge_into_daily_csvs()/print output were otherwise near-identical
+# copies of each other.
+
+def merge_items_into_daily_csvs(
+    items: Iterable,
+    data_dir: Path,
+    dry_run: bool,
+) -> dict:
+    """Group scraped items by publish date and merge them into daily CSVs.
+
+    *items* must expose ``.publish_date`` (date | None), ``.to_row()``,
+    ``.title``, and ``.url`` -- i.e. anything satisfying scrape_utils.NewsItem.
+    Items with no resolvable date are skipped (and logged individually)
+    rather than passed to merge_into_daily_csvs().
+
+    Returns the same summary dict as merge_into_daily_csvs(), with an added
+    "undated" key: the number of items skipped for lack of a date.
+    """
+    items = list(items)
+    dated = [item for item in items if item.publish_date is not None]
+    undated = [item for item in items if item.publish_date is None]
+
+    rows_by_date: dict[date, list[dict]] = {}
+    for item in dated:
+        rows_by_date.setdefault(item.publish_date, []).append(item.to_row())
+
+    summary = merge_into_daily_csvs(rows_by_date, data_dir, dry_run)
+    summary["undated"] = len(undated)
+
+    if undated:
+        logger.warning(
+            "%d item(s) had no resolvable publish date and were NOT written to any "
+            "daily CSV. Re-run with --fetch-detail-pages to attempt resolution "
+            "(or --debug-dump-html / --verbose to diagnose):",
+            len(undated),
+        )
+        for item in undated:
+            logger.warning("  UNDATED: %s | %s", item.title, item.url)
+
+    return summary
+
+
+def print_merge_summary(
+    summary: dict,
+    dry_run: bool,
+    filtered: Iterable,
+    data_dir: Optional[Path] = None,
+) -> None:
+    """Print the one-line "Wrote N new + M updated row(s) ..." summary.
+
+    *filtered* is the item list that was passed to the merge; on a dry run
+    (when nothing is actually written, so summary["files_written"] stays 0)
+    it is used to count how many distinct dated files *would* have been
+    written. Pass *data_dir* to include "under <data_dir>" in the message.
+    """
+    filtered = list(filtered)
+    action = "Would write" if dry_run else "Wrote"
+    dated_file_count = (
+        summary["files_written"] if not dry_run
+        else len({i.publish_date for i in filtered if i.publish_date})
+    )
+    skipped = f" ({summary['undated']} undated item(s) skipped)" if summary.get("undated") else ""
+    location = f" under {data_dir}" if data_dir is not None else ""
+    print(
+        f"{action} {summary['rows_added']} new + {summary['rows_updated']} updated row(s) "
+        f"across {dated_file_count} daily CSV file(s){location}{skipped}"
+    )

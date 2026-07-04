@@ -105,7 +105,7 @@ from dataclasses import dataclass
 from datetime import date
 from pathlib import Path
 from typing import Optional
-from urllib.parse import urlencode, urljoin, urlparse, urlunparse
+from urllib.parse import urlencode, urljoin
 
 try:
     import requests
@@ -117,10 +117,14 @@ try:
 except ImportError:
     sys.exit("Missing dependency. Install with: pip install beautifulsoup4 lxml")
 
-from csv_utils import merge_into_daily_csvs as _csv_merge_into_daily_csvs
+from csv_utils import merge_items_into_daily_csvs, print_merge_summary
 from scrape_utils import (
     NewsItem as _BaseNewsItem,
     add_common_args,
+    add_network_and_debug_args,
+    configure_logging,
+    extract_date_from_detail_html,
+    fetch_missing_dates_via_http,
     filter_items,
     parse_date,
     parse_year_args,
@@ -369,77 +373,15 @@ def parse_listing_page(
 def fetch_date_from_detail_page(url: str, timeout: int = 30) -> tuple[Optional[date], str]:
     """Fetch a detail page and extract its publish date.
 
-    Tries multiple selectors in priority order before falling back to a
-    full-text scan of the article body.
+    Parsing heuristics live in scrape_utils.extract_date_from_detail_html(),
+    shared with scrape_notified.py; this function owns only the fetch.
     """
     try:
         html = fetch_html(url, timeout=timeout)
     except Exception as exc:
         logger.warning("Failed to fetch detail page %s: %s", url, exc)
         return None, ""
-
-    soup = BeautifulSoup(html, "lxml")
-
-    # Priority 1: <time datetime="...">
-    for time_tag in soup.find_all("time"):
-        dt_attr = time_tag.get("datetime", "")
-        if dt_attr:
-            d, raw = parse_date(dt_attr)
-            if d:
-                return d, raw
-        d, raw = parse_date(time_tag.get_text(strip=True))
-        if d:
-            return d, raw
-
-    # Priority 2: common date CSS selectors on InvestorRoom pages.
-    date_selectors = [
-        "span.date", "p.date", "div.date",
-        ".press-release-date", ".release-date", ".article-date",
-        ".news-date", ".pr-date", ".date-label",
-        "[class*='date']",
-    ]
-    for sel in date_selectors:
-        el = soup.select_one(sel)
-        if el:
-            d, raw = parse_date(el.get_text(strip=True))
-            if d:
-                return d, raw
-
-    # Priority 3: scan the first 2000 characters of the article body.
-    article = soup.find("article") or soup.find("main") or soup.find("body")
-    if article:
-        d, raw = parse_date(article.get_text(separator=" ", strip=True)[:2000])
-        if d:
-            return d, raw
-
-    return None, ""
-
-
-def fetch_missing_dates(items: list[NewsItem], polite_delay: float, timeout: int) -> None:
-    """Mutate ``items`` in-place: fetch detail pages for items with no date."""
-    missing = [item for item in items if item.publish_date is None]
-    if not missing:
-        return
-
-    logger.info("Fetching detail pages to resolve dates for %d item(s)...", len(missing))
-    for i, item in enumerate(missing):
-        if i > 0:
-            time.sleep(polite_delay)
-        d, raw = fetch_date_from_detail_page(item.url, timeout=timeout)
-        if d:
-            item.publish_date = d
-            item.raw_date_text = raw
-            logger.debug("Resolved date %s for: %s", d, item.title)
-        else:
-            logger.warning("Could not resolve date for: %s | %s", item.title, item.url)
-
-    still_missing = sum(1 for item in items if item.publish_date is None)
-    if still_missing:
-        logger.warning(
-            "%d item(s) still have no date after detail-page fetch; "
-            "they will be skipped in CSV output.",
-            still_missing,
-        )
+    return extract_date_from_detail_html(html)
 
 
 # ---------------------------------------------------------------------------
@@ -570,33 +512,9 @@ def scrape(
 # Output: daily CSVs
 # ---------------------------------------------------------------------------
 
-def merge_into_daily_csvs(
-    items: list[NewsItem], dry_run: bool, data_dir: Path = DATA_DIR
-) -> dict:
-    """Merge scraped items into per-date CSV files under data_dir.
-
-    Files are only written when there is at least one new or updated row.
-    """
-    dated = [item for item in items if item.publish_date is not None]
-    undated = [item for item in items if item.publish_date is None]
-
-    rows_by_date: dict[date, list[dict]] = {}
-    for item in dated:
-        rows_by_date.setdefault(item.publish_date, []).append(item.to_row())
-
-    summary = _csv_merge_into_daily_csvs(rows_by_date, data_dir, dry_run)
-    summary["undated"] = len(undated)
-
-    if undated:
-        logger.warning(
-            "%d item(s) had no resolvable publish date and were NOT written. "
-            "Re-run with --fetch-detail-pages to attempt resolution.",
-            len(undated),
-        )
-        for item in undated:
-            logger.warning("  UNDATED: %s | %s", item.title, item.url)
-
-    return summary
+# merge_into_daily_csvs() and the CSV-write summary line are handled by
+# csv_utils.merge_items_into_daily_csvs() / print_merge_summary(), shared
+# with scrape_q4_ir.py and scrape_notified.py. Called directly from main().
 
 
 # ---------------------------------------------------------------------------
@@ -621,50 +539,13 @@ def resolve_source(
       2. the "news_releases_path" field on the matched sources.yaml record
       3. DEFAULT_NEWS_RELEASES_PATH ("/news-releases")
     """
-    try:
-        from sources_utils import find_source, find_source_by_ir_url, load_sources
-        sources = load_sources()
-    except Exception as exc:
-        logger.warning("Could not load sources.yaml (%s); slug/ticker lookup disabled.", exc)
-        sources = []
+    from sources_utils import resolve_source_identity
 
-    url = url or ""
-    slug = slug or ""
-    ticker = ticker or ""
-    record: Optional[dict] = None
-
-    if slug or ticker:
-        query = slug or ticker
-        record = find_source(sources, query) if sources else None
-        if record is None:
-            logger.warning(
-                "No sources.yaml record found for '%s'. Using provided values as-is.", query
-            )
-        else:
-            slug = slug or record.get("slug", "")
-            ticker = ticker or record.get("ticker", "")
-            if not url:
-                url = record.get("ir_url", "").rstrip("/")
-    elif url:
-        # Strip path so we hold only the site root.
-        parsed = urlparse(url)
-        url = urlunparse((parsed.scheme, parsed.netloc, "", "", "", ""))
-        record = find_source_by_ir_url(sources, url) if sources else None
-        if record is None:
-            logger.warning(
-                "No sources.yaml record matched the host of '%s'. "
-                "Slug and ticker will be empty.", url
-            )
-        else:
-            slug = record.get("slug", "")
-            ticker = record.get("ticker", "")
-    else:
-        slug, ticker, url = DEFAULT_SLUG, DEFAULT_TICKER, DEFAULT_BASE_URL
-
-    if not slug:
-        logger.warning("Slug is empty; CSV rows will have an empty slug column.")
-    if not ticker:
-        logger.warning("Ticker is empty; CSV rows will have an empty ticker column.")
+    url, slug, ticker, record = resolve_source_identity(
+        url, slug, ticker,
+        default_slug=DEFAULT_SLUG, default_ticker=DEFAULT_TICKER, default_url=DEFAULT_BASE_URL,
+        strip_url_to_root=True, logger=logger,
+    )
 
     # news_releases_path precedence: explicit CLI arg > sources.yaml field > default.
     if not news_releases_path:
@@ -707,7 +588,8 @@ def build_arg_parser() -> argparse.ArgumentParser:
         ),
     )
 
-    network = parser.add_argument_group("network")
+    # Shared: --polite-delay/--timeout/--debug-dump-html/--verbose
+    network = add_network_and_debug_args(parser, default_polite_delay=15.0)
     network.add_argument(
         "--page-limit", type=int, default=DEFAULT_PAGE_LIMIT, metavar="N",
         dest="page_limit",
@@ -715,21 +597,6 @@ def build_arg_parser() -> argparse.ArgumentParser:
             f"Items per listing page via ?l= (default: {DEFAULT_PAGE_LIMIT}). "
             "The server default without ?l= is 5, which causes many more requests."
         ),
-    )
-    network.add_argument(
-        "--polite-delay", type=float, default=15.0, metavar="SECONDS",
-        help="Seconds between requests (default: 15).",
-    )
-    network.add_argument("--timeout", type=int, default=30, metavar="SECONDS")
-
-    debug = parser.add_argument_group("debug")
-    debug.add_argument(
-        "--debug-dump-html", type=Path, default=None, metavar="PATH",
-        help="Save the first fetched listing page HTML to PATH.",
-    )
-    debug.add_argument(
-        "--verbose", "-v", action="store_true",
-        help="Enable DEBUG-level logging.",
     )
 
     return parser
@@ -739,11 +606,7 @@ def main(argv: Optional[list[str]] = None) -> int:
     parser = build_arg_parser()
     args = parser.parse_args(argv)
 
-    logging.basicConfig(
-        level=logging.DEBUG if args.verbose else logging.INFO,
-        format="%(asctime)s [%(levelname)s] %(message)s",
-        datefmt="%H:%M:%S",
-    )
+    configure_logging(args.verbose)
 
     if args.format == "json" and args.output is None:
         parser.error("--output PATH is required when --format json")
@@ -769,7 +632,9 @@ def main(argv: Optional[list[str]] = None) -> int:
     logger.info("Scraped %d item(s) total (before filtering).", len(all_items))
 
     if args.fetch_detail_pages:
-        fetch_missing_dates(all_items, polite_delay=args.polite_delay, timeout=args.timeout)
+        fetch_missing_dates_via_http(
+            all_items, fetch_date_from_detail_page, args.polite_delay, args.timeout
+        )
 
     filtered = filter_items(
         all_items, years=years, since=args.since, until=args.until, limit=None
@@ -782,19 +647,8 @@ def main(argv: Optional[list[str]] = None) -> int:
     if args.format == "json":
         write_json(filtered, args.output, dry_run=args.dry_run)
     else:
-        summary = merge_into_daily_csvs(filtered, dry_run=args.dry_run)
-        undated_note = (
-            f" ({summary['undated']} undated item(s) skipped)" if summary["undated"] else ""
-        )
-        action = "Would write" if args.dry_run else "Wrote"
-        dated_count = (
-            summary["files_written"] if not args.dry_run
-            else len({i.publish_date for i in filtered if i.publish_date})
-        )
-        print(
-            f"{action} {summary['rows_added']} new + {summary['rows_updated']} updated row(s) "
-            f"across {dated_count} daily CSV file(s){undated_note}"
-        )
+        summary = merge_items_into_daily_csvs(filtered, DATA_DIR, args.dry_run)
+        print_merge_summary(summary, args.dry_run, filtered)
 
     return 0
 

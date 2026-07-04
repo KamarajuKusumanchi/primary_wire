@@ -101,7 +101,7 @@ try:
 except ImportError:
     sys.exit("Missing dependency. Install with: pip install playwright")
 
-from csv_utils import merge_into_daily_csvs as _csv_merge_into_daily_csvs
+from csv_utils import merge_items_into_daily_csvs, print_merge_summary
 from scrape_utils import (
     NewsItem as _BaseNewsItem,
     add_common_args,
@@ -569,53 +569,11 @@ def fetch_missing_dates(
 # Output: CSV (primary_wire daily files) and JSON
 # ---------------------------------------------------------------------------
 
-def merge_into_daily_csvs(items: list[NewsItem], data_dir: Path, dry_run: bool) -> dict:
-    """Group items by publish date and merge into data/YYYY/YYYY-MM-DD.csv.
-
-    Items with no resolvable date are skipped. Files are only written when
-    there is at least one new or updated row. Returns a summary dict.
-    """
-    by_date: dict[date, list[NewsItem]] = {}
-    undated: list[NewsItem] = []
-    for item in items:
-        if item.publish_date is None:
-            undated.append(item)
-        else:
-            by_date.setdefault(item.publish_date, []).append(item)
-
-    rows_by_date = {
-        d: [item.to_csv_row() for item in day_items]
-        for d, day_items in by_date.items()
-    }
-    summary = _csv_merge_into_daily_csvs(rows_by_date, data_dir, dry_run)
-    summary["undated"] = len(undated)
-
-    if undated:
-        logger.warning(
-            "%d item(s) had no resolvable publish date and were NOT written to any "
-            "daily CSV. Use --debug-dump-html / --verbose to diagnose, or pass "
-            "--fetch-detail-pages to resolve dates from individual press-release pages:",
-            len(undated),
-        )
-        for item in undated:
-            logger.warning("  UNDATED: %s | %s", item.title, item.url)
-
-    return summary
-
-
-def print_csv_summary(summary: dict, data_dir: Path, dry_run: bool, filtered: list[NewsItem]) -> None:
-    """Print the one-line CSV write summary to stdout."""
-    action = "Would write" if dry_run else "Wrote"
-    dated_file_count = (
-        summary["files_written"]
-        if not dry_run
-        else len({i.publish_date for i in filtered if i.publish_date})
-    )
-    skipped = f" ({summary['undated']} undated item(s) skipped)" if summary["undated"] else ""
-    print(
-        f"{action} {summary['rows_added']} new + {summary['rows_updated']} updated row(s) "
-        f"across {dated_file_count} daily CSV file(s) under {data_dir}{skipped}"
-    )
+# merge_into_daily_csvs() and the CSV-write summary line are handled by
+# csv_utils.merge_items_into_daily_csvs() / print_merge_summary(), shared
+# with scrape_investorroom.py and scrape_notified.py. Called directly from
+# main() below -- see there for the undated-item warning and the final
+# "Wrote N new + M updated ..." line.
 
 
 # ---------------------------------------------------------------------------
@@ -629,66 +587,22 @@ def resolve_source(
 ) -> tuple[str, str, str]:
     """Resolve (url, slug, ticker) by consulting sources.yaml.
 
-    Accepts whichever subset of the three the caller supplied and fills in
-    the rest from the matching sources.yaml record.  Priority:
-
-      1. slug or ticker given  →  look up record, derive missing fields;
-         url built from ir_url + NEWS_PATH if not already provided.
-      2. only url given        →  look up record by hostname, derive slug + ticker.
-      3. nothing given         →  fall back to Costco defaults so the bare
-                                  "python scrape_q4_ir.py" invocation keeps working.
+    Thin Q4-specific wrapper around sources_utils.resolve_source_identity():
+    Q4 sites want one complete listing URL, so a URL derived from a slug/
+    ticker lookup has NEWS_PATH appended (listing_path_suffix); see that
+    function's docstring for the full priority order (slug/ticker -> url ->
+    Costco defaults).
 
     Returns (url, slug, ticker) as plain strings (never None).
     Logs warnings for any fields that could not be resolved.
     """
-    try:
-        from sources_utils import find_source, find_source_by_ir_url, load_sources
-        sources = load_sources()
-    except Exception as exc:
-        logger.warning("Could not load sources.yaml (%s); slug/ticker lookup disabled.", exc)
-        sources = []
+    from sources_utils import resolve_source_identity
 
-    url = url or ""
-    slug = slug or ""
-    ticker = ticker or ""
-
-    if slug or ticker:
-        query = slug or ticker
-        record = find_source(sources, query) if sources else None
-        if record is None:
-            logger.warning(
-                "No sources.yaml record found for '%s'. Using provided slug/ticker as-is.", query
-            )
-        else:
-            slug = slug or record.get("slug", "")
-            ticker = ticker or record.get("ticker", "")
-            if not url:
-                ir_url = record.get("ir_url", "")
-                if ir_url:
-                    url = ir_url.rstrip("/") + NEWS_PATH
-                else:
-                    logger.warning(
-                        "Record '%s' has no ir_url; cannot derive --url automatically.", slug
-                    )
-    elif url:
-        record = find_source_by_ir_url(sources, url) if sources else None
-        if record is None:
-            logger.warning(
-                "No sources.yaml record matched the host of '%s'. "
-                "Slug and ticker will be empty unless passed explicitly.",
-                url,
-            )
-        else:
-            slug = record.get("slug", "")
-            ticker = record.get("ticker", "")
-    else:
-        slug, ticker, url = DEFAULT_SLUG, DEFAULT_TICKER, DEFAULT_URL
-
-    if not slug:
-        logger.warning("Slug is empty; CSV rows will have an empty slug column.")
-    if not ticker:
-        logger.warning("Ticker is empty; CSV rows will have an empty ticker column.")
-
+    url, slug, ticker, _record = resolve_source_identity(
+        url, slug, ticker,
+        default_slug=DEFAULT_SLUG, default_ticker=DEFAULT_TICKER, default_url=DEFAULT_URL,
+        listing_path_suffix=NEWS_PATH, logger=logger,
+    )
     return url, slug, ticker
 
 
@@ -865,8 +779,8 @@ def main(argv: Optional[list[str]] = None) -> int:
     print_preview(filtered)
 
     if args.format in ("csv", "both"):
-        summary = merge_into_daily_csvs(filtered, args.data_dir, args.dry_run)
-        print_csv_summary(summary, args.data_dir, args.dry_run, filtered)
+        summary = merge_items_into_daily_csvs(filtered, args.data_dir, args.dry_run)
+        print_merge_summary(summary, args.dry_run, filtered, data_dir=args.data_dir)
 
     if args.format in ("json", "both"):
         output = args.output or REPO_ROOT / "q4_ir_news.json"

@@ -9,11 +9,15 @@ Public API
 DATE_PATTERNS        : list of (compiled re, list[str]) -- date regex + strptime formats
 NewsItem             : base dataclass for a scraped press-release item
 parse_date(text)     -> (date | None, str)   -- first parseable date in text + raw match
+extract_date_from_detail_html(html) -> (date | None, str) -- date heuristics for detail pages
 parse_year_args(args)-> set[int] | None       -- resolve --year/--start-year/--end-year
 filter_items(...)    -> list[NewsItem]
+fetch_missing_dates_via_http(...)             -- fill in missing dates via detail-page fetches
 write_json(...)
 print_preview(...)
 add_common_args(parser)                       -- attach shared CLI args to an ArgumentParser
+add_network_and_debug_args(parser, ...)       -- attach --polite-delay/--timeout/--debug-dump-html/-v
+configure_logging(verbose)                    -- shared logging.basicConfig() for HTTP scrapers
 """
 
 from __future__ import annotations
@@ -22,10 +26,16 @@ import argparse
 import json
 import logging
 import re
+import time
 from dataclasses import dataclass
 from datetime import date, datetime
 from pathlib import Path
 from typing import Iterable, Optional
+
+try:
+    from bs4 import BeautifulSoup
+except ImportError:
+    BeautifulSoup = None  # extract_date_from_detail_html() raises a clear error if actually called
 
 logger = logging.getLogger(__name__)
 
@@ -68,6 +78,62 @@ def parse_date(text: str) -> tuple[Optional[date], str]:
                 return datetime.strptime(cleaned, fmt).date(), raw
             except ValueError:
                 continue
+    return None, ""
+
+
+# Common date CSS selectors seen across IR platforms. Used by
+# extract_date_from_detail_html() below.
+_DETAIL_PAGE_DATE_SELECTORS = [
+    "span.date", "p.date", "div.date",
+    ".press-release-date", ".release-date", ".article-date",
+    ".news-date", ".pr-date", ".date-label",
+    "[class*='date']",
+]
+
+
+def extract_date_from_detail_html(html: str) -> tuple[Optional[date], str]:
+    """Extract a publish date from a press-release detail page's HTML.
+
+    Tries, in priority order:
+      1. Any <time> element's ``datetime`` attribute or text.
+      2. Common date CSS selectors used across IR platforms
+         (see _DETAIL_PAGE_DATE_SELECTORS).
+      3. A scan of the first ~2000 characters of the <article>/<main>/<body>
+         text, whichever is found first.
+
+    Shared by scrape_investorroom.py and scrape_notified.py, whose detail
+    pages happen to follow this same layout convention despite being
+    different IR platforms. scrape_q4_ir.py's detail pages don't, and use
+    their own heuristic (a fixed-size scan anchored on the headline).
+    """
+    if BeautifulSoup is None:
+        raise ImportError("Missing dependency. Install with: pip install beautifulsoup4 lxml")
+
+    soup = BeautifulSoup(html, "lxml")
+
+    for time_tag in soup.find_all("time"):
+        dt_attr = time_tag.get("datetime", "")
+        if dt_attr:
+            d, raw = parse_date(dt_attr)
+            if d:
+                return d, raw
+        d, raw = parse_date(time_tag.get_text(strip=True))
+        if d:
+            return d, raw
+
+    for sel in _DETAIL_PAGE_DATE_SELECTORS:
+        el = soup.select_one(sel)
+        if el:
+            d, raw = parse_date(el.get_text(strip=True))
+            if d:
+                return d, raw
+
+    article = soup.find("article") or soup.find("main") or soup.find("body")
+    if article:
+        d, raw = parse_date(article.get_text(separator=" ", strip=True)[:2000])
+        if d:
+            return d, raw
+
     return None, ""
 
 
@@ -167,6 +233,55 @@ def filter_items(
     if limit is not None:
         result = result[:limit]
     return result
+
+
+# ---------------------------------------------------------------------------
+# Detail-page date fallback (HTTP-based scrapers)
+# ---------------------------------------------------------------------------
+
+def fetch_missing_dates_via_http(
+    items: Iterable[NewsItem],
+    fetch_date_from_detail_page,
+    polite_delay: float,
+    timeout: int,
+) -> None:
+    """Mutate ``items`` in place: fetch a detail page for each item with no
+    ``publish_date`` and fill it in from there.
+
+    ``fetch_date_from_detail_page`` is a ``(url, timeout=...) -> (date | None, str)``
+    callable supplied by the caller (each platform fetches over a different
+    HTTP stack -- plain ``requests`` for scrape_investorroom.py, ``curl_cffi``
+    for scrape_notified.py). This function only owns the shared looping,
+    pacing, and logging.
+
+    Shared by scrape_investorroom.py and scrape_notified.py. scrape_q4_ir.py
+    needs a live Playwright browser session per fetch instead and keeps its
+    own implementation.
+    """
+    items = list(items)
+    missing = [item for item in items if item.publish_date is None]
+    if not missing:
+        return
+
+    logger.info("Fetching detail pages to resolve dates for %d item(s)...", len(missing))
+    for i, item in enumerate(missing):
+        if i > 0:
+            time.sleep(polite_delay)
+        d, raw = fetch_date_from_detail_page(item.url, timeout=timeout)
+        if d:
+            item.publish_date = d
+            item.raw_date_text = raw
+            logger.debug("Resolved date %s for: %s", d, item.title)
+        else:
+            logger.warning("Could not resolve date for: %s | %s", item.title, item.url)
+
+    still_missing = sum(1 for item in items if item.publish_date is None)
+    if still_missing:
+        logger.warning(
+            "%d item(s) still have no date after detail-page fetch; "
+            "they will be skipped in CSV output.",
+            still_missing,
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -273,4 +388,50 @@ def add_common_args(parser: argparse.ArgumentParser) -> None:
     out.add_argument(
         "--dry-run", action="store_true",
         help="Parse/scrape and show what would be written, but write nothing.",
+    )
+
+
+def add_network_and_debug_args(
+    parser: argparse.ArgumentParser,
+    *,
+    default_polite_delay: float = 15.0,
+) -> argparse._ArgumentGroup:
+    """Attach the "network" and "debug" argument groups shared by the
+    HTTP-based scrapers (scrape_investorroom.py, scrape_notified.py).
+
+    Covers --polite-delay, --timeout, --debug-dump-html, and --verbose.
+    Returns the "network" group so callers can add their own extra options
+    to it (e.g. scrape_investorroom.py's --page-limit).
+    """
+    network = parser.add_argument_group("network")
+    network.add_argument(
+        "--polite-delay", type=float, default=default_polite_delay, metavar="SECONDS",
+        help=f"Seconds between requests (default: {default_polite_delay:g}).",
+    )
+    network.add_argument("--timeout", type=int, default=30, metavar="SECONDS")
+
+    debug = parser.add_argument_group("debug")
+    debug.add_argument(
+        "--debug-dump-html", type=Path, default=None, metavar="PATH",
+        help="Save the first fetched listing page HTML to PATH.",
+    )
+    debug.add_argument(
+        "--verbose", "-v", action="store_true",
+        help="Enable DEBUG-level logging.",
+    )
+
+    return network
+
+
+def configure_logging(verbose: bool) -> None:
+    """Configure root logging with the timestamped format shared by the
+    HTTP-based scrapers (scrape_investorroom.py, scrape_notified.py).
+
+    scrape_q4_ir.py uses a different scheme (-v/-vv counted verbosity, no
+    timestamp) and configures logging itself instead of calling this.
+    """
+    logging.basicConfig(
+        level=logging.DEBUG if verbose else logging.INFO,
+        format="%(asctime)s [%(levelname)s] %(message)s",
+        datefmt="%H:%M:%S",
     )
