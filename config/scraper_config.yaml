@@ -33,3 +33,4 @@ notified:
   sources:
     - slug: abbvie
     - slug: teradyne
+#    - slug: apollo

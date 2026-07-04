@@ -33,7 +33,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import scrape_q4_ir
-from sources_utils import load_source_record
+from sources_utils import join_url_path, load_source_record
 
 # ---- Configure these three values per company ----
 TARGET_SLUG = "CHANGEME"           # must match slug in sources/sources.yaml
@@ -52,7 +52,7 @@ def main() -> int:
     if not ticker:
         sys.exit(f"sources.yaml '{TARGET_SLUG}' record has no ticker")
 
-    news_url = ir_url.rstrip("/") + NEWS_PATH
+    news_url = join_url_path(ir_url, NEWS_PATH)
 
     # Strip --no-fetch-detail-pages before forwarding (scrape_q4_ir doesn't
     # know that flag; we just omit --fetch-detail-pages instead).

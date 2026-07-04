@@ -33,6 +33,8 @@ sources:
     name: Apollo Global Management, Inc.
     ticker: APO
     ir_url: https://ir.apollo.com/
+#    news_releases_path: /news-events/press-releases
+#    first_page_index: 1
   - slug: apple
     name: Apple Inc.
     ticker: AAPL

@@ -118,6 +118,7 @@ except ImportError:
     sys.exit("Missing dependency. Install with: pip install beautifulsoup4 lxml")
 
 from csv_utils import merge_items_into_daily_csvs, print_merge_summary
+from sources_utils import join_url_path
 from scrape_utils import (
     NewsItem as _BaseNewsItem,
     add_common_args,
@@ -247,7 +248,7 @@ def listing_page_url(
     news_releases_path defaults to "/news-releases"; callers resolve the
     right value via resolve_source() / sources.yaml before calling this.
     """
-    base = base_url.rstrip("/") + news_releases_path
+    base = join_url_path(base_url, news_releases_path)
     params: dict[str, int] = {"l": page_limit}
     if offset > 0:
         params["o"] = offset
@@ -262,7 +263,7 @@ def year_filter_url(
     news_releases_path: str = DEFAULT_NEWS_RELEASES_PATH,
 ) -> str:
     """Build a year-filtered listing URL. See listing_page_url() for news_releases_path."""
-    base = base_url.rstrip("/") + news_releases_path
+    base = join_url_path(base_url, news_releases_path)
     params: dict[str, object] = {"year": year, "l": page_limit}
     if offset > 0:
         params["o"] = offset
@@ -614,7 +615,7 @@ def main(argv: Optional[list[str]] = None) -> int:
     base_url, slug, ticker, news_releases_path = resolve_source(
         args.url, args.slug, args.ticker, args.news_releases_path
     )
-    logger.info("Scraping %s (%s) from %s", slug, ticker, base_url + news_releases_path)
+    logger.info("Scraping %s (%s) from %s", slug, ticker, join_url_path(base_url, news_releases_path))
 
     years = parse_year_args(args)
 

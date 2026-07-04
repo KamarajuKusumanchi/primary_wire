@@ -28,6 +28,31 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 SOURCES_PATH = REPO_ROOT / "sources" / "sources.yaml"
 
 
+def join_url_path(base_url: str, path: str) -> str:
+    """Join an IR site root with a listing/news path.
+
+    Tolerates the presence or absence of a leading slash on *path* and a
+    trailing slash on *base_url*, so ``join_url_path("https://ir.x.com/", "news")``
+    and ``join_url_path("https://ir.x.com", "/news")`` both produce
+    ``"https://ir.x.com/news"``.
+
+    This replaces the naive ``base_url.rstrip("/") + path`` concatenation
+    used historically across the scrapers, which silently produced a broken
+    URL like ``"https://ir.x.comnews"`` whenever *path* arrived without its
+    leading slash (e.g. a shell -- Git Bash/MSYS2 in particular -- rewrote a
+    ``--news-releases-path=/news`` CLI argument into a filesystem path before
+    Python ever saw it, or a caller simply forgot the slash).
+
+    *path* may be "" (the default for callers like
+    ``resolve_source_identity``'s ``listing_path_suffix``), in which case
+    *base_url* is returned unchanged apart from trailing-slash stripping.
+    """
+    base = base_url.rstrip("/")
+    if not path:
+        return base
+    return base + "/" + path.lstrip("/")
+
+
 def load_sources(sources_path: Path = SOURCES_PATH) -> list[dict]:
     """Return all records from sources.yaml as a list of dicts.
 
@@ -161,7 +186,7 @@ def resolve_source_identity(
             if not url:
                 ir_url = record.get("ir_url", "")
                 if ir_url:
-                    url = ir_url.rstrip("/") + listing_path_suffix
+                    url = join_url_path(ir_url, listing_path_suffix)
                 else:
                     log.warning(
                         "Record '%s' has no ir_url; cannot derive --url automatically.", query

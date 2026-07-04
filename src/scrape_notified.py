@@ -120,6 +120,7 @@ except ImportError:
     sys.exit("Missing dependency. Install with: pip install beautifulsoup4 lxml")
 
 from csv_utils import merge_items_into_daily_csvs, print_merge_summary
+from sources_utils import join_url_path
 from scrape_utils import (
     NewsItem as _BaseNewsItem,
     add_common_args,
@@ -318,7 +319,7 @@ def listing_page_url(
     Teradyne) use "/press-releases" instead; callers resolve the right value
     via resolve_source() / sources.yaml before calling this.
     """
-    base = base_url.rstrip("/") + news_releases_path
+    base = join_url_path(base_url, news_releases_path)
     return base + "?" + urlencode({"page": page})
 
 
@@ -878,7 +879,7 @@ def main(argv: Optional[list[str]] = None) -> int:
     )
     logger.info(
         "Scraping %s (%s) from %s (first page index=%d)",
-        slug, ticker, base_url + news_releases_path, first_page_index,
+        slug, ticker, join_url_path(base_url, news_releases_path), first_page_index,
     )
 
     years = parse_year_args(args)
