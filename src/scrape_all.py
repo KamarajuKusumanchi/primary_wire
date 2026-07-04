@@ -5,7 +5,9 @@ scrape_all.py
 Orchestrate scraping across all sources configured in config/scraper_config.yaml.
 
 Usage:
-    python src/scrape_all.py --year 2026
+    python src/scrape_all.py                             # current year (default)
+    python src/scrape_all.py --year 2024
+    python src/scrape_all.py --all-years                 # full history, every source
     python src/scrape_all.py --year 2026 --dry-run
     python src/scrape_all.py --year 2026 --slug cdw      # single source
     python src/scrape_all.py --year 2026 --dry-run -v    # verbose
@@ -14,6 +16,7 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import datetime
 import importlib
 import logging
 import sys
@@ -65,7 +68,10 @@ def run_scraper(module_name: str, argv: list[str]) -> int:
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__,
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("--year", type=int, help="Year to scrape (omit for site default)")
+    parser.add_argument("--year", type=int,
+                        help="Year to scrape (default: current year)")
+    parser.add_argument("--all-years", action="store_true",
+                        help="Scrape full history for every source, ignoring --year")
     parser.add_argument("--slug", help="Scrape only this slug (omit for all configured)")
     parser.add_argument("--dry-run", action="store_true", help="Pass --dry-run to every scraper")
     parser.add_argument("--between-delay", type=float, default=5.0,
@@ -79,6 +85,11 @@ def main(argv: list[str] | None = None) -> int:
         datefmt="%H:%M:%S",
     )
 
+    if args.all_years:
+        year = None
+    else:
+        year = args.year if args.year is not None else datetime.date.today().year
+
     config = load_scraper_config()
     failures: list[str] = []
     ran = 0
@@ -91,7 +102,7 @@ def main(argv: list[str] | None = None) -> int:
                 continue
 
             extra_args = list(entry.get("args", []))
-            scraper_argv = build_argv(slug, args.year, extra_args, args.dry_run)
+            scraper_argv = build_argv(slug, year, extra_args, args.dry_run)
 
             logger.info("=== %s  [%s]  argv: %s ===", slug, module_name, scraper_argv)
             if ran > 0:
