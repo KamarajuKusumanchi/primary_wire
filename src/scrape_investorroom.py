@@ -117,9 +117,9 @@ try:
 except ImportError:
     sys.exit("Missing dependency. Install with: pip install beautifulsoup4 lxml")
 
-from csv_utils import merge_items_into_daily_csvs, print_merge_summary
-from sources_utils import join_url_path
-from scrape_utils import (
+from utils.csv_utils import merge_items_into_daily_csvs, print_merge_summary
+from utils.sources_utils import join_url_path
+from utils.scrape_utils import (
     NewsItem as _BaseNewsItem,
     add_common_args,
     add_network_and_debug_args,
@@ -540,7 +540,7 @@ def resolve_source(
       2. the "news_releases_path" field on the matched sources.yaml record
       3. DEFAULT_NEWS_RELEASES_PATH ("news-releases")
     """
-    from sources_utils import resolve_source_identity
+    from utils.sources_utils import resolve_source_identity
 
     url, slug, ticker, record = resolve_source_identity(
         url, slug, ticker,

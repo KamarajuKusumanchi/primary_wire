@@ -40,7 +40,7 @@ except ImportError:
     sys.exit("Missing dependency. Install with: pip install ruamel.yaml")
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from sources_utils import load_sources  # noqa: E402
+from utils.sources_utils import load_sources  # noqa: E402
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 SOURCES_PATH = REPO_ROOT / "sources" / "sources.yaml"

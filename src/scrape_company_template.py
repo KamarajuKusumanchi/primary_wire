@@ -33,7 +33,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import scrape_q4_ir
-from sources_utils import join_url_path, load_source_record
+from utils.sources_utils import join_url_path, load_source_record
 
 # ---- Configure these three values per company ----
 TARGET_SLUG = "CHANGEME"           # must match slug in sources/sources.yaml

@@ -19,10 +19,11 @@ import pytest
 
 # src/ is a flat module directory, not an installed package (matches the
 # sys.path.insert() pattern already used by scrape_cdw.py etc. to import
-# sibling modules).
+# sibling modules). The three shared utility modules live in src/utils/,
+# a regular subpackage of src/, so src/ is what needs to be on sys.path.
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
-from sources_utils import join_url_path  # noqa: E402
+from utils.sources_utils import join_url_path  # noqa: E402
 
 
 @pytest.mark.parametrize(

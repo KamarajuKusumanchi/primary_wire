@@ -101,8 +101,8 @@ try:
 except ImportError:
     sys.exit("Missing dependency. Install with: pip install playwright")
 
-from csv_utils import merge_items_into_daily_csvs, print_merge_summary
-from scrape_utils import (
+from utils.csv_utils import merge_items_into_daily_csvs, print_merge_summary
+from utils.scrape_utils import (
     NewsItem as _BaseNewsItem,
     add_common_args,
     filter_items,
@@ -596,7 +596,7 @@ def resolve_source(
     Returns (url, slug, ticker) as plain strings (never None).
     Logs warnings for any fields that could not be resolved.
     """
-    from sources_utils import resolve_source_identity
+    from utils.sources_utils import resolve_source_identity
 
     url, slug, ticker, _record = resolve_source_identity(
         url, slug, ticker,

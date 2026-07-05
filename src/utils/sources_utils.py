@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-sources_utils.py
+src/utils/sources_utils.py
 
 Shared utilities for reading sources/sources.yaml.
 
@@ -24,7 +24,7 @@ except ImportError:
 
 logger = logging.getLogger(__name__)
 
-REPO_ROOT = Path(__file__).resolve().parent.parent
+REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 SOURCES_PATH = REPO_ROOT / "sources" / "sources.yaml"
 
 

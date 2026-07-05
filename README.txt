@@ -210,6 +210,10 @@ functional but not yet complete, and more tooling is planned.
       update_source.py    Interactively add or update an entry in sources.yaml
       update_release.py   Interactively add a press release to a daily CSV file
       missing_tickers.py  Show S&P 500 tickers not yet in sources.yaml
+      utils/
+        csv_utils.py      Shared daily-CSV read/merge/write helpers
+        scrape_utils.py   Shared scraper argparse/date/NewsItem helpers
+        sources_utils.py  Shared sources.yaml read/lookup helpers
     tests/
       src/                Tests for scripts in src/ (forthcoming)
     docs/

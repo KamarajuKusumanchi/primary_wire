@@ -23,7 +23,7 @@ try:
 except ImportError:
     sys.exit("Missing dependency. Install with: pip install yfinance")
 
-from sources_utils import SOURCES_PATH
+from utils.sources_utils import SOURCES_PATH
 
 try:
     from ruamel.yaml import YAML

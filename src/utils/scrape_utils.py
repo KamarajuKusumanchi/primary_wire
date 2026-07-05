@@ -1,5 +1,5 @@
 """
-scrape_utils.py
+src/utils/scrape_utils.py
 
 Shared utilities for primary_wire's scraper scripts
 (scrape_q4_ir.py, scrape_investorroom.py, and any future scrapers).

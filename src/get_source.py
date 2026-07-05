@@ -16,7 +16,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from sources_utils import SOURCES_PATH, find_source, load_sources
+from utils.sources_utils import SOURCES_PATH, find_source, load_sources
 
 
 def format_record(record: dict) -> str:
