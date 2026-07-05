@@ -230,7 +230,30 @@ def extract_date_from_row(anchor) -> tuple[Optional[date], str]:
 
     Strategy 3: Walk up to 5 ancestors scanning all text (same as
     scrape_investorroom's extract_date_near_link).
+
+    IMPORTANT: headlines themselves often contain a date that is NOT the
+    publish date, e.g. "Apollo to Announce Second Quarter 2026 Financial
+    Results on August 4, 2026" (published Jun 25, but mentions Aug 4).  Sites
+    that lay out releases as cards (a date label followed by an <h3><a>
+    heading) rather than <table> rows have no <tr> ancestor, so Strategy 1
+    never fires and the ancestor walk in Strategy 3 would otherwise match the
+    headline's own embedded date on the very first iteration -- before ever
+    reaching the sibling text that holds the real publish date.  To avoid
+    this, the anchor's own text is stripped out of every candidate string
+    before searching it for a date.
     """
+    anchor_text = anchor.get_text(separator=" ", strip=True)
+
+    def _without_anchor_text(text: str) -> str:
+        """Strip the anchor's own (title) text out of a larger text blob.
+
+        Prevents a date mentioned inside the headline from being mistaken
+        for the row's publish date.
+        """
+        if anchor_text and anchor_text in text:
+            text = text.replace(anchor_text, " ")
+        return text
+
     # Strategy 1: find the enclosing <tr> and read first <td>
     node = anchor
     for _ in range(10):
@@ -244,20 +267,21 @@ def extract_date_from_row(anchor) -> tuple[Optional[date], str]:
                 d, raw = parse_short_date(cell_text)
                 if d:
                     return d, raw
-            # Also scan the full row text for long-form dates (Strategy 2)
-            row_text = node.get_text(separator=" ", strip=True)
+            # Also scan the full row text for long-form dates (Strategy 2),
+            # excluding the headline's own text.
+            row_text = _without_anchor_text(node.get_text(separator=" ", strip=True))
             d, raw = parse_date(row_text)
             if d:
                 return d, raw
             break
 
-    # Strategy 3: walk ancestors
+    # Strategy 3: walk ancestors, never searching inside the headline's own text
     node = anchor
     for _ in range(5):
         parent = node.parent
         if parent is None:
             break
-        card_text = parent.get_text(separator=" ", strip=True)
+        card_text = _without_anchor_text(parent.get_text(separator=" ", strip=True))
         d, raw = parse_short_date(card_text)
         if d:
             return d, raw
