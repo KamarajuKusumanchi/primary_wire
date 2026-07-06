@@ -29,6 +29,10 @@ sources:
     name: Accenture plc
     ticker: ACN
     ir_url: https://investor.accenture.com/
+  - slug: amd
+    name: Advanced Micro Devices, Inc.
+    ticker: AMD
+    ir_url: https://ir.amd.com/
   - slug: apollo
     name: Apollo Global Management, Inc.
     ticker: APO
@@ -47,6 +51,14 @@ sources:
     name: Ares Management Corporation
     ticker: ARES
     ir_url: https://ir.ares.com/
+  - slug: arista-networks
+    name: Arista Networks, Inc.
+    ticker: ANET
+    ir_url: https://investors.arista.com/
+  - slug: autozone
+    name: AutoZone, Inc.
+    ticker: AZO
+    ir_url: https://about.autozone.com/investor-overview
   - slug: axon
     name: Axon Enterprise, Inc.
     ticker: AXON
@@ -104,6 +116,10 @@ sources:
     name: Conagra Brands, Inc.
     ticker: CAG
     ir_url: https://www.conagrabrands.com/investor-relations
+  - slug: constellation-brands
+    name: Constellation Brands, Inc.
+    ticker: STZ
+    ir_url: https://ir.cbrands.com/
   - slug: corning
     name: Corning Incorporated
     ticker: GLW
@@ -216,6 +232,10 @@ sources:
     name: NVIDIA Corporation
     ticker: NVDA
     ir_url: https://investor.nvidia.com/news/press-releases/default.aspx
+  - slug: o-reilly-auto-parts
+    name: O'Reilly Automotive, Inc.
+    ticker: ORLY
+    ir_url: https://corporate.oreillyauto.com/investor-relations-information/
   - slug: onsemi
     name: ON Semiconductor Corporation
     ticker: "ON"
@@ -274,6 +294,10 @@ sources:
     name: The TJX Companies, Inc.
     ticker: TJX
     ir_url: https://investor.tjx.com/
+  - slug: tractor-supply
+    name: Tractor Supply Company
+    ticker: TSCO
+    ir_url: https://ir.tractorsupply.com/
   - slug: united-airlines
     name: United Airlines Holdings, Inc.
     ticker: UAL
