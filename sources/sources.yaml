@@ -29,6 +29,10 @@ sources:
     name: Accenture plc
     ticker: ACN
     ir_url: https://investor.accenture.com/
+  - slug: alexandria-real-estate-equities
+    name: Alexandria Real Estate Equities, Inc.
+    ticker: ARE
+    ir_url: https://investor.are.com/
   - slug: amd
     name: Advanced Micro Devices, Inc.
     ticker: AMD
@@ -220,6 +224,10 @@ sources:
     name: MSCI Inc.
     ticker: MSCI
     ir_url: https://ir.msci.com/
+  - slug: netapp
+    name: NetApp, Inc.
+    ticker: NTAP
+    ir_url: https://investors.netapp.com/
   - slug: netflix
     name: Netflix, Inc.
     ticker: NFLX

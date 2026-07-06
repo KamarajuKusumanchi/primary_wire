@@ -1,12 +1,15 @@
-Sources in sources.yaml:     72
-With automated scraper:      8 (11.1%)
-Without automated scraper:   64
+Sources in sources.yaml:     78
+With automated scraper:      8 (10.3%)
+Without automated scraper:   70
 
 Uncovered slugs:
   accenture
+  amd
   apple
   applied-materials
   ares
+  arista-networks
+  autozone
   bio-techne
   blackstone
   bls
@@ -17,6 +20,7 @@ Uncovered slugs:
   ciena
   coherent
   conagra
+  constellation-brands
   corning
   criver
   datadog
@@ -44,6 +48,7 @@ Uncovered slugs:
   netflix
   nike
   nvidia
+  o-reilly-auto-parts
   onsemi
   palantir
   qualcomm
@@ -57,6 +62,7 @@ Uncovered slugs:
   super-micro
   tesla
   tjx
+  tractor-supply
   united-airlines
   universal-health-services
   verisign

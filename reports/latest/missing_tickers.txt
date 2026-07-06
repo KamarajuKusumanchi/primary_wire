@@ -1,7 +1,7 @@
 
 S&P 500 companies:  503
-Covered in sources: 68
-Missing:            435
+Covered in sources: 74
+Missing:            429
 
 Missing tickers:
   A
@@ -26,13 +26,11 @@ Missing tickers:
   ALL
   ALLE
   AMCR
-  AMD
   AME
   AMGN
   AMP
   AMT
   AMZN
-  ANET
   AON
   AOS
   APA
@@ -46,7 +44,6 @@ Missing tickers:
   AVY
   AWK
   AXP
-  AZO
   BA
   BAC
   BALL
@@ -308,7 +305,6 @@ Missing tickers:
   OKE
   OMC
   ORCL
-  ORLY
   OTIS
   OXY
   PANW
@@ -369,7 +365,6 @@ Missing tickers:
   STE
   STLD
   STT
-  STZ
   SW
   SWK
   SYF
@@ -391,7 +386,6 @@ Missing tickers:
   TRMB
   TROW
   TRV
-  TSCO
   TSN
   TT
   TTD
