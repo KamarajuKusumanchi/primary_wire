@@ -1,9 +1,10 @@
-Sources in sources.yaml:     78
-With automated scraper:      8 (10.3%)
-Without automated scraper:   70
+Sources in sources.yaml:     80
+With automated scraper:      8 (10.0%)
+Without automated scraper:   72
 
 Uncovered slugs:
   accenture
+  alexandria-real-estate-equities
   amd
   apple
   applied-materials
@@ -45,6 +46,7 @@ Uncovered slugs:
   micron
   moderna
   msci
+  netapp
   netflix
   nike
   nvidia

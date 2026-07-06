@@ -1,7 +1,7 @@
 
 S&P 500 companies:  503
-Covered in sources: 74
-Missing:            429
+Covered in sources: 76
+Missing:            427
 
 Missing tickers:
   A
@@ -38,7 +38,6 @@ Missing tickers:
   APH
   APP
   APTV
-  ARE
   ATO
   AVB
   AVY
@@ -293,7 +292,6 @@ Missing tickers:
   NOC
   NRG
   NSC
-  NTAP
   NTRS
   NUE
   NVR
