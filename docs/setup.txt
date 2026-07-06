@@ -6,7 +6,7 @@ view and edit CSV data files.
 ===== Prerequisites =====
 
   * Git installed
-  * Python 3.14+ installed
+  * Python 3.12+ installed
   * uv installed (see below)
 
 ===== 1. Install uv =====

@@ -1,7 +1,7 @@
 [project]
 name = "primary_wire"
 version = "0.1.0"
-requires-python = ">=3.14"
+requires-python = ">=3.12"
 
 # primary_wire dependencies
 dependencies = [
@@ -107,3 +107,21 @@ dev = [
 #
 # ====== recreate the nevironment from scratch ======
 #   deactivate && uv venv --clear --system-certs && uv sync --extra dev --reinstall --system-certs && source .venv/Scripts/activate
+#
+# ====== downgrade from Python 3.14.x to 3.12.x ======
+# today | 2026-07-06
+# Initially, I was using 3.14.5 since pyproject.toml specified
+#   requires-python = ">=3.14"
+# But this felt too stringent. So I relaxed the assumption to
+#   requires-python = ">=3.12"
+# since the code does not depend on any features beyond that. I used the
+# following commands to downgrade the python version and regenerate the
+# uv.lock file.
+# Check the current version
+#   $ python --version
+#   Python 3.14.5
+# Recreate the environment
+#   deactivate && uv venv --clear --system-certs --python 3.12 && uv sync --extra dev --reinstall --system-certs && source .venv/Scripts/activate
+# Verify afterward
+#   $ uv run python --version
+#   Python 3.12.13
