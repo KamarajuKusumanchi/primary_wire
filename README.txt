@@ -185,17 +185,21 @@ Scrapers that ignore these guidelines will not have their PRs accepted.
 
 Each daily CSV file has five columns:
 
-^ Column           ^ Description                                                  ^
-| slug             | Short identifier for the organization (e.g. ''fedex'')       |
-| ticker           | Stock ticker symbol (empty for govt sources)                 |
-| title            | Press release title                                          |
-| url              | Link to the full press release                               |
-| publish_datetime | Date published in YYYY-MM-DD format. Time added if available |
+^ Column       ^ Description                                            ^
+| slug         | Short identifier for the organization (e.g. ''fedex'') |
+| ticker       | Stock ticker symbol (empty for govt sources)           |
+| title        | Press release title                                    |
+| url          | Link to the full press release                         |
+| publish_date | Date published, in YYYY-MM-DD format                   |
+
+A ''publish_time'' column is planned for a future release, to record
+time-of-day separately when the source provides it. For now, ''publish_date''
+holds a plain date only.
 
 Example: ''data/2026/2026-06-01.csv''
 
-  slug,ticker,title,url,publish_datetime
-  fedex,FDX,FedEx Completes Spin-Off of FedEx Freight,https://newsroom.fedex.com/...,2026-06-01 05:30 AM
+  slug,ticker,title,url,publish_date
+  fedex,FDX,FedEx Completes Spin-Off of FedEx Freight,https://newsroom.fedex.com/...,2026-06-01
 
 ===== Project structure =====
 

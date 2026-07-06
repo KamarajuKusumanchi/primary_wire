@@ -40,7 +40,7 @@ Create the file and its year directory if they do not exist:
 
 If the file is new, add the header row first:
 
-  slug,ticker,title,url,publish_datetime
+  slug,ticker,title,url,publish_date
 
 ==== 4. Add your entry ====
 
@@ -55,18 +55,19 @@ Press ''a'' to append a new row and fill in each column:
 | ticker       | ''FDX'' (leave empty for govt sources)                |
 | title        | ''FedEx Completes Spin-Off of FedEx Freight''         |
 | url          | ''https://newsroom.fedex.com/...''                    |
-| publish_datetime | See format table below                                |
+| publish_date | ''2026-06-01'' (see format note below)                |
 
 Press ''Ctrl+S'' to save, then ''q'' to quit.
 
-==== publish_datetime format ====
+==== publish_date format ====
 
-Use whatever precision is available on the source page — do not guess or fill in missing information:
+''publish_date'' holds a date only, in ''YYYY-MM-DD'' format — do not guess
+or fill in a missing date.
 
-^ What's available        ^ Example value             ^
-| Date only               | ''2026-06-01''              |
-| Date and time           | ''2026-06-01 05:30 AM''     |
-| Date, time and timezone | ''2026-06-10 08:30 AM EST'' |
+There is no column yet for time-of-day. If the source page gives a
+publish time, leave it out of ''publish_date'' and mention it in your pull
+request description instead; a ''publish_time'' column is planned for a
+future release.
 
 ==== 5. Validate your entry ====
 
@@ -77,7 +78,7 @@ Check the file looks correct:
 Make sure:
   * The URL points to the original source, not a news aggregator
   * The slug matches an entry in ''sources/sources.yaml''
-  * The publish_datetime matches the filename date
+  * The publish_date matches the filename date
   * There are no duplicate URLs
 
 ==== 6. Commit and submit a pull request ====

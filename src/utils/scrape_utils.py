@@ -158,7 +158,7 @@ class NewsItem:
     raw_date_text: str = ""
 
     @property
-    def publish_datetime(self) -> str:
+    def publish_date_str(self) -> str:
         return self.publish_date.isoformat() if self.publish_date else ""
 
     def to_row(self) -> dict:
@@ -168,7 +168,7 @@ class NewsItem:
             "ticker": self.ticker,
             "title": self.title,
             "url": self.url,
-            "publish_datetime": self.publish_datetime,
+            "publish_date": self.publish_date_str,
         }
 
 
@@ -316,7 +316,7 @@ def print_preview(items: Iterable[NewsItem], *, show_category: bool = False) -> 
         return
     print(f"\n{len(items)} item(s):\n")
     for item in items:
-        d = item.publish_datetime or "????-??-??"
+        d = item.publish_date_str or "????-??-??"
         cat = ""
         if show_category:
             category = getattr(item, "category", "")

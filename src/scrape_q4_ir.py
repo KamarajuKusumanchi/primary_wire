@@ -146,7 +146,7 @@ class NewsItem(_BaseNewsItem):
 
     def to_json_dict(self) -> dict:
         d = asdict(self)
-        d["publish_date"] = self.publish_datetime
+        d["publish_date"] = self.publish_date_str
         return d
 
 

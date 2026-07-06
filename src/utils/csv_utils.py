@@ -29,8 +29,8 @@ from typing import Iterable, Optional
 
 logger = logging.getLogger(__name__)
 
-CSV_FIELDS = ["slug", "ticker", "title", "url", "publish_datetime"]
-SORT_FIELDS = ["publish_datetime", "slug", "ticker", "title", "url"]
+CSV_FIELDS = ["slug", "ticker", "title", "url", "publish_date"]
+SORT_FIELDS = ["publish_date", "slug", "ticker", "title", "url"]
 
 
 # ---------------------------------------------------------------------------

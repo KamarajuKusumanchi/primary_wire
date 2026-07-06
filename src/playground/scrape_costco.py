@@ -80,8 +80,8 @@ DEFAULT_URL = "https://investor.costco.com/news/default.aspx"
 DEFAULT_SLUG = "costco"
 DEFAULT_TICKER = "COST"
 
-CSV_FIELDS = ["slug", "ticker", "title", "url", "publish_datetime"]
-SORT_FIELDS = ["publish_datetime", "slug", "ticker", "title", "url"]
+CSV_FIELDS = ["slug", "ticker", "title", "url", "publish_date"]
+SORT_FIELDS = ["publish_date", "slug", "ticker", "title", "url"]
 
 CATEGORY_CHOICES = ["All News", "Sales Releases", "Earnings Releases", "Other Company Releases"]
 
@@ -123,7 +123,7 @@ class NewsItem:
     raw_date_text: str = ""
 
     @property
-    def publish_datetime(self) -> str:
+    def publish_date_str(self) -> str:
         return self.publish_date.isoformat() if self.publish_date else ""
 
     def to_csv_row(self) -> dict:
@@ -132,12 +132,12 @@ class NewsItem:
             "ticker": self.ticker,
             "title": self.title,
             "url": self.url,
-            "publish_datetime": self.publish_datetime,
+            "publish_date": self.publish_date_str,
         }
 
     def to_json_dict(self) -> dict:
         d = asdict(self)
-        d["publish_date"] = self.publish_datetime
+        d["publish_date"] = self.publish_date_str
         return d
 
 
@@ -622,7 +622,7 @@ def print_preview(items: list[NewsItem]) -> None:
         return
     print(f"\n{len(items)} item(s):\n")
     for item in items:
-        d = item.publish_datetime or "????-??-??"
+        d = item.publish_date_str or "????-??-??"
         cat = f" [{item.category}]" if item.category else ""
         print(f"  {d}  {item.title}{cat}")
         print(f"             {item.url}")

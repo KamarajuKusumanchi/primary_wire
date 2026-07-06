@@ -174,7 +174,7 @@ class NewsItem(_BaseNewsItem):
     """InvestorRoom press-release item.
 
     Inherits slug, ticker, title, url, publish_date, raw_date_text, and
-    publish_datetime from scrape_utils.NewsItem.  No extra fields needed for
+    publish_date_str from scrape_utils.NewsItem.  No extra fields needed for
     this platform; subclassing keeps isinstance() checks consistent and leaves
     room for future additions without touching shared code.
     """

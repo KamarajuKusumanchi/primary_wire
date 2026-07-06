@@ -193,7 +193,7 @@ class NewsItem(_BaseNewsItem):
     """Notified/Drupal IR press-release item.
 
     Inherits slug, ticker, title, url, publish_date, raw_date_text, and
-    publish_datetime from scrape_utils.NewsItem.
+    publish_date_str from scrape_utils.NewsItem.
     """
 
 

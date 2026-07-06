@@ -27,8 +27,8 @@ except ImportError:
 # Assumes this script lives in <repo_root>/src/update_release.py
 REPO_ROOT = Path(__file__).resolve().parent.parent
 SOURCES_PATH = REPO_ROOT / "sources" / "sources.yaml"
-CSV_FIELDS = ["slug", "ticker", "title", "url", "publish_datetime"]
-SORT_FIELDS = ["publish_datetime", "slug", "ticker", "title", "url"]
+CSV_FIELDS = ["slug", "ticker", "title", "url", "publish_date"]
+SORT_FIELDS = ["publish_date", "slug", "ticker", "title", "url"]
 
 
 # ---------------------------------------------------------------------------
@@ -141,32 +141,26 @@ def main():
             break
         print("  Invalid format. Please enter the date as YYYY-MM-DD (e.g. 2026-06-22).")
 
-    # 4. Prompt for publish time (optional — press Enter to skip)
-    publish_time = prompt("Publish time (press Enter to skip)", allow_empty=True)
-
-    # 5. Derive publish_datetime
-    if publish_time:
-        publish_datetime = publish_date + " " + publish_time
-    else:
-        publish_datetime = publish_date
-
-    # 6. Prompt for title
+    # 4. Prompt for title
+    # NOTE: there is no publish_time column yet, so time-of-day is not
+    # collected here. Once a publish_time column exists, re-add a prompt for
+    # it here (see the old publish_datetime combination logic in git history).
     title = prompt("\nTitle")
 
-    # 7. Confirm the entry
+    # 5. Confirm the entry
     print("\n--- Confirm entry ---")
-    print(f"  slug:             {slug}")
-    print(f"  ticker:           {ticker}")
-    print(f"  title:            {title}")
-    print(f"  url:              {url}")
-    print(f"  publish_datetime: {publish_datetime}")
+    print(f"  slug:         {slug}")
+    print(f"  ticker:       {ticker}")
+    print(f"  title:        {title}")
+    print(f"  url:          {url}")
+    print(f"  publish_date: {publish_date}")
     print("---------------------")
 
     if not confirm("Save this entry?"):
         print("Aborted. No changes written.")
         return
 
-    # 8-10. Load (or create) the CSV file and update it
+    # 6-8. Load (or create) the CSV file and update it
     csv_path = csv_path_for_date(publish_date)
     df = load_csv(csv_path)
 
@@ -175,14 +169,14 @@ def main():
         "ticker": ticker,
         "title": title,
         "url": url,
-        "publish_datetime": publish_datetime,
+        "publish_date": publish_date,
     }])
 
     url_found = url in df["url"].values
     df = df[df["url"] != url]                        # drop existing row if present
     df = pd.concat([df, new_row], ignore_index=True) # append new row
 
-    # 11. Sort and write
+    # 9. Sort and write
     df = df.sort_values(SORT_FIELDS).reset_index(drop=True)
     write_csv(csv_path, df)
 
