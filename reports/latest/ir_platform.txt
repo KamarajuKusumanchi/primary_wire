@@ -23,7 +23,7 @@ chipotle                         CMG     investorroom  https://ir.chipotle.com/
 ciena                            CIEN    q4            https://investor.ciena.com/                                      
 coherent                         COHR    unknown       https://www.coherent.com/company/investor-relations              
 coinbase                         COIN    q4            https://investor.coinbase.com/                                   
-conagra                          CAG     notified      https://www.conagrabrands.com/investor-relations                 
+conagra                          CAG     unknown       https://www.conagrabrands.com/investor-relations                 
 constellation-brands             STZ     notified      https://ir.cbrands.com/                                          
 corning                          GLW     q4            https://investor.corning.com/                                    
 costco                           COST    q4            https://investor.costco.com/                                     
@@ -67,7 +67,7 @@ skyworks                         SWKS    notified      https://www.skyworksinc.c
 spacex                           SPCX    unknown       https://ir.spacex.com/                                           
 super-micro                      SMCI    q4            https://ir.supermicro.com/                                       
 teradyne                         TER     notified      https://investors.teradyne.com/                                  
-tesla                            TSLA    notified      https://ir.tesla.com/                                            
+tesla                            TSLA    unknown       https://ir.tesla.com/                                            
 tjx                              TJX     notified      https://investor.tjx.com/                                        
 tractor-supply                   TSCO    unknown       https://ir.tractorsupply.com/                                    
 united-airlines                  UAL     notified      https://ir.united.com/                                           
