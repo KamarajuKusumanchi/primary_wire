@@ -1,11 +1,10 @@
 Sources in sources.yaml:     80
-With automated scraper:      8 (10.0%)
-Without automated scraper:   72
+With automated scraper:      9 (11.2%)
+Without automated scraper:   71
 
 Uncovered slugs:
   accenture
   alexandria-real-estate-equities
-  amd
   apple
   applied-materials
   ares
