@@ -37,6 +37,8 @@ sources:
     name: Advanced Micro Devices, Inc.
     ticker: AMD
     ir_url: https://ir.amd.com/
+    news_releases_path: news-events/press-releases
+    first_page_index: 1
   - slug: apollo
     name: Apollo Global Management, Inc.
     ticker: APO

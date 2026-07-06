@@ -32,5 +32,6 @@ notified:
   scraper: scrape_notified
   sources:
     - slug: abbvie
-    - slug: teradyne
+    - slug: amd
     - slug: apollo
+    - slug: teradyne
