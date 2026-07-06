@@ -1,10 +1,9 @@
 Sources in sources.yaml:     72
-With automated scraper:      7 (9.7%)
-Without automated scraper:   65
+With automated scraper:      8 (11.1%)
+Without automated scraper:   64
 
 Uncovered slugs:
   accenture
-  apollo
   apple
   applied-materials
   ares
