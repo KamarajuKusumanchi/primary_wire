@@ -29,7 +29,7 @@ from typing import Iterable, Optional
 
 logger = logging.getLogger(__name__)
 
-CSV_FIELDS = ["slug", "ticker", "title", "url", "publish_date"]
+CSV_FIELDS = ["slug", "ticker", "title", "url", "publish_date", "publish_time"]
 SORT_FIELDS = ["publish_date", "slug", "ticker", "title", "url"]
 
 

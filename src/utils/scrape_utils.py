@@ -7,8 +7,10 @@ Shared utilities for primary_wire's scraper scripts
 Public API
 ----------
 DATE_PATTERNS        : list of (compiled re, list[str]) -- date regex + strptime formats
+TIME_RE               : compiled re matching a clock-time-with-timezone string
 NewsItem             : base dataclass for a scraped press-release item
 parse_date(text)     -> (date | None, str)   -- first parseable date in text + raw match
+parse_time(text)     -> str                  -- first raw clock-time-with-timezone in text
 extract_date_from_detail_html(html) -> (date | None, str) -- date heuristics for detail pages
 parse_year_args(args)-> set[int] | None       -- resolve --year/--start-year/--end-year
 filter_items(...)    -> list[NewsItem]
@@ -79,6 +81,30 @@ def parse_date(text: str) -> tuple[Optional[date], str]:
             except ValueError:
                 continue
     return None, ""
+
+
+# Clock time immediately followed by a timezone abbreviation, e.g.:
+#   "4:30 am EDT", "4:30 a.m. EDT", "12:15 pm PT", "9:00 AM UTC"
+# Deliberately permissive about am/pm punctuation/case since IR sites are
+# inconsistent about it, but requires an uppercase timezone abbreviation
+# (2-5 letters) right after, so it doesn't fire on random "H:MM am/pm"
+# mentions elsewhere in body text that lack a timezone.
+TIME_RE = re.compile(r"\b\d{1,2}:\d{2}\s*[AaPp]\.?[Mm]\.?\s+[A-Z]{2,5}\b")
+
+
+def parse_time(text: str) -> str:
+    """Return the first raw clock-time-with-timezone substring in *text*.
+
+    e.g. parse_time("Jun 8, 2026 4:30 am EDT") -> "4:30 am EDT"
+
+    This is intentionally NOT converted/normalized to any other timezone or
+    24-hour format -- callers want the exact string as published, since that's
+    the only thing that can be stated with confidence (the scraper doesn't
+    know each company's local timezone conventions). Returns "" if no
+    match is found (e.g. the company doesn't publish a time).
+    """
+    m = TIME_RE.search(text)
+    return m.group(0).strip() if m else ""
 
 
 # Common date CSS selectors seen across IR platforms. Used by
@@ -156,6 +182,11 @@ class NewsItem:
     url: str
     publish_date: Optional[date]
     raw_date_text: str = ""
+    publish_time: str = ""
+    # Raw "as published" clock time (e.g. "4:30 am EDT"), NOT converted to any
+    # other timezone/format -- see parse_time() above. Left as "" for sources
+    # that don't publish a time; not every scraper subclass populates this
+    # (only those whose listing/detail pages actually expose a time do).
 
     @property
     def publish_date_str(self) -> str:
@@ -169,6 +200,7 @@ class NewsItem:
             "title": self.title,
             "url": self.url,
             "publish_date": self.publish_date_str,
+            "publish_time": self.publish_time,
         }
 
 
@@ -254,6 +286,12 @@ def fetch_missing_dates_via_http(
     for scrape_notified.py). This function only owns the shared looping,
     pacing, and logging.
 
+    Some callers (e.g. scrape_notified.py) return a 3-tuple instead --
+    ``(date | None, str, str)``, where the third element is a raw publish-time
+    string (see ``parse_time()``) -- in which case ``item.publish_time`` is
+    also filled in. Callers returning the plain 2-tuple are unaffected and
+    leave ``item.publish_time`` untouched (its dataclass default is "").
+
     Shared by scrape_investorroom.py and scrape_notified.py. scrape_q4_ir.py
     needs a live Playwright browser session per fetch instead and keeps its
     own implementation.
@@ -267,10 +305,17 @@ def fetch_missing_dates_via_http(
     for i, item in enumerate(missing):
         if i > 0:
             time.sleep(polite_delay)
-        d, raw = fetch_date_from_detail_page(item.url, timeout=timeout)
+        result = fetch_date_from_detail_page(item.url, timeout=timeout)
+        if len(result) == 3:
+            d, raw, time_str = result
+        else:
+            d, raw = result
+            time_str = None
         if d:
             item.publish_date = d
             item.raw_date_text = raw
+            if time_str:
+                item.publish_time = time_str
             logger.debug("Resolved date %s for: %s", d, item.title)
         else:
             logger.warning("Could not resolve date for: %s | %s", item.title, item.url)

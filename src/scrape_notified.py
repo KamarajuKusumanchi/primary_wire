@@ -43,6 +43,14 @@ in the 2000s (i.e. "26" → 2026).  Dates are also present verbatim in
 each row's summary text (e.g. "NORTH CHICAGO, Ill., June 26, 2026")
 which is used as a fallback.
 
+Some sites (e.g. AMD's card-based listing, which has no <tr> at all) show a
+long-form date immediately followed by a publish time and timezone in the
+same row/card text, e.g. "Jun 8, 2026 4:30 am EDT". When present, that raw
+time-with-timezone substring (e.g. "4:30 am EDT") is captured verbatim into
+the publish_time CSV column -- see parse_time() in utils/scrape_utils.py.
+It is NOT converted to any other timezone or format. Sites that don't
+publish a time leave this column blank.
+
 Usage
 -----
   # Default: scrape AbbVie, dry-run (no files written)
@@ -130,6 +138,7 @@ from utils.scrape_utils import (
     fetch_missing_dates_via_http,
     filter_items,
     parse_date,
+    parse_time,
     parse_year_args,
     print_preview,
     write_json,
@@ -218,8 +227,16 @@ def parse_short_date(text: str) -> tuple[Optional[date], str]:
     return None, ""
 
 
-def extract_date_from_row(anchor) -> tuple[Optional[date], str]:
-    """Extract the publish date for a press-release link on a Notified listing page.
+def extract_date_and_time_from_row(anchor) -> tuple[Optional[date], str, str]:
+    """Extract the publish date and time for a press-release link on a
+    Notified listing page.
+
+    Returns (publish_date, raw_date_text, publish_time). publish_time is a
+    raw, unconverted "clock time + timezone" substring (e.g. "4:30 am EDT"),
+    or "" if none is found near the date -- see parse_time() in
+    utils/scrape_utils.py. It is extracted from the same candidate text used
+    to find the date (below), since sites that publish a time put it
+    immediately after the date in the same row/card text.
 
     Strategy 1: The listing table has a Date column as the first <td> in the
     same <tr> as (or an ancestor of) the link.  Walk up to find the <tr> and
@@ -240,7 +257,9 @@ def extract_date_from_row(anchor) -> tuple[Optional[date], str]:
     headline's own embedded date on the very first iteration -- before ever
     reaching the sibling text that holds the real publish date.  To avoid
     this, the anchor's own text is stripped out of every candidate string
-    before searching it for a date.
+    before searching it for a date (and, incidentally, before searching for
+    a time -- a headline is very unlikely to contain a clock time, but this
+    keeps the two extractions consistent).
     """
     anchor_text = anchor.get_text(separator=" ", strip=True)
 
@@ -266,13 +285,13 @@ def extract_date_from_row(anchor) -> tuple[Optional[date], str]:
                 cell_text = first_td.get_text(separator=" ", strip=True)
                 d, raw = parse_short_date(cell_text)
                 if d:
-                    return d, raw
+                    return d, raw, parse_time(cell_text)
             # Also scan the full row text for long-form dates (Strategy 2),
             # excluding the headline's own text.
             row_text = _without_anchor_text(node.get_text(separator=" ", strip=True))
             d, raw = parse_date(row_text)
             if d:
-                return d, raw
+                return d, raw, parse_time(row_text)
             break
 
     # Strategy 3: walk ancestors, never searching inside the headline's own text
@@ -284,13 +303,13 @@ def extract_date_from_row(anchor) -> tuple[Optional[date], str]:
         card_text = _without_anchor_text(parent.get_text(separator=" ", strip=True))
         d, raw = parse_short_date(card_text)
         if d:
-            return d, raw
+            return d, raw, parse_time(card_text)
         d, raw = parse_date(card_text)
         if d:
-            return d, raw
+            return d, raw, parse_time(card_text)
         node = parent
 
-    return None, ""
+    return None, "", ""
 
 
 # ---------------------------------------------------------------------------
@@ -406,7 +425,7 @@ def parse_listing_page(
 
         seen_urls.add(norm_url)
 
-        publish_date, raw_date_text = extract_date_from_row(anchor)
+        publish_date, raw_date_text, publish_time = extract_date_and_time_from_row(anchor)
 
         items.append(NewsItem(
             slug=slug,
@@ -415,6 +434,7 @@ def parse_listing_page(
             url=full_url,
             publish_date=publish_date,
             raw_date_text=raw_date_text,
+            publish_time=publish_time,
         ))
 
     return items
@@ -424,18 +444,28 @@ def parse_listing_page(
 # Detail-page date fallback
 # ---------------------------------------------------------------------------
 
-def fetch_date_from_detail_page(url: str, timeout: int = 30) -> tuple[Optional[date], str]:
-    """Fetch a detail page and extract its publish date.
+def fetch_date_from_detail_page(url: str, timeout: int = 30) -> tuple[Optional[date], str, str]:
+    """Fetch a detail page and extract its publish date and time.
 
-    Parsing heuristics live in scrape_utils.extract_date_from_detail_html(),
-    shared with scrape_investorroom.py; this function owns only the fetch.
+    Date-parsing heuristics live in scrape_utils.extract_date_from_detail_html(),
+    shared with scrape_investorroom.py. Time extraction is Notified-specific
+    (not shared, since it's not known whether other platforms lay out a
+    time the same way) so it's a best-effort scan of the same
+    article/main/body text region that the shared date heuristic falls back
+    to, via scrape_utils.parse_time(). Returns (date, raw_date_text,
+    publish_time); publish_time is "" if no time is found (e.g. site doesn't
+    publish one).
     """
     try:
         html = fetch_html(url, timeout=timeout)
     except Exception as exc:
         logger.warning("Failed to fetch detail page %s: %s", url, exc)
-        return None, ""
-    return extract_date_from_detail_html(html)
+        return None, "", ""
+    d, raw = extract_date_from_detail_html(html)
+    soup = BeautifulSoup(html, "lxml")
+    article = soup.find("article") or soup.find("main") or soup.find("body")
+    publish_time = parse_time(article.get_text(separator=" ", strip=True)[:2000]) if article else ""
+    return d, raw, publish_time
 
 
 # ---------------------------------------------------------------------------
