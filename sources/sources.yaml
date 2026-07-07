@@ -214,6 +214,10 @@ sources:
     name: International Business Machines Corporation
     ticker: IBM
     ir_url: https://www.ibm.com/investor
+  - slug: intel
+    name: Intel Corporation
+    ticker: INTC
+    ir_url: https://www.intc.com/
   - slug: iqvia
     name: IQVIA Holdings Inc.
     ticker: IQV
