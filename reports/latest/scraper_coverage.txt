@@ -1,6 +1,6 @@
-Sources in sources.yaml:     80
-With automated scraper:      9 (11.2%)
-Without automated scraper:   71
+Sources in sources.yaml:     85
+With automated scraper:      9 (10.6%)
+Without automated scraper:   76
 
 Uncovered slugs:
   accenture
@@ -18,6 +18,7 @@ Uncovered slugs:
   builders-firstsource
   charter
   ciena
+  cognizant
   coherent
   conagra
   constellation-brands
@@ -31,19 +32,23 @@ Uncovered slugs:
   factset
   fedex
   fedex-freight
+  fis-global
   flex
   fox
   ge-healthcare
   gen-digital
   genuine-parts
+  godaddy
   google
   honeywell
   ibm
+  intel
   iqvia
   kla
   lam-research
   micron
   moderna
+  molson-coors
   msci
   netapp
   netflix

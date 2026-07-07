@@ -1,7 +1,7 @@
 
 S&P 500 companies:  503
-Covered in sources: 76
-Missing:            427
+Covered in sources: 81
+Missing:            422
 
 Missing tickers:
   A
@@ -102,7 +102,6 @@ Missing tickers:
   CSGP
   CSX
   CTAS
-  CTSH
   CTVA
   CVNA
   CVS
@@ -162,7 +161,6 @@ Missing tickers:
   FE
   FFIV
   FICO
-  FIS
   FISV
   FITB
   FIX
@@ -172,7 +170,6 @@ Missing tickers:
   FTNT
   FTV
   GD
-  GDDY
   GE
   GEV
   GILD
@@ -209,7 +206,6 @@ Missing tickers:
   IEX
   IFF
   INCY
-  INTC
   INTU
   INVH
   IP
@@ -369,7 +365,6 @@ Missing tickers:
   SYK
   SYY
   T
-  TAP
   TDG
   TDY
   TEL
