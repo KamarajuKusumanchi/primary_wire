@@ -113,13 +113,18 @@ def group_sources_by_signature(config: dict) -> dict[Signature, list[Source]]:
     identical module + args are interchangeable for smoke-testing purposes,
     since either one exercises exactly the same code.
 
-    Concretely, in scraper_config.yaml today: cdw (--fetch-detail-pages) is
-    its own signature distinct from costco/coinbase (--fallback-to-visible),
-    even though all three live under the 'q4_ir' group -- cdw exercises the
-    detail-page-fallback branch in scrape_q4_ir.py that costco and coinbase
-    never touch, so it must always be included rather than randomized away.
-    costco and coinbase, on the other hand, share a signature and are truly
-    interchangeable: testing either one is representative of testing both.
+    Concretely, in scraper_config.yaml today: costco and coinbase share a
+    signature (both pass --fallback-to-visible) and are truly interchangeable
+    for smoke-testing -- testing either one is representative of testing both.
+
+    TODO: cdw no longer carries a distinguishing 'args' entry -- its need for
+    detail-page-fetched dates moved to sources.yaml's needs_detail_page_dates
+    field (a durable site fact, not a per-run scraper flag) -- so it now
+    groups with costco/coinbase here even though it exercises a different
+    code path in scrape_q4_ir.py (the detail-page-fallback branch) that they
+    never touch. Until this grouping logic is taught to also key off
+    sources.yaml fields, cdw risks being randomized away by --smoke-test.
+    Tracked as a separate follow-up.
 
     Args are sorted before hashing so that e.g. [--a, --b] and [--b, --a]
     are treated as the same signature (order doesn't affect which code path

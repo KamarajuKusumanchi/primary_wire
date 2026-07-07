@@ -21,25 +21,30 @@ Date extraction works in two stages:
      elements around each news link looking for a date in the card text.
      Works on many Q4 themes (e.g. Costco).
 
-  2. Detail-page fallback (opt-in via --fetch-detail-pages): for any item
-     still missing a date after stage 1, fetch its individual detail page
-     and parse the date from there. Required for some Q4 themes (e.g. CDW)
-     where the listing page does not include dates in the card HTML.
-     Fetches are spaced by --polite-delay. Each detail page is loaded in
-     the same already-open browser session to avoid repeated launch overhead.
+  2. Detail-page fallback (opt-in via --fetch-detail-pages, or automatically
+     enabled by a source's "needs_detail_page_dates: true" field in
+     sources.yaml): for any item still missing a date after stage 1, fetch
+     its individual detail page and parse the date from there. Required for
+     some Q4 themes (e.g. CDW) where the listing page does not include dates
+     in the card HTML. Fetches are spaced by --polite-delay. Each detail page
+     is loaded in the same already-open browser session to avoid repeated
+     launch overhead.
 
 Examples:
     # Costco -- dates found on listing page, no detail fetches needed
     python src/scrape_q4_ir.py --dry-run
 
-    # CDW -- dates only on detail pages; --fetch-detail-pages is required
+    # CDW -- dates only on detail pages; sources.yaml marks cdw with
+    # needs_detail_page_dates: true, so --fetch-detail-pages is applied
+    # automatically and does not need to be passed here
+    python src/scrape_q4_ir.py --slug cdw --dry-run
+    python src/scrape_q4_ir.py --ticker CDW --dry-run
+
+    # A raw --url not resolvable against sources.yaml still needs the flag
+    # passed explicitly, since there's no record to read it from
     python src/scrape_q4_ir.py \\
         --url https://investor.cdw.com/news/default.aspx \\
         --fetch-detail-pages --dry-run
-
-    # Any other Q4 IR site by slug or ticker
-    python src/scrape_q4_ir.py --slug cdw --fetch-detail-pages --dry-run
-    python src/scrape_q4_ir.py --ticker CDW --fetch-detail-pages --dry-run
 
     # Scrape a specific year
     python src/scrape_q4_ir.py --year 2025
@@ -584,8 +589,9 @@ def resolve_source(
     url: Optional[str],
     slug: Optional[str],
     ticker: Optional[str],
-) -> tuple[str, str, str]:
-    """Resolve (url, slug, ticker) by consulting sources.yaml.
+    fetch_detail_pages: Optional[bool] = None,
+) -> tuple[str, str, str, bool]:
+    """Resolve (url, slug, ticker, fetch_detail_pages) by consulting sources.yaml.
 
     Thin Q4-specific wrapper around sources_utils.resolve_source_identity():
     Q4 sites want one complete listing URL, so a URL derived from a slug/
@@ -593,17 +599,28 @@ def resolve_source(
     function's docstring for the full priority order (slug/ticker -> url ->
     Costco defaults).
 
-    Returns (url, slug, ticker) as plain strings (never None).
-    Logs warnings for any fields that could not be resolved.
+    fetch_detail_pages precedence (highest wins):
+      1. the fetch_detail_pages argument (i.e. --fetch-detail-pages on the CLI)
+      2. the "needs_detail_page_dates" field on the matched sources.yaml record
+      3. False
+
+    Returns (url, slug, ticker, fetch_detail_pages). url/slug/ticker are plain
+    strings (never None); fetch_detail_pages is a plain bool. Logs warnings for
+    any fields that could not be resolved.
     """
     from utils.sources_utils import resolve_source_identity
 
-    url, slug, ticker, _record = resolve_source_identity(
+    url, slug, ticker, record = resolve_source_identity(
         url, slug, ticker,
         default_slug=DEFAULT_SLUG, default_ticker=DEFAULT_TICKER, default_url=DEFAULT_URL,
         listing_path_suffix=NEWS_PATH, logger=logger,
     )
-    return url, slug, ticker
+
+    # fetch_detail_pages precedence: explicit CLI flag > sources.yaml field > False.
+    if fetch_detail_pages is None:
+        fetch_detail_pages = bool(record.get("needs_detail_page_dates")) if record else False
+
+    return url, slug, ticker, fetch_detail_pages
 
 
 def scrape_all_years(
@@ -715,11 +732,19 @@ def build_arg_parser() -> argparse.ArgumentParser:
 
     fallback = parser.add_argument_group("date fallback")
     fallback.add_argument(
-        "--fetch-detail-pages", action="store_true",
+        "--fetch-detail-pages", dest="fetch_detail_pages", action="store_true", default=None,
         help="For any item whose date was not found on the listing page, fetch its "
              "individual press-release page to extract the date. Required for Q4 themes "
              "that do not embed dates in the listing cards (e.g. CDW). Adds one browser "
-             "request per undated item, spaced by --polite-delay.",
+             "request per undated item, spaced by --polite-delay. Defaults to the "
+             "'needs_detail_page_dates' field on the matched sources.yaml record if not "
+             "passed explicitly; pass this flag to force it on for a source that doesn't "
+             "have that field set.",
+    )
+    fallback.add_argument(
+        "--no-fetch-detail-pages", dest="fetch_detail_pages", action="store_false",
+        help="Force detail-page date fetching off, overriding a "
+             "'needs_detail_page_dates: true' sources.yaml field for this source.",
     )
 
     parser.add_argument(
@@ -738,11 +763,15 @@ def main(argv: Optional[list[str]] = None) -> int:
     level = {0: _logging.WARNING, 1: _logging.INFO}.get(args.verbose, _logging.DEBUG)
     _logging.basicConfig(level=level, format="%(levelname)s: %(message)s")
 
-    url, slug, ticker = resolve_source(args.url, args.slug, args.ticker)
+    url, slug, ticker, fetch_detail_pages = resolve_source(
+        args.url, args.slug, args.ticker, args.fetch_detail_pages
+    )
     if not url:
         logger.error("Could not determine a news URL. Pass --url, --slug, or --ticker.")
         return 1
-    logger.info("slug=%s  ticker=%s  url=%s", slug, ticker, url)
+    logger.info(
+        "slug=%s  ticker=%s  url=%s  fetch_detail_pages=%s", slug, ticker, url, fetch_detail_pages
+    )
 
     years = parse_year_args(args)
     all_items = scrape_all_years(url, slug, ticker, years, args)
@@ -755,7 +784,7 @@ def main(argv: Optional[list[str]] = None) -> int:
         args.headless = False
         all_items = scrape_all_years(url, slug, ticker, years, args)
 
-    if args.fetch_detail_pages:
+    if fetch_detail_pages:
         fetch_missing_dates(
             all_items,
             headless=args.headless,

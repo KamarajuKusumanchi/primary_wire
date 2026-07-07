@@ -18,6 +18,15 @@
 #                         by item offset (?o=), which has no equivalent
 #                         starting-index quirk, and other scrapers ignore it.
 #   notes:                any useful context about finding press releases
+#   needs_detail_page_dates: true if this source's Q4 IR listing page does not
+#                         embed a publish date in its news cards, so scrape_q4_ir.py
+#                         must fetch each item's individual detail page to find one
+#                         (equivalent to always passing --fetch-detail-pages).
+#                         Optional -- omit to use the default (false). Only
+#                         meaningful for scrape_q4_ir.py; other scrapers ignore it.
+#                         This is a durable fact about the site's Q4 theme, not a
+#                         per-run behavior choice, so it lives here rather than as
+#                         an 'args' override in config/scraper_config.yaml.
 
 sources:
 
@@ -98,6 +107,7 @@ sources:
     name: CDW Corporation
     ticker: CDW
     ir_url: https://investor.cdw.com/
+    needs_detail_page_dates: true
   - slug: charter
     name: Charter Communications, Inc.
     ticker: CHTR

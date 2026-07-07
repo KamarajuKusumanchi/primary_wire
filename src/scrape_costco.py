@@ -10,7 +10,9 @@ ir_url and ticker, appends /news/default.aspx, then delegates all scraping
 and output work to scrape_q4_ir.
 
 Costco's Q4 IR theme embeds dates in listing-page cards, so detail-page
-fetches are not needed. Pass --fetch-detail-pages to enable them anyway.
+fetches are not needed (the "costco" sources.yaml record has no
+needs_detail_page_dates field, so scrape_q4_ir defaults it off). Pass
+--fetch-detail-pages to enable them anyway.
 
 Examples:
     # Preview what would be written, without writing anything
@@ -41,9 +43,6 @@ from utils.sources_utils import join_url_path, load_source_record
 
 TARGET_SLUG = "costco"
 NEWS_PATH = "/news/default.aspx"
-# Costco's Q4 theme embeds dates in listing cards, so detail-page fetches
-# are not needed to resolve them. Set to True for themes that omit dates.
-FETCH_DETAIL_PAGES = False
 
 
 def main() -> int:
@@ -58,16 +57,12 @@ def main() -> int:
 
     news_url = join_url_path(ir_url, NEWS_PATH)
 
-    # Strip --no-fetch-detail-pages before forwarding (scrape_q4_ir doesn't
-    # know that flag; we just omit --fetch-detail-pages instead).
+    # --fetch-detail-pages / --no-fetch-detail-pages, if present, are forwarded
+    # as-is: scrape_q4_ir.py understands both directly and, absent either,
+    # falls back to this record's needs_detail_page_dates field on its own
+    # (via --slug costco below), so no special-casing is needed here.
     raw_args = sys.argv[1:]
-    no_fetch = "--no-fetch-detail-pages" in raw_args
-    if no_fetch:
-        raw_args = [a for a in raw_args if a != "--no-fetch-detail-pages"]
-
     injected = ["--url", news_url, "--slug", TARGET_SLUG, "--ticker", ticker]
-    if FETCH_DETAIL_PAGES and not no_fetch:
-        injected.append("--fetch-detail-pages")
 
     return scrape_q4_ir.main(injected + raw_args)
 

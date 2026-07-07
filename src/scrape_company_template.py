@@ -9,11 +9,13 @@ To create a new wrapper:
   1. Copy this file to src/scrape_<slug>.py
   2. Set TARGET_SLUG to match the slug in sources/sources.yaml
   3. Set NEWS_PATH if the site uses a different path (rare)
-  4. Set FETCH_DETAIL_PAGES:
-       False  -- site embeds dates in listing cards (e.g. Costco)
-       True   -- dates only on individual detail pages (e.g. CDW)
-     When unsure, start with False and run --dry-run; any items shown in the
-     preview with date "????-??-??" mean you need True.
+  4. If the site's listing page omits dates from its cards (e.g. CDW), add
+       needs_detail_page_dates: true
+     to this company's record in sources/sources.yaml -- do NOT set a
+     FETCH_DETAIL_PAGES constant here; that field is a durable fact about the
+     site, so it belongs in sources.yaml, not in this wrapper. When unsure,
+     leave it unset and run --dry-run; any items shown in the preview with
+     date "????-??-??" mean you need to add the field.
   5. Update the module docstring and Examples below.
 
 Examples:
@@ -35,11 +37,13 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import scrape_q4_ir
 from utils.sources_utils import join_url_path, load_source_record
 
-# ---- Configure these three values per company ----
+# ---- Configure these two values per company ----
 TARGET_SLUG = "CHANGEME"           # must match slug in sources/sources.yaml
 NEWS_PATH = "/news/default.aspx"   # override only if the site differs
-FETCH_DETAIL_PAGES = False         # True if listing page omits dates (e.g. CDW)
 # --------------------------------------------------
+# Whether detail-page date fetching is needed (e.g. CDW) is read from this
+# source's needs_detail_page_dates field in sources.yaml, not set here --
+# see step 4 above.
 
 
 def main() -> int:
@@ -54,16 +58,12 @@ def main() -> int:
 
     news_url = join_url_path(ir_url, NEWS_PATH)
 
-    # Strip --no-fetch-detail-pages before forwarding (scrape_q4_ir doesn't
-    # know that flag; we just omit --fetch-detail-pages instead).
+    # --fetch-detail-pages / --no-fetch-detail-pages, if present, are forwarded
+    # as-is: scrape_q4_ir.py understands both directly and, absent either,
+    # falls back to this record's needs_detail_page_dates field on its own
+    # (via --slug below), so no special-casing is needed here.
     raw_args = sys.argv[1:]
-    no_fetch = "--no-fetch-detail-pages" in raw_args
-    if no_fetch:
-        raw_args = [a for a in raw_args if a != "--no-fetch-detail-pages"]
-
     injected = ["--url", news_url, "--slug", TARGET_SLUG, "--ticker", ticker]
-    if FETCH_DETAIL_PAGES and not no_fetch:
-        injected.append("--fetch-detail-pages")
 
     return scrape_q4_ir.main(injected + raw_args)
 

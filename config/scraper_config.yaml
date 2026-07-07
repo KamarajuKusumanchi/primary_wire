@@ -10,14 +10,18 @@
 # 'args' also determines grouping for `scrape_all.py --smoke-test`: sources
 # under the same scraper with identical 'args' are treated as interchangeable
 # (one is picked at random to represent all of them), while a source with a
-# distinct 'args' value -- even within the same group below, e.g. cdw's
-# --fetch-detail-pages vs. costco/coinbase's --fallback-to-visible -- always
-# gets its own representative, since it exercises a different code path.
+# distinct 'args' value gets its own representative, since it exercises a
+# different code path. (TODO: cdw's need for detail-page-fetched dates no
+# longer shows up here as an 'args' override -- see needs_detail_page_dates
+# in sources.yaml -- so it currently groups with costco/coinbase for
+# smoke-test purposes even though it exercises a different code path.
+# Tracked as a separate follow-up.)
 #
-# Note: per-source URL structure (e.g. news_releases_path) belongs in
-# sources.yaml, not here as an 'args' override -- it's a durable fact about
+# Note: per-source URL structure (e.g. news_releases_path) and other durable
+# facts about a source's site (e.g. needs_detail_page_dates) belong in
+# sources.yaml, not here as an 'args' override -- they're durable facts about
 # the source's site, not a per-run scraper behavior flag, and scripts run
-# directly (outside scrape_all.py) still need to pick it up.
+# directly (outside scrape_all.py) still need to pick them up.
 
 q4_ir:
   scraper: scrape_q4_ir
@@ -25,7 +29,6 @@ q4_ir:
     - slug: costco
       args: [--fallback-to-visible]
     - slug: cdw
-      args: [--fetch-detail-pages]
     - slug: coinbase
       args: [--fallback-to-visible]
 
