@@ -961,8 +961,9 @@ def main(argv: Optional[list[str]] = None) -> int:
     )
     logger.info("%d item(s) after filtering.", len(filtered))
 
-    if args.dry_run:
-        print_preview(filtered)
+    # Always show the parsed entries on screen, whether or not we're
+    # also writing them to disk.
+    print_preview(filtered)
 
     if args.format == "json":
         write_json(filtered, args.output, dry_run=args.dry_run)
