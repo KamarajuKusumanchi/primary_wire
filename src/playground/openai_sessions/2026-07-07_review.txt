@@ -1,0 +1,454 @@
+2026-07-07 4:11 PM
+
+Prompt:
+Please review the attached zip file and tell me what you think? What are the next steps? How to improve the scraper coverage? Ignore files in src/playground , src/scrape_costco.py, src/scrape_cdw.py, src/prototypes from your review.
+
+Response:
+I reviewed the project structure (excluding `src/playground`, `src/prototypes`, `src/scrape_costco.py`, and `src/scrape_cdw.py` as requested). Overall, I think this is a well-structured project with a solid architectural direction. It already looks like it's evolved beyond a collection of one-off scrapers into a scraper framework.
+
+## Overall impression
+
+The project has several things going for it:
+
+* Platform-based architecture instead of company-based scrapers.
+* Shared utilities (`scrape_utils.py`) instead of duplicated parsing logic.
+* Configuration-driven orchestration (`scraper_config.yaml` + `scrape_all.py`).
+* Coverage reporting (`check_scraper_coverage.py`).
+* Automatic platform detection (`detect_ir_platform.py`).
+
+Those are exactly the kinds of abstractions that make a scraper project maintainable.
+
+The biggest limitation is no longer scraper quality—it's **coverage expansion**.
+
+---
+
+# Strengths
+
+## 1. Platform abstraction
+
+This is the biggest architectural win.
+
+Instead of
+
+```
+500 companies
+→ 500 scrapers
+```
+
+you've moved toward
+
+```
+Platform
+   ↓
+Q4
+InvestorRoom
+Notified
+...
+```
+
+Every new company supported by an existing platform is almost free.
+
+That's the correct long-term direction.
+
+---
+
+## 2. Shared scraper utilities
+
+`scrape_utils.py` is doing exactly what it should.
+
+Instead of each scraper implementing
+
+* date parsing
+* filtering
+* logging
+* year handling
+* JSON writing
+
+it's centralized.
+
+That will keep future scrapers much smaller.
+
+---
+
+## 3. Coverage reporting
+
+`check_scraper_coverage.py` is surprisingly valuable.
+
+Many scraping projects never know:
+
+* what they support
+* what broke
+* what's missing
+
+You already have a coverage metric.
+
+I'd build on this even further.
+
+---
+
+## 4. Automatic platform detection
+
+`detect_ir_platform.py` is probably one of the most valuable pieces of the repo.
+
+Instead of manually categorizing websites forever, you've begun automating it.
+
+This becomes increasingly useful as coverage expands.
+
+---
+
+# What I'd improve
+
+## 1. Introduce a BaseScraper class
+
+Right now every scraper still feels fairly standalone.
+
+I'd introduce something like
+
+```python
+BaseScraper
+    fetch()
+    parse()
+    normalize()
+    write()
+```
+
+Then
+
+```
+Q4Scraper(BaseScraper)
+
+InvestorRoomScraper(BaseScraper)
+
+NotifiedScraper(BaseScraper)
+```
+
+The orchestration becomes much cleaner.
+
+---
+
+## 2. Standardize scraper outputs
+
+Every scraper should return exactly the same object.
+
+For example
+
+```python
+PressRelease(
+    title,
+    url,
+    publish_date,
+    publish_time,
+    source,
+    ticker,
+    platform
+)
+```
+
+instead of dictionaries.
+
+That makes downstream tooling much easier.
+
+---
+
+## 3. Reduce HTML parsing duplication
+
+I noticed each scraper still contains quite a bit of BeautifulSoup logic.
+
+Many pages ultimately boil down to
+
+```
+find article
+
+extract title
+
+extract date
+
+extract URL
+```
+
+A shared parser helper layer could remove another few hundred lines.
+
+---
+
+## 4. More tests
+
+This is probably the biggest engineering gap.
+
+Scrapers inevitably break.
+
+I'd snapshot representative HTML pages.
+
+Example:
+
+```
+tests/
+
+q4/
+
+page1.html
+
+page2.html
+
+page3.html
+```
+
+Then
+
+```
+pytest
+```
+
+can tell you immediately if a selector change broke extraction.
+
+Without snapshots, regressions are hard to catch.
+
+---
+
+# Improving scraper coverage
+
+This is where I'd spend almost all future effort.
+
+## Phase 1: Detect platforms automatically
+
+You're already doing this.
+
+I'd expand it.
+
+Instead of only
+
+```
+Q4
+
+InvestorRoom
+
+Notified
+```
+
+I'd identify
+
+```
+Q4
+
+Notified
+
+InvestorRoom
+
+EQS
+
+Euronext
+
+Cision
+
+BusinessWire-hosted IR
+
+GlobeNewswire-hosted IR
+
+Presspage
+
+Investis
+
+Notified IR
+
+IR Magazine
+
+Modular Finance
+
+Newsfile
+
+Prnewswire-hosted archives
+```
+
+Each new platform potentially unlocks dozens of companies.
+
+---
+
+## Phase 2: Generate candidate URLs
+
+Instead of manually adding companies:
+
+```
+ticker
+
+company
+
+IR URL
+```
+
+automatically search
+
+```
+Company Name investor relations
+
+Company Name newsroom
+
+Company Name press releases
+```
+
+Store candidates for review.
+
+Human approval only takes seconds.
+
+---
+
+## Phase 3: Auto-detect supported platform
+
+Once URL is known
+
+```
+↓
+
+detect platform
+
+↓
+
+assign scraper automatically
+
+↓
+
+update config
+```
+
+Much less manual work.
+
+---
+
+## Phase 4: Unknown classifier
+
+Right now unknown sites remain unknown.
+
+I'd save
+
+```
+HTML
+
+title
+
+meta generator
+
+scripts
+
+CSS
+
+common URLs
+```
+
+into an analysis folder.
+
+Then periodically cluster them.
+
+You'll often discover
+
+```
+15 companies
+
+↓
+
+same vendor
+
+↓
+
+new scraper supports all 15
+```
+
+That's a high-leverage way to expand coverage.
+
+---
+
+# Coverage metrics I'd track
+
+Instead of just
+
+```
+60 / 500
+```
+
+I'd report
+
+```
+Companies
+
+Covered
+
+Missing
+
+Unknown platform
+
+Known platform but unsupported
+
+Broken scraper
+
+Last successful scrape
+
+Average releases/company
+
+Coverage by platform
+
+Coverage by sector
+```
+
+This makes prioritization much easier.
+
+---
+
+# Next platforms I'd target
+
+If your goal is the S&P 500, I'd prioritize platforms by expected payoff rather than company-by-company additions.
+
+A rough order:
+
+1. Investis
+2. Modular Finance
+3. Presspage
+4. EQS
+5. Euronext IR
+6. Cision-hosted newsrooms
+7. Business Wire archive pages
+8. GlobeNewswire-hosted archives
+9. Newsfile
+10. Custom WordPress newsroom templates
+
+One new scraper can unlock dozens of companies.
+
+---
+
+# CI improvements
+
+I'd also add automated health checks.
+
+Every night:
+
+```
+Run all scrapers
+
+↓
+
+Compare release counts
+
+↓
+
+Alert if count drops sharply
+
+↓
+
+Save HTML when parsing fails
+
+↓
+
+Generate coverage report
+```
+
+This catches site changes quickly and provides debugging artifacts.
+
+---
+
+# Long-term vision
+
+I think the project is gradually becoming less of a "collection of scrapers" and more of an **official press release ingestion framework**. To reinforce that direction, I'd organize future work around:
+
+1. **Coverage expansion**: add support for more IR platforms to maximize the number of companies covered per new scraper.
+2. **Reliability**: snapshot-based tests, nightly runs, and automatic regression detection.
+3. **Automation**: automatically discover IR URLs, detect platforms, and generate candidate configuration entries.
+4. **Data quality**: normalize all scraper outputs into a single schema with consistent metadata and validation.
+5. **Observability**: dashboards for coverage, scrape success rates, stale sources, and newly detected unsupported platforms.
+
+Overall, I'd rate the architecture around **8.5–9/10** for a project at this stage. The core design choices are sound, and the remaining work is less about rewriting the framework and more about systematically increasing coverage and adding tooling to make that growth sustainable.
