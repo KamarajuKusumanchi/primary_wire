@@ -360,8 +360,15 @@ def print_preview(items: Iterable[NewsItem], *, show_category: bool = False) -> 
         print("No items to preview.")
         return
     print(f"\n{len(items)} item(s):\n")
+    # Only show the publish_time column at all if at least one item actually
+    # has one -- most sources never populate it, and printing an empty
+    # " ()" on every line for those would just be noise.
+    any_time = any(getattr(item, "publish_time", "") for item in items)
     for item in items:
         d = item.publish_date_str or "????-??-??"
+        if any_time:
+            t = getattr(item, "publish_time", "")
+            d = f"{d} ({t})" if t else d
         cat = ""
         if show_category:
             category = getattr(item, "category", "")
