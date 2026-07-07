@@ -110,6 +110,10 @@ sources:
     name: Ciena Corporation
     ticker: CIEN
     ir_url: https://investor.ciena.com/
+  - slug: cognizant
+    name: Cognizant Technology Solutions Corporation
+    ticker: CTSH
+    ir_url: https://investors.cognizant.com/
   - slug: coherent
     name: Coherent Corp.
     ticker: COHR
@@ -170,6 +174,10 @@ sources:
     name: FedEx Freight Holding Company, Inc.
     ticker: FDXF
     ir_url: https://ir.fedexfreight.com/
+  - slug: fis-global
+    name: Fidelity National Information Services, Inc.
+    ticker: FIS
+    ir_url: https://www.investor.fisglobal.com/
   - slug: flex
     name: Flex Ltd.
     ticker: FLEX
@@ -190,6 +198,10 @@ sources:
     name: Genuine Parts Company
     ticker: GPC
     ir_url: https://www.genpt.com/overview
+  - slug: godaddy
+    name: GoDaddy Inc.
+    ticker: GDDY
+    ir_url: https://aboutus.godaddy.net/investor-relations/
   - slug: google
     name: Alphabet Inc.
     ticker: GOOGL
@@ -222,6 +234,10 @@ sources:
     name: Moderna, Inc.
     ticker: MRNA
     ir_url: https://investors.modernatx.com/
+  - slug: molson-coors
+    name: Molson Coors Beverage Company
+    ticker: TAP
+    ir_url: https://ir.molsoncoors.com/
   - slug: msci
     name: MSCI Inc.
     ticker: MSCI
