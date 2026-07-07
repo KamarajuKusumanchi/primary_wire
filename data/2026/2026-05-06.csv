@@ -1,7 +1,7 @@
-slug,ticker,title,url,publish_date
-abbvie,ABBV,AbbVie to Present at the Bank of America Securities Healthcare Conference,https://investors.abbvie.com/news-releases/news-release-details/abbvie-present-bank-america-securities-healthcare-conference-2,2026-05-06
-apollo,APO,Apollo Reports First Quarter 2026 Results,https://ir.apollo.com/news-events/press-releases/detail/622/apollo-reports-first-quarter-2026-results,2026-05-06
-axon,AXON,"Axon reports Q1 2026 revenue of $807 million, up 34% year over year","https://investor.axon.com/2026-05-06-Axon-reports-Q1-2026-revenue-of-807-million,-up-34-year-over-year",2026-05-06
-cdw,CDW,CDW Declares Quarterly Cash Dividend of $0.630 Per Share,https://investor.cdw.com/news/news-details/2026/CDW-Declares-Quarterly-Cash-Dividend-of-0-630-Per-Share-5ed35dea0/default.aspx,2026-05-06
-cdw,CDW,CDW Reports First Quarter 2026 Earnings,https://investor.cdw.com/news/news-details/2026/CDW-Reports-First-Quarter-2026-Earnings/default.aspx,2026-05-06
-costco,COST,Costco Wholesale Corporation Reports April Sales Results,https://investor.costco.com/news/news-details/2026/Costco-Wholesale-Corporation-Reports-April-Sales-Results/default.aspx,2026-05-06
+slug,ticker,title,url,publish_date,publish_time
+abbvie,ABBV,AbbVie to Present at the Bank of America Securities Healthcare Conference,https://investors.abbvie.com/news-releases/news-release-details/abbvie-present-bank-america-securities-healthcare-conference-2,2026-05-06,
+apollo,APO,Apollo Reports First Quarter 2026 Results,https://ir.apollo.com/news-events/press-releases/detail/622/apollo-reports-first-quarter-2026-results,2026-05-06,
+axon,AXON,"Axon reports Q1 2026 revenue of $807 million, up 34% year over year","https://investor.axon.com/2026-05-06-Axon-reports-Q1-2026-revenue-of-807-million,-up-34-year-over-year",2026-05-06,
+cdw,CDW,CDW Declares Quarterly Cash Dividend of $0.630 Per Share,https://investor.cdw.com/news/news-details/2026/CDW-Declares-Quarterly-Cash-Dividend-of-0-630-Per-Share-5ed35dea0/default.aspx,2026-05-06,
+cdw,CDW,CDW Reports First Quarter 2026 Earnings,https://investor.cdw.com/news/news-details/2026/CDW-Reports-First-Quarter-2026-Earnings/default.aspx,2026-05-06,
+costco,COST,Costco Wholesale Corporation Reports April Sales Results,https://investor.costco.com/news/news-details/2026/Costco-Wholesale-Corporation-Reports-April-Sales-Results/default.aspx,2026-05-06,
