@@ -354,11 +354,20 @@ def print_preview(items: Iterable[NewsItem], *, show_category: bool = False) -> 
 
     Pass ``show_category=True`` for scrapers that populate the ``category``
     attribute (e.g. scrape_q4_ir.py) so that field appears in the output.
+
+    Items are printed in the same order they end up on disk (see
+    csv_utils.SORT_FIELDS / write_csv): grouped by publish_date, and within
+    a date ordered chronologically by publish_time. Without this, items
+    print in whatever order the scraper happened to encounter them
+    (typically reverse-chronological page order), which can disagree with
+    the CSV file's order for same-day items.
     """
     items = list(items)
     if not items:
         print("No items to preview.")
         return
+    from utils.csv_utils import sort_key as _csv_sort_key
+    items = sorted(items, key=lambda item: _csv_sort_key(item.to_row()))
     print(f"\n{len(items)} item(s):\n")
     # Only show the publish_time column at all if at least one item actually
     # has one -- most sources never populate it, and printing an empty

@@ -4,13 +4,16 @@ src/utils/csv_utils.py
 Shared helpers for reading, merging, and writing primary_wire's daily
 data/YYYY/YYYY-MM-DD.csv files.
 
-Used by scrape_q4_ir.py, scrape_investorroom.py, and any future scraper that
-follows the same per-date CSV layout.
+Used by scrape_q4_ir.py, scrape_investorroom.py, scrape_notified.py, and any
+future scraper that follows the same per-date CSV layout. sort_key() is also
+imported by scrape_utils.print_preview() so that stdout preview order matches
+the order rows are written to disk.
 
 Public API
 ----------
 CSV_FIELDS       : list[str]  -- canonical column order
 SORT_FIELDS      : list[str]  -- sort key for every CSV write
+sort_key(row)                  -> tuple  -- SORT_FIELDS sort key for one row
 csv_path_for_date(data_dir, d) -> Path
 load_csv(path)                 -> list[dict]
 write_csv(path, rows)          -- sorts then writes
@@ -63,12 +66,18 @@ def _publish_time_sort_key(value: str) -> tuple[int, int, int]:
     return (1, 0, 0)
 
 
-def _sort_key(row: dict) -> tuple:
+def sort_key(row: dict) -> tuple:
     """Build the SORT_FIELDS sort key for one row.
 
     Every field sorts on its raw string value except publish_time, which is
     routed through _publish_time_sort_key() so that it sorts chronologically
     instead of lexicographically (see the note above SORT_FIELDS).
+
+    Public (unlike _publish_time_sort_key) because callers outside this
+    module need to reproduce the CSV's row ordering -- see
+    scrape_utils.print_preview(), which sorts items the same way before
+    printing so that stdout output matches the order rows are written to
+    the daily CSV files.
     """
     key: list = []
     for field in SORT_FIELDS:
@@ -103,7 +112,7 @@ def load_csv(path: Path) -> list[dict]:
 def write_csv(path: Path, rows: list[dict]) -> None:
     """Sort *rows* by SORT_FIELDS and write them to *path*, creating parent dirs."""
     path.parent.mkdir(parents=True, exist_ok=True)
-    rows_sorted = sorted(rows, key=_sort_key)
+    rows_sorted = sorted(rows, key=sort_key)
     with open(path, "w", newline="", encoding="utf-8") as f:
         writer = csv.DictWriter(f, fieldnames=CSV_FIELDS)
         writer.writeheader()
