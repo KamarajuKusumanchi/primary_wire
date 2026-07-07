@@ -23,6 +23,7 @@ from __future__ import annotations
 
 import csv
 import logging
+import re
 from datetime import date
 from pathlib import Path
 from typing import Iterable, Optional
@@ -30,7 +31,53 @@ from typing import Iterable, Optional
 logger = logging.getLogger(__name__)
 
 CSV_FIELDS = ["slug", "ticker", "title", "url", "publish_date", "publish_time"]
-SORT_FIELDS = ["publish_date", "slug", "ticker", "title", "url"]
+SORT_FIELDS = ["publish_date", "slug", "ticker", "publish_time", "title", "url"]
+
+# publish_time is stored verbatim as scraped, e.g. "4:30 am EDT" -- see
+# parse_time() in scrape_utils.py. It is deliberately NOT zero-padded or
+# timezone-normalized there, so it cannot be sorted as a plain string: e.g.
+# "10:31 pm EST" < "9:15 pm EST" lexicographically, which is backwards.
+# _publish_time_sort_key() below fixes that for the common "H:MM am/pm TZ"
+# shape without attempting real timezone math (no offset table is applied;
+# same-timezone comparisons are exact, cross-timezone comparisons are only
+# as good as clock time, same as before this change).
+_TIME_SORT_RE = re.compile(r"(\d{1,2}):(\d{2})\s*([APap])\.?[Mm]\.?\s+[A-Z]{2,5}\b")
+
+
+def _publish_time_sort_key(value: str) -> tuple[int, int, int]:
+    """Return a zero-padded, chronologically-sortable key for one row's
+    raw publish_time string.
+
+    Rows whose publish_time is empty or doesn't match the expected
+    "H:MM am/pm TZ" shape sort *after* every row with a recognizable time --
+    "no time" is less specific than a real one, not earlier in the day.
+    """
+    if value:
+        m = _TIME_SORT_RE.match(value.strip())
+        if m:
+            hour, minute, meridiem = m.groups()
+            hour = int(hour) % 12
+            if meridiem.lower() == "p":
+                hour += 12
+            return (0, hour, int(minute))
+    return (1, 0, 0)
+
+
+def _sort_key(row: dict) -> tuple:
+    """Build the SORT_FIELDS sort key for one row.
+
+    Every field sorts on its raw string value except publish_time, which is
+    routed through _publish_time_sort_key() so that it sorts chronologically
+    instead of lexicographically (see the note above SORT_FIELDS).
+    """
+    key: list = []
+    for field in SORT_FIELDS:
+        value = row.get(field, "")
+        if field == "publish_time":
+            key.append(_publish_time_sort_key(value))
+        else:
+            key.append(value)
+    return tuple(key)
 
 
 # ---------------------------------------------------------------------------
@@ -56,7 +103,7 @@ def load_csv(path: Path) -> list[dict]:
 def write_csv(path: Path, rows: list[dict]) -> None:
     """Sort *rows* by SORT_FIELDS and write them to *path*, creating parent dirs."""
     path.parent.mkdir(parents=True, exist_ok=True)
-    rows_sorted = sorted(rows, key=lambda r: tuple(r.get(k, "") for k in SORT_FIELDS))
+    rows_sorted = sorted(rows, key=_sort_key)
     with open(path, "w", newline="", encoding="utf-8") as f:
         writer = csv.DictWriter(f, fieldnames=CSV_FIELDS)
         writer.writeheader()
