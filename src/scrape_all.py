@@ -13,6 +13,13 @@ Usage:
     python src/scrape_all.py --year 2026 --platform investorroom  # single platform
     python src/scrape_all.py --year 2026 --platform notified --slug abbvie  # both (ANDed)
     python src/scrape_all.py --year 2026 --dry-run -v          # verbose
+    python src/scrape_all.py --smoke-test --dry-run            # quick "is anything broken?" check
+    python src/scrape_all.py --smoke-test --dry-run --seed 42  # reproducible smoke test
+
+--smoke-test runs one randomly-picked source per distinct (scraper, extra
+args) signature instead of every configured source -- see
+pick_smoke_test_selection() below for why that's the right unit of
+"category" rather than the YAML group name.
 """
 
 from __future__ import annotations
@@ -21,6 +28,7 @@ import argparse
 import datetime
 import importlib
 import logging
+import random
 import sys
 import time
 from pathlib import Path
@@ -91,6 +99,64 @@ def iter_selected_sources(config: dict, platform: str | None, slug: str | None):
             yield group_name, module_name, entry
 
 
+Source = tuple[str, str, dict]  # (group_name, module_name, entry) -- same shape iter_selected_sources yields
+Signature = tuple[str, tuple[str, ...]]  # (module_name, sorted extra-args)
+
+
+def group_sources_by_signature(config: dict) -> dict[Signature, list[Source]]:
+    """Group every configured source by its (scraper module, extra args) signature.
+
+    This is the grouping --smoke-test samples from, and it's deliberately
+    *not* the same as the YAML group name (e.g. 'q4_ir'). Two sources under
+    the same scraper module but with different extra args exercise different
+    code paths and each need their own smoke-test coverage; two sources with
+    identical module + args are interchangeable for smoke-testing purposes,
+    since either one exercises exactly the same code.
+
+    Concretely, in scraper_config.yaml today: cdw (--fetch-detail-pages) is
+    its own signature distinct from costco/coinbase (--fallback-to-visible),
+    even though all three live under the 'q4_ir' group -- cdw exercises the
+    detail-page-fallback branch in scrape_q4_ir.py that costco and coinbase
+    never touch, so it must always be included rather than randomized away.
+    costco and coinbase, on the other hand, share a signature and are truly
+    interchangeable: testing either one is representative of testing both.
+
+    Args are sorted before hashing so that e.g. [--a, --b] and [--b, --a]
+    are treated as the same signature (order doesn't affect which code path
+    a boolean flag triggers).
+
+    Returns a dict preserving config order, mapping each signature to the
+    list of sources that share it.
+    """
+    groups: dict[Signature, list[Source]] = {}
+    for group_name, module_name, entry in iter_selected_sources(config, platform=None, slug=None):
+        signature = (module_name, tuple(sorted(entry.get("args", []))))
+        groups.setdefault(signature, []).append((group_name, module_name, entry))
+    return groups
+
+
+def pick_smoke_test_selection(config: dict, rng: random.Random) -> list[Source]:
+    """Pick one representative source per (scraper, args) signature.
+
+    Every distinct signature is guaranteed exactly one representative each
+    run -- nothing is ever skipped entirely. Within a signature that has
+    more than one interchangeable candidate (e.g. costco vs. coinbase),
+    the representative is chosen at random via `rng`, so repeated runs
+    rotate coverage across siblings instead of always testing the same one.
+
+    `rng` is injected (rather than using the `random` module's global state)
+    so callers can pass a seeded random.Random for reproducible picks.
+    """
+    selection: list[Source] = []
+    for signature, candidates in group_sources_by_signature(config).items():
+        chosen = rng.choice(candidates)
+        if len(candidates) > 1:
+            siblings = ", ".join(entry["slug"] for _, _, entry in candidates)
+            logger.debug("signature %s: picked %r from [%s]", signature, chosen[2]["slug"], siblings)
+        selection.append(chosen)
+    return selection
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__,
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -102,11 +168,24 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--platform",
                         help="Scrape only sources under this IR platform group in "
                              "scraper_config.yaml, e.g. 'investorroom' (omit for all)")
+    parser.add_argument("--smoke-test", action="store_true",
+                        help="Scrape one randomly-picked source per distinct (scraper, "
+                             "extra args) signature, instead of every configured source "
+                             "-- a quick 'is anything broken?' check. Cannot be combined "
+                             "with --slug/--platform. Combine with --dry-run to avoid "
+                             "writing data.")
+    parser.add_argument("--seed", type=int,
+                        help="Random seed for --smoke-test, for reproducible picks")
     parser.add_argument("--dry-run", action="store_true", help="Pass --dry-run to every scraper")
     parser.add_argument("--between-delay", type=float, default=5.0,
                         help="Seconds to wait between sources (default: 5)")
     parser.add_argument("-v", "--verbose", action="store_true")
     args = parser.parse_args(argv)
+
+    if args.smoke_test and (args.slug or args.platform):
+        parser.error("--smoke-test cannot be combined with --slug or --platform")
+    if args.seed is not None and not args.smoke_test:
+        parser.error("--seed only has an effect together with --smoke-test")
 
     logging.basicConfig(
         level=logging.DEBUG if args.verbose else logging.INFO,
@@ -123,7 +202,16 @@ def main(argv: list[str] | None = None) -> int:
     failures: list[str] = []
     ran = 0
 
-    for _group_name, module_name, entry in iter_selected_sources(config, args.platform, args.slug):
+    if args.smoke_test:
+        sources = pick_smoke_test_selection(config, random.Random(args.seed))
+        signature_count = len(group_sources_by_signature(config))
+        logger.info("Smoke test: %d source(s) selected across %d signature group(s): %s",
+                    len(sources), signature_count,
+                    ", ".join(entry["slug"] for _, _, entry in sources))
+    else:
+        sources = list(iter_selected_sources(config, args.platform, args.slug))
+
+    for _group_name, module_name, entry in sources:
         slug = entry["slug"]
         extra_args = list(entry.get("args", []))
         scraper_argv = build_argv(slug, year, extra_args, args.dry_run)
@@ -139,10 +227,13 @@ def main(argv: list[str] | None = None) -> int:
             failures.append(slug)
 
     if ran == 0:
-        logger.error(
-            "No matching entries found in scraper_config.yaml for platform=%r slug=%r",
-            args.platform, args.slug,
-        )
+        if args.smoke_test:
+            logger.error("No sources found in scraper_config.yaml to smoke-test")
+        else:
+            logger.error(
+                "No matching entries found in scraper_config.yaml for platform=%r slug=%r",
+                args.platform, args.slug,
+            )
         return 1
 
     if failures:

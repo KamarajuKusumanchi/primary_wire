@@ -7,6 +7,13 @@
 # 'args' is an optional list of extra CLI flags passed verbatim to that scraper.
 # --slug and --year are always passed automatically by scrape_all.py.
 #
+# 'args' also determines grouping for `scrape_all.py --smoke-test`: sources
+# under the same scraper with identical 'args' are treated as interchangeable
+# (one is picked at random to represent all of them), while a source with a
+# distinct 'args' value -- even within the same group below, e.g. cdw's
+# --fetch-detail-pages vs. costco/coinbase's --fallback-to-visible -- always
+# gets its own representative, since it exercises a different code path.
+#
 # Note: per-source URL structure (e.g. news_releases_path) belongs in
 # sources.yaml, not here as an 'args' override -- it's a durable fact about
 # the source's site, not a per-run scraper behavior flag, and scripts run

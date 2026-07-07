@@ -15,6 +15,7 @@ Usage
     invoke ir-platform           # regenerate just reports/latest/ir_platform.txt
     invoke missing-tickers       # regenerate just reports/latest/missing_tickers.txt
     invoke scraper-coverage      # regenerate just reports/latest/scraper_coverage.txt
+    invoke smoke-test            # quick "is anything broken?" check (see below)
 
 Each script is invoked as "uv run python <script>" (using an absolute path to
 the script, so this works no matter which directory you run `invoke` from),
@@ -84,3 +85,24 @@ def scraper_coverage(c):
 def reports(c):
     """Regenerate all three reports under reports/latest/."""
     print("Done: reports/latest/ is up to date.")
+
+
+@task
+def smoke_test(c, seed=None):
+    """Quick check that the scrapers aren't broken, without scraping everything.
+
+    Runs src/scrape_all.py --smoke-test --dry-run, which picks one random
+    source per distinct (scraper, extra-args) signature in
+    config/scraper_config.yaml -- see that script's docstring for why that's
+    the right unit of "category" to sample from. --dry-run means nothing is
+    written to data/; this only checks that each code path still runs.
+
+    Usage:
+        invoke smoke-test
+        invoke smoke-test --seed 42   # reproducible picks, e.g. for a bug report
+    """
+    script_path = ROOT / "src" / "scrape_all.py"
+    cmd = f'uv run python "{script_path}" --smoke-test --dry-run'
+    if seed is not None:
+        cmd += f" --seed {seed}"
+    c.run(cmd, pty=True)

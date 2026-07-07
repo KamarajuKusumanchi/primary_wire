@@ -79,6 +79,33 @@ is not financial advice.
 
 ===== Scrapers =====
 
+==== scrape_all.py ====
+
+Orchestrates every scraper configured in ''config/scraper_config.yaml'' in
+one command, instead of invoking each scraper script by hand.
+
+Usage:
+
+  # Scrape every configured source for the current year
+  python src/scrape_all.py
+
+  # Preview only, nothing written
+  python src/scrape_all.py --dry-run
+
+  # One specific source, or one platform group
+  python src/scrape_all.py --slug cdw
+  python src/scrape_all.py --platform investorroom
+
+  # Quick "is anything broken?" check: one random source per distinct
+  # (scraper, extra CLI args) combination, instead of every source
+  python src/scrape_all.py --smoke-test --dry-run
+
+  # Same, but with a fixed seed for reproducible picks
+  python src/scrape_all.py --smoke-test --dry-run --seed 42
+
+''--smoke-test'' is also available as a single ''invoke'' command --
+see [[docs/tasks.txt]].
+
 ==== scrape_q4_ir.py ====
 
 The main scraper. Collects press release links from any investor relations site
@@ -208,6 +235,7 @@ functional but not yet complete, and more tooling is planned.
 
   primary_wire/
     src/
+      scrape_all.py       Orchestrate all scrapers in scraper_config.yaml (incl. --smoke-test)
       scrape_q4_ir.py     Scrape any Q4 Inc. IR site for press release links
       scrape_costco.py    Wrapper: scrape Costco's IR page via scrape_q4_ir
       scrape_cdw.py       Wrapper: scrape CDW's IR page via scrape_q4_ir

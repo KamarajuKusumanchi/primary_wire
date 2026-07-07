@@ -1,8 +1,8 @@
 ====== primary_wire: Tasks ======
 
 This project uses [[https://www.pyinvoke.org/|Invoke]] as a small task runner
-for repetitive maintenance commands -- currently, regenerating the files
-under ''reports/latest/''.
+for repetitive maintenance commands -- regenerating the files under
+''reports/latest/'', and smoke-testing the scrapers.
 
 ===== Why Invoke =====
 
@@ -47,6 +47,32 @@ path to the script), captures stdout, and writes it to the corresponding
 file under ''reports/latest/''. This works whether or not a virtual
 environment is currently activated, and from any directory inside the repo
 -- see "Running from other directories" below.
+
+===== Smoke-testing the scrapers =====
+
+Before pushing a change that touches a scraper or a shared utility module,
+check that nothing is broken with:
+
+  invoke smoke-test
+
+This runs ''src/scrape_all.py --smoke-test --dry-run'', which scrapes one
+randomly-picked source per distinct (scraper, extra CLI args) combination
+in ''config/scraper_config.yaml'', instead of every configured source. For
+example, ''cdw'' uses ''--fetch-detail-pages'' and is the only source
+configured with that flag, so it always runs; ''costco'' and ''coinbase''
+both use ''--fallback-to-visible'', so one of the two is picked at random
+each time. This gives quick, representative coverage of every distinct code
+path without waiting for a full run across every configured source, and
+without hammering the same slug (and the servers behind it) on every run.
+''--dry-run'' means nothing is written to ''data/''.
+
+For a reproducible run (e.g. to attach the exact picks to a bug report):
+
+  invoke smoke-test --seed 42
+
+See the ''--smoke-test'' section of ''src/scrape_all.py''s docstring for
+the full rationale, and ''pick_smoke_test_selection()'' in that file for
+the implementation.
 
 ===== Running from other directories =====
 
