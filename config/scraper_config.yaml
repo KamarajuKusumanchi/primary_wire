@@ -8,14 +8,12 @@
 # --slug and --year are always passed automatically by scrape_all.py.
 #
 # 'args' also determines grouping for `scrape_all.py --smoke-test`: sources
-# under the same scraper with identical 'args' are treated as interchangeable
-# (one is picked at random to represent all of them), while a source with a
-# distinct 'args' value gets its own representative, since it exercises a
-# different code path. (TODO: cdw's need for detail-page-fetched dates no
-# longer shows up here as an 'args' override -- see needs_detail_page_dates
-# in sources.yaml -- so it currently groups with costco/coinbase for
-# smoke-test purposes even though it exercises a different code path.
-# Tracked as a separate follow-up.)
+# under the same scraper with identical 'args' *and* identical durable
+# per-source facts (see DURABLE_SIGNATURE_FIELDS in scrape_all.py, sourced
+# from sources.yaml) are treated as interchangeable (one is picked at random
+# to represent all of them), while a source differing on either 'args' or a
+# registered durable fact gets its own representative, since it exercises a
+# different code path.
 #
 # Note: per-source URL structure (e.g. news_releases_path) and other durable
 # facts about a source's site (e.g. needs_detail_page_dates) belong in

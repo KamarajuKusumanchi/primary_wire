@@ -17,9 +17,9 @@ Usage:
     python src/scrape_all.py --smoke-test --dry-run --seed 42  # reproducible smoke test
 
 --smoke-test runs one randomly-picked source per distinct (scraper, extra
-args) signature instead of every configured source -- see
-pick_smoke_test_selection() below for why that's the right unit of
-"category" rather than the YAML group name.
+args, durable source facts) signature instead of every configured source --
+see pick_smoke_test_selection() and group_sources_by_signature() below for
+why that's the right unit of "category" rather than the YAML group name.
 """
 
 from __future__ import annotations
@@ -40,6 +40,7 @@ except ImportError:
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 SCRAPER_CONFIG_PATH = REPO_ROOT / "config" / "scraper_config.yaml"
+SOURCES_YAML_PATH = REPO_ROOT / "sources" / "sources.yaml"
 SRC_DIR = Path(__file__).resolve().parent
 
 logger = logging.getLogger("scrape_all")
@@ -51,6 +52,32 @@ def load_scraper_config(path: Path = SCRAPER_CONFIG_PATH) -> dict:
     yaml = YAML()
     with open(path) as f:
         return yaml.load(f)
+
+
+def load_sources_lookup(path: Path = SOURCES_YAML_PATH) -> dict[str, dict]:
+    """Load sources.yaml into a dict keyed by slug, for cross-referencing
+    durable per-source facts (e.g. needs_detail_page_dates) against
+    scraper_config.yaml entries."""
+    if not path.exists():
+        sys.exit(f"sources.yaml not found at {path}")
+    yaml = YAML()
+    with open(path) as f:
+        data = yaml.load(f)
+    return {s["slug"]: s for s in data["sources"]}
+
+
+# Per-scraper-module durable fields (from sources.yaml) that change which
+# code path a source exercises, and therefore must factor into its
+# smoke-test signature alongside 'args'. Values can be any YAML scalar type
+# (bool, str, int, ...) or structured (list/dict) -- add an entry here
+# whenever a scraper is taught to branch on a new durable per-source fact,
+# regardless of that field's type. No other code needs to change.
+DURABLE_SIGNATURE_FIELDS: dict[str, tuple[str, ...]] = {
+    "scrape_q4_ir": ("needs_detail_page_dates",),
+    # e.g. once a hypothetical scrape_pr_newswire.py branches on a
+    # 'release_feed_format' string field in sources.yaml:
+    #   "scrape_pr_newswire": ("release_feed_format",),
+}
 
 
 def build_argv(slug: str, year: int | None, extra_args: list[str], dry_run: bool) -> list[str]:
@@ -100,48 +127,80 @@ def iter_selected_sources(config: dict, platform: str | None, slug: str | None):
 
 
 Source = tuple[str, str, dict]  # (group_name, module_name, entry) -- same shape iter_selected_sources yields
-Signature = tuple[str, tuple[str, ...]]  # (module_name, sorted extra-args)
+DurableValue = tuple[str, object]  # (field_name, normalized field value)
+Signature = tuple[str, tuple[str, ...], tuple[DurableValue, ...]]
+# (module_name, sorted extra-args, durable (field_name, value) pairs in
+# DURABLE_SIGNATURE_FIELDS order -- see _normalize_for_signature for why
+# values are pre-normalized before landing here.)
 
 
-def group_sources_by_signature(config: dict) -> dict[Signature, list[Source]]:
-    """Group every configured source by its (scraper module, extra args) signature.
+def _normalize_for_signature(value: object) -> object:
+    """Coerce a sources.yaml field value into something hashable, so any
+    scalar, list, or nested-dict field can safely sit inside a Signature
+    tuple -- not just the booleans/strings we happen to have today."""
+    if isinstance(value, list):
+        return tuple(_normalize_for_signature(v) for v in value)
+    if isinstance(value, dict):
+        return tuple((k, _normalize_for_signature(v)) for k, v in sorted(value.items()))
+    return value  # str, int, float, bool, None -- already hashable
+
+
+def group_sources_by_signature(
+    config: dict, sources_lookup: dict[str, dict]
+) -> dict[Signature, list[Source]]:
+    """Group every configured source by its (scraper module, extra args,
+    durable source facts) signature.
 
     This is the grouping --smoke-test samples from, and it's deliberately
-    *not* the same as the YAML group name (e.g. 'q4_ir'). Two sources under
-    the same scraper module but with different extra args exercise different
-    code paths and each need their own smoke-test coverage; two sources with
-    identical module + args are interchangeable for smoke-testing purposes,
-    since either one exercises exactly the same code.
+    *not* the same as the YAML group name (e.g. 'q4_ir'), and not just
+    'args' either. Two sources under the same scraper module but with
+    different extra args exercise different code paths and each need their
+    own smoke-test coverage; two sources with identical module + args are
+    interchangeable for smoke-testing purposes -- *unless* they also differ
+    on a durable, per-source fact declared in sources.yaml that the scraper
+    branches on (see DURABLE_SIGNATURE_FIELDS), in which case they still
+    need separate coverage even though 'args' alone doesn't show it.
 
     Concretely, in scraper_config.yaml today: costco and coinbase share a
-    signature (both pass --fallback-to-visible) and are truly interchangeable
-    for smoke-testing -- testing either one is representative of testing both.
-
-    TODO: cdw no longer carries a distinguishing 'args' entry -- its need for
-    detail-page-fetched dates moved to sources.yaml's needs_detail_page_dates
-    field (a durable site fact, not a per-run scraper flag) -- so it now
-    groups with costco/coinbase here even though it exercises a different
-    code path in scrape_q4_ir.py (the detail-page-fallback branch) that they
-    never touch. Until this grouping logic is taught to also key off
-    sources.yaml fields, cdw risks being randomized away by --smoke-test.
-    Tracked as a separate follow-up.
+    signature (both pass --fallback-to-visible, neither has a durable fact
+    registered for scrape_q4_ir) and are truly interchangeable for
+    smoke-testing. cdw carries no 'args' override, but sources.yaml marks it
+    with needs_detail_page_dates: true, which DURABLE_SIGNATURE_FIELDS
+    registers for scrape_q4_ir -- so cdw gets its own signature, distinct
+    from costco/coinbase, reflecting that it actually exercises
+    scrape_q4_ir.py's detail-page-fallback branch.
 
     Args are sorted before hashing so that e.g. [--a, --b] and [--b, --a]
     are treated as the same signature (order doesn't affect which code path
-    a boolean flag triggers).
+    a boolean flag triggers). Durable field values are normalized via
+    _normalize_for_signature so this works regardless of whether a given
+    field is a bool, string, number, or structured value -- adding a new
+    durable field to a new or existing scraper only requires registering it
+    in DURABLE_SIGNATURE_FIELDS, no changes needed here.
 
     Returns a dict preserving config order, mapping each signature to the
     list of sources that share it.
     """
     groups: dict[Signature, list[Source]] = {}
     for group_name, module_name, entry in iter_selected_sources(config, platform=None, slug=None):
-        signature = (module_name, tuple(sorted(entry.get("args", []))))
+        extra_args = tuple(sorted(entry.get("args", [])))
+
+        source_facts = sources_lookup.get(entry["slug"], {})
+        durable_fields = DURABLE_SIGNATURE_FIELDS.get(module_name, ())
+        durable_values: tuple[DurableValue, ...] = tuple(
+            (field, _normalize_for_signature(source_facts.get(field)))
+            for field in durable_fields
+        )
+
+        signature = (module_name, extra_args, durable_values)
         groups.setdefault(signature, []).append((group_name, module_name, entry))
     return groups
 
 
-def pick_smoke_test_selection(config: dict, rng: random.Random) -> list[Source]:
-    """Pick one representative source per (scraper, args) signature.
+def pick_smoke_test_selection(
+    config: dict, sources_lookup: dict[str, dict], rng: random.Random
+) -> list[Source]:
+    """Pick one representative source per (scraper, args, durable facts) signature.
 
     Every distinct signature is guaranteed exactly one representative each
     run -- nothing is ever skipped entirely. Within a signature that has
@@ -153,7 +212,7 @@ def pick_smoke_test_selection(config: dict, rng: random.Random) -> list[Source]:
     so callers can pass a seeded random.Random for reproducible picks.
     """
     selection: list[Source] = []
-    for signature, candidates in group_sources_by_signature(config).items():
+    for signature, candidates in group_sources_by_signature(config, sources_lookup).items():
         chosen = rng.choice(candidates)
         if len(candidates) > 1:
             siblings = ", ".join(entry["slug"] for _, _, entry in candidates)
@@ -175,10 +234,10 @@ def main(argv: list[str] | None = None) -> int:
                              "scraper_config.yaml, e.g. 'investorroom' (omit for all)")
     parser.add_argument("--smoke-test", action="store_true",
                         help="Scrape one randomly-picked source per distinct (scraper, "
-                             "extra args) signature, instead of every configured source "
-                             "-- a quick 'is anything broken?' check. Cannot be combined "
-                             "with --slug/--platform. Combine with --dry-run to avoid "
-                             "writing data.")
+                             "extra args, durable source facts) signature, instead of "
+                             "every configured source -- a quick 'is anything broken?' "
+                             "check. Cannot be combined with --slug/--platform. Combine "
+                             "with --dry-run to avoid writing data.")
     parser.add_argument("--seed", type=int,
                         help="Random seed for --smoke-test, for reproducible picks")
     parser.add_argument("--dry-run", action="store_true", help="Pass --dry-run to every scraper")
@@ -204,12 +263,13 @@ def main(argv: list[str] | None = None) -> int:
         year = args.year if args.year is not None else datetime.date.today().year
 
     config = load_scraper_config()
+    sources_lookup = load_sources_lookup()
     failures: list[str] = []
     ran = 0
 
     if args.smoke_test:
-        sources = pick_smoke_test_selection(config, random.Random(args.seed))
-        signature_count = len(group_sources_by_signature(config))
+        sources = pick_smoke_test_selection(config, sources_lookup, random.Random(args.seed))
+        signature_count = len(group_sources_by_signature(config, sources_lookup))
         logger.info("Smoke test: %d source(s) selected across %d signature group(s): %s",
                     len(sources), signature_count,
                     ", ".join(entry["slug"] for _, _, entry in sources))
