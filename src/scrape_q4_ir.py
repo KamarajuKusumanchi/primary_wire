@@ -106,15 +106,13 @@ try:
 except ImportError:
     sys.exit("Missing dependency. Install with: pip install playwright")
 
-from utils.csv_utils import merge_items_into_daily_csvs, print_merge_summary
 from utils.scrape_utils import (
     NewsItem as _BaseNewsItem,
     add_common_args,
-    filter_items,
+    finalize_and_output,
     parse_date,
     parse_year_args,
     print_preview as _base_print_preview,
-    write_json,
 )
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -574,11 +572,10 @@ def fetch_missing_dates(
 # Output: CSV (primary_wire daily files) and JSON
 # ---------------------------------------------------------------------------
 
-# merge_into_daily_csvs() and the CSV-write summary line are handled by
-# csv_utils.merge_items_into_daily_csvs() / print_merge_summary(), shared
-# with scrape_investorroom.py and scrape_notified.py. Called directly from
-# main() below -- see there for the undated-item warning and the final
-# "Wrote N new + M updated ..." line.
+# CSV/JSON writing and the "Wrote N new + M updated ..." summary line are
+# handled by scrape_utils.finalize_and_output(), shared with
+# scrape_investorroom.py and scrape_notified.py. Called directly from
+# main() below -- see there for the undated-item warning that precedes it.
 
 
 # ---------------------------------------------------------------------------
@@ -801,19 +798,21 @@ def main(argv: Optional[list[str]] = None) -> int:
                 undated_count,
             )
 
-    filtered = filter_items(all_items, years=years, since=args.since, until=args.until, limit=args.limit)
+    # Filters, always previews (with the category column, via print_preview
+    # above), and writes CSV/JSON per --format; see finalize_and_output()'s
+    # docstring for the three behaviors this standardizes across
+    # scrape_q4_ir.py/scrape_investorroom.py/scrape_notified.py
+    # (preview-always, --format both, --output default path).
+    filtered = finalize_and_output(
+        all_items,
+        years=years, since=args.since, until=args.until, limit=args.limit,
+        format=args.format, output=args.output, dry_run=args.dry_run,
+        data_dir=args.data_dir,
+        default_json_path=REPO_ROOT / "q4_ir_news.json",
+        preview_fn=print_preview,
+    )
     if not filtered:
         logger.warning("No items matched the requested filters.")
-
-    print_preview(filtered)
-
-    if args.format in ("csv", "both"):
-        summary = merge_items_into_daily_csvs(filtered, args.data_dir, args.dry_run)
-        print_merge_summary(summary, args.dry_run, filtered, data_dir=args.data_dir)
-
-    if args.format in ("json", "both"):
-        output = args.output or REPO_ROOT / "q4_ir_news.json"
-        write_json(filtered, output, args.dry_run)
 
     return 0
 

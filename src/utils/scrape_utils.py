@@ -14,12 +14,14 @@ parse_time(text)     -> str                  -- first raw clock-time-with-timezo
 extract_date_from_detail_html(html) -> (date | None, str) -- date heuristics for detail pages
 parse_year_args(args)-> set[int] | None       -- resolve --year/--start-year/--end-year
 filter_items(...)    -> list[NewsItem]
+dedupe_by_url(...)   -> list[NewsItem]        -- drop repeat items by normalized URL
 fetch_missing_dates_via_http(...)             -- fill in missing dates via detail-page fetches
 write_json(...)
 print_preview(...)
 add_common_args(parser)                       -- attach shared CLI args to an ArgumentParser
 add_network_and_debug_args(parser, ...)       -- attach --polite-delay/--timeout/--debug-dump-html/-v
 configure_logging(verbose)                    -- shared logging.basicConfig() for HTTP scrapers
+finalize_and_output(...)                      -- shared main() tail: filter, preview, write CSV/JSON
 """
 
 from __future__ import annotations
@@ -267,6 +269,31 @@ def filter_items(
     return result
 
 
+def dedupe_by_url(items: Iterable[NewsItem]) -> list[NewsItem]:
+    """Return *items* with repeat URLs removed, keeping the first occurrence.
+
+    URLs are compared with a trailing slash stripped, matching the
+    normalization each scraper already applies when first collecting items
+    off a listing page (so a trailing-slash-only difference doesn't count as
+    a distinct item here either).
+
+    This is the "global dedup across year passes" step every scraper does
+    once per invocation, previously reimplemented inline in
+    scrape_investorroom.scrape() and (twice) in scrape_notified.scrape().
+    Per-page incremental dedup while paginating (deciding whether a page
+    yielded anything *new*, so a scraper knows when to stop) is a different
+    job and stays local to each scraper's pagination loop.
+    """
+    seen: set[str] = set()
+    deduped: list[NewsItem] = []
+    for item in items:
+        key = item.url.rstrip("/")
+        if key not in seen:
+            seen.add(key)
+            deduped.append(item)
+    return deduped
+
+
 # ---------------------------------------------------------------------------
 # Detail-page date fallback (HTTP-based scrapers)
 # ---------------------------------------------------------------------------
@@ -386,6 +413,85 @@ def print_preview(items: Iterable[NewsItem], *, show_category: bool = False) -> 
         print(f"  {d}  {item.title}{cat}")
         print(f"             {item.url}")
     print()
+
+
+# ---------------------------------------------------------------------------
+# Shared main() tail: filter, preview, write CSV/JSON
+# ---------------------------------------------------------------------------
+
+def finalize_and_output(
+    items: Iterable[NewsItem],
+    *,
+    years: Optional[set[int]],
+    since: Optional[date],
+    until: Optional[date],
+    limit: Optional[int],
+    format: str,
+    output: Optional[Path],
+    dry_run: bool,
+    data_dir: Path,
+    default_json_path: Optional[Path] = None,
+    preview_fn=print_preview,
+) -> list[NewsItem]:
+    """Filter, preview, and write out a scraper's collected items.
+
+    This is the common tail every scraper's main() used to reimplement
+    separately, with three real behavioral differences between them that
+    are resolved here (rather than silently picking one and leaving the
+    others undocumented):
+
+    1. Preview: scrape_investorroom.py only called print_preview() on
+       --dry-run; scrape_notified.py and scrape_q4_ir.py always did. This
+       function always previews, matching the latter two -- seeing what was
+       scraped is useful whether or not you're also writing it to disk, and
+       that was already the majority behavior.
+
+    2. --format both: scrape_investorroom.py and scrape_notified.py checked
+       ``if args.format == "json": ... else: <csv>``, so "both" silently
+       behaved like plain "csv" and JSON was never written -- even though
+       "both" was (and still is) an advertised, valid --format choice in
+       add_common_args(). scrape_q4_ir.py handled it correctly with two
+       independent ``in ("csv", "both")`` / ``in ("json", "both")`` checks.
+       This function uses scrape_q4_ir.py's (correct) version for everyone.
+
+    3. --output with --format json: scrape_investorroom.py/scrape_notified.py
+       made this a hard, fatal ``parser.error()`` if omitted;
+       scrape_q4_ir.py instead fell back to a scraper-specific default path
+       under REPO_ROOT. This function takes that default-path approach for
+       all scrapers via *default_json_path*, and only raises if a caller
+       doesn't supply one -- so a bare ``--format json`` no longer requires
+       remembering to also pass --output.
+
+    *limit* is scrape_q4_ir.py's post-sort item cap (its --limit flag);
+    pass None for scrapers that don't have one.
+
+    *preview_fn* defaults to this module's print_preview(); scrape_q4_ir.py
+    passes its own wrapper (show_category=True) to keep the category column.
+
+    Returns the filtered list, in case a caller wants it afterward (e.g. to
+    decide an exit code).
+    """
+    filtered = filter_items(items, years=years, since=since, until=until, limit=limit)
+    logger.info("%d item(s) after filtering.", len(filtered))
+
+    preview_fn(filtered)
+
+    if format in ("json", "both"):
+        json_path = output or default_json_path
+        if json_path is None:
+            raise SystemExit(
+                "--output PATH is required for --format json (or both) on this scraper "
+                "(no default JSON path was configured)."
+            )
+        write_json(filtered, json_path, dry_run)
+
+    if format in ("csv", "both"):
+        from utils.csv_utils import merge_items_into_daily_csvs, print_merge_summary
+
+        summary = merge_items_into_daily_csvs(filtered, data_dir, dry_run)
+        print_merge_summary(summary, dry_run, filtered, data_dir=data_dir)
+
+    return filtered
 
 
 # ---------------------------------------------------------------------------

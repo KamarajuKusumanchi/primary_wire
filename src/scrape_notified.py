@@ -127,21 +127,19 @@ try:
 except ImportError:
     sys.exit("Missing dependency. Install with: pip install beautifulsoup4 lxml")
 
-from utils.csv_utils import merge_items_into_daily_csvs, print_merge_summary
 from utils.sources_utils import join_url_path
 from utils.scrape_utils import (
     NewsItem as _BaseNewsItem,
     add_common_args,
     add_network_and_debug_args,
     configure_logging,
+    dedupe_by_url,
     extract_date_from_detail_html,
     fetch_missing_dates_via_http,
-    filter_items,
+    finalize_and_output,
     parse_date,
     parse_time,
     parse_year_args,
-    print_preview,
-    write_json,
 )
 
 
@@ -772,14 +770,7 @@ def scrape(
             )
 
             # Global dedup.
-            seen: set[str] = set()
-            deduped: list[NewsItem] = []
-            for item in items:
-                k = item.url.rstrip("/")
-                if k not in seen:
-                    seen.add(k)
-                    deduped.append(item)
-            return deduped
+            return dedupe_by_url(items)
 
     # No year filter (or fallback): scrape everything.
     items = scrape_one_pass(
@@ -794,23 +785,16 @@ def scrape(
     )
 
     # Global dedup (should already be clean from scrape_one_pass, but be safe).
-    seen: set[str] = set()
-    deduped: list[NewsItem] = []
-    for item in items:
-        k = item.url.rstrip("/")
-        if k not in seen:
-            seen.add(k)
-            deduped.append(item)
-    return deduped
+    return dedupe_by_url(items)
 
 
 # ---------------------------------------------------------------------------
 # Output: daily CSVs
 # ---------------------------------------------------------------------------
 
-# merge_into_daily_csvs() and the CSV-write summary line are handled by
-# csv_utils.merge_items_into_daily_csvs() / print_merge_summary(), shared
-# with scrape_q4_ir.py and scrape_investorroom.py. Called directly from main().
+# CSV/JSON writing and the "Wrote N new + M updated ..." summary line are
+# handled by scrape_utils.finalize_and_output(), shared with scrape_q4_ir.py
+# and scrape_investorroom.py. Called directly from main() below.
 
 
 # ---------------------------------------------------------------------------
@@ -925,9 +909,6 @@ def main(argv: Optional[list[str]] = None) -> int:
 
     configure_logging(args.verbose)
 
-    if args.format == "json" and args.output is None:
-        parser.error("--output PATH is required when --format json")
-
     base_url, slug, ticker, news_releases_path, first_page_index = resolve_source(
         args.url, args.slug, args.ticker, args.news_releases_path, args.first_page_index
     )
@@ -956,20 +937,17 @@ def main(argv: Optional[list[str]] = None) -> int:
             all_items, fetch_date_from_detail_page, args.polite_delay, args.timeout
         )
 
-    filtered = filter_items(
-        all_items, years=years, since=args.since, until=args.until, limit=None
+    # Filters, always previews, and writes CSV/JSON per --format; see
+    # finalize_and_output()'s docstring for the three behaviors this
+    # standardizes across scrape_notified.py/scrape_investorroom.py/
+    # scrape_q4_ir.py (preview-always, --format both, --output default path).
+    finalize_and_output(
+        all_items,
+        years=years, since=args.since, until=args.until, limit=None,
+        format=args.format, output=args.output, dry_run=args.dry_run,
+        data_dir=DATA_DIR,
+        default_json_path=REPO_ROOT / "notified_news.json",
     )
-    logger.info("%d item(s) after filtering.", len(filtered))
-
-    # Always show the parsed entries on screen, whether or not we're
-    # also writing them to disk.
-    print_preview(filtered)
-
-    if args.format == "json":
-        write_json(filtered, args.output, dry_run=args.dry_run)
-    else:
-        summary = merge_items_into_daily_csvs(filtered, DATA_DIR, args.dry_run)
-        print_merge_summary(summary, args.dry_run, filtered)
 
     return 0
 
