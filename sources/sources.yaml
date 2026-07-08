@@ -46,6 +46,10 @@ sources:
     name: Alexandria Real Estate Equities, Inc.
     ticker: ARE
     ir_url: https://investor.are.com/
+  - slug: amcor
+    name: Amcor plc
+    ticker: AMCR
+    ir_url: https://www.amcor.com/investors
   - slug: amd
     name: Advanced Micro Devices, Inc.
     ticker: AMD
@@ -320,6 +324,10 @@ sources:
     name: Skyworks Solutions, Inc.
     ticker: SWKS
     ir_url: https://www.skyworksinc.com/investors
+  - slug: smurfit-westrock
+    name: Smurfit Westrock Plc
+    ticker: SW
+    ir_url: http://investors.smurfitwestrock.com/
   - slug: spacex
     name: Space Exploration Technologies Corp.
     ticker: SPCX
@@ -328,6 +336,10 @@ sources:
     name: Super Micro Computer, Inc.
     ticker: SMCI
     ir_url: https://ir.supermicro.com/
+  - slug: synchrony-financial
+    name: Synchrony Financial
+    ticker: SYF
+    ir_url: https://investors.synchrony.com/
   - slug: teradyne
     name: Teradyne, Inc.
     ticker: TER
