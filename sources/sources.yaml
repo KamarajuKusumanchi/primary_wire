@@ -38,6 +38,10 @@ sources:
     name: Accenture plc
     ticker: ACN
     ir_url: https://investor.accenture.com/
+  - slug: akamai
+    name: Akamai Technologies, Inc.
+    ticker: AKAM
+    ir_url: https://www.ir.akamai.com/
   - slug: alexandria-real-estate-equities
     name: Alexandria Real Estate Equities, Inc.
     ticker: ARE
@@ -103,6 +107,10 @@ sources:
     name: Builders FirstSource, Inc.
     ticker: BLDR
     ir_url: https://investors.bldr.com/
+  - slug: caseys
+    name: Casey's General Stores, Inc.
+    ticker: CASY
+    ir_url: https://investor.caseys.com/
   - slug: cdw
     name: CDW Corporation
     ticker: CDW
@@ -330,6 +338,10 @@ sources:
     name: Tesla, Inc.
     ticker: TSLA
     ir_url: https://ir.tesla.com/
+  - slug: texas-instruments
+    name: Texas Instruments Incorporated
+    ticker: TXN
+    ir_url: https://investor.ti.com/
   - slug: tjx
     name: The TJX Companies, Inc.
     ticker: TJX
