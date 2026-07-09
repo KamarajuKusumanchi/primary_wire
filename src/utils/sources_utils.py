@@ -151,9 +151,16 @@ def resolve_source_identity(
     listing URL. Scrapers that keep the site root and listing path separate
     (scrape_investorroom.py, scrape_notified.py) leave this as "".
 
-    strip_url_to_root, when True, reduces an explicitly-passed --url to just
-    its scheme+host (case 2 above) before it is matched and returned --
-    used by scrapers whose listing path is appended separately elsewhere.
+    strip_url_to_root, when True, reduces the resolved URL to just its
+    scheme+host before it is returned -- whether that URL came from an
+    explicitly-passed --url (case 2 above, stripped before matching) or was
+    derived from a sources.yaml record's ir_url (case 1 above, stripped
+    before listing_path_suffix is joined onto it). This is for scrapers
+    whose listing path is appended separately elsewhere, and whose
+    sources.yaml ir_url may point at a specific IR sub-page rather than the
+    site root (e.g. ir_url: https://www.genpt.com/overview) -- without the
+    strip, listing_path_suffix would be joined onto that sub-page path
+    instead of the site root.
 
     Returns (url, slug, ticker, record). record is None when no sources.yaml
     entry matched (or the file could not be loaded). Warns (via `logger`,
@@ -186,6 +193,9 @@ def resolve_source_identity(
             if not url:
                 ir_url = record.get("ir_url", "")
                 if ir_url:
+                    if strip_url_to_root:
+                        parsed = urlparse(ir_url)
+                        ir_url = urlunparse((parsed.scheme, parsed.netloc, "", "", "", ""))
                     url = join_url_path(ir_url, listing_path_suffix)
                 else:
                     log.warning(
