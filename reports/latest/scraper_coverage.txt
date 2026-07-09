@@ -1,12 +1,13 @@
-Sources in sources.yaml:     91
-With automated scraper:      10 (11.0%)
-Without automated scraper:   81
+Sources in sources.yaml:     96
+With automated scraper:      10 (10.4%)
+Without automated scraper:   86
 
 Uncovered slugs:
   accenture
   akamai
   alexandria-real-estate-equities
   amcor
+  apa
   apple
   applied-materials
   ares
@@ -45,9 +46,11 @@ Uncovered slugs:
   honeywell
   ibm
   intel
+  intercontinental-exchange
   iqvia
   kla
   lam-research
+  lumentum
   micron
   moderna
   molson-coors
@@ -55,10 +58,12 @@ Uncovered slugs:
   netapp
   netflix
   nike
+  norwegian-cruise-line
   nvidia
   o-reilly-auto-parts
   onsemi
   palantir
+  paramount-skydance
   qualcomm
   robinhood
   ross-stores

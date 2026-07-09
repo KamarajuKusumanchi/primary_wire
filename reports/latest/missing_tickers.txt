@@ -1,7 +1,7 @@
 
 S&P 500 companies:  503
-Covered in sources: 87
-Missing:            416
+Covered in sources: 92
+Missing:            411
 
 Missing tickers:
   A
@@ -31,7 +31,6 @@ Missing tickers:
   AMZN
   AON
   AOS
-  APA
   APD
   APH
   APP
@@ -198,7 +197,6 @@ Missing tickers:
   HUM
   HWM
   IBKR
-  ICE
   IDXX
   IEX
   IFF
@@ -237,7 +235,6 @@ Missing tickers:
   LHX
   LII
   LIN
-  LITE
   LLY
   LMT
   LNT
@@ -276,7 +273,6 @@ Missing tickers:
   MSI
   MTB
   MTD
-  NCLH
   NDAQ
   NDSN
   NEE
@@ -321,7 +317,6 @@ Missing tickers:
   PPL
   PRU
   PSA
-  PSKY
   PSX
   PTC
   PWR
