@@ -68,8 +68,10 @@ def main():
 
     blocks = [format_row(row) for row in rows]
 
+    print(f"```")
     print(f"==== press releases on {date_label} ====\n")
     print("\n\n".join(blocks))
+    print(f"```")
 
 
 if __name__ == "__main__":
