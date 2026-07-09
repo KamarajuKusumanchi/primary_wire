@@ -56,6 +56,10 @@ sources:
     ir_url: https://ir.amd.com/
     news_releases_path: news-events/press-releases
     first_page_index: 1
+  - slug: apa
+    name: APA Corporation
+    ticker: APA
+    ir_url: https://investor.apacorp.com/
   - slug: apollo
     name: Apollo Global Management, Inc.
     ticker: APO
@@ -241,6 +245,10 @@ sources:
     name: Intel Corporation
     ticker: INTC
     ir_url: https://www.intc.com/
+  - slug: intercontinental-exchange
+    name: Intercontinental Exchange, Inc.
+    ticker: ICE
+    ir_url: https://ir.theice.com/
   - slug: iqvia
     name: IQVIA Holdings Inc.
     ticker: IQV
@@ -253,6 +261,10 @@ sources:
     name: Lam Research Corporation
     ticker: LRCX
     ir_url: https://investor.lamresearch.com/
+  - slug: lumentum
+    name: Lumentum Holdings Inc.
+    ticker: LITE
+    ir_url: https://investor.lumentum.com/
   - slug: micron
     name: Micron Technology, Inc.
     ticker: MU
@@ -281,6 +293,10 @@ sources:
     name: NIKE, Inc.
     ticker: NKE
     ir_url: https://investors.nike.com/
+  - slug: norwegian-cruise-line
+    name: Norwegian Cruise Line Holdings Ltd.
+    ticker: NCLH
+    ir_url: https://www.nclhltd.com/investors
   - slug: nvidia
     name: NVIDIA Corporation
     ticker: NVDA
@@ -297,6 +313,10 @@ sources:
     name: Palantir Technologies Inc.
     ticker: PLTR
     ir_url: https://investors.palantir.com/
+  - slug: paramount-skydance
+    name: Paramount Skydance Corporation
+    ticker: PSKY
+    ir_url: https://ir.paramount.com/
   - slug: qualcomm
     name: QUALCOMM Incorporated
     ticker: QCOM
