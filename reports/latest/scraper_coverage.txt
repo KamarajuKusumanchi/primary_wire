@@ -1,10 +1,12 @@
-Sources in sources.yaml:     85
-With automated scraper:      9 (10.6%)
-Without automated scraper:   76
+Sources in sources.yaml:     91
+With automated scraper:      10 (11.0%)
+Without automated scraper:   81
 
 Uncovered slugs:
   accenture
+  akamai
   alexandria-real-estate-equities
+  amcor
   apple
   applied-materials
   ares
@@ -16,6 +18,7 @@ Uncovered slugs:
   booking
   broadcom
   builders-firstsource
+  caseys
   charter
   ciena
   cognizant
@@ -37,7 +40,6 @@ Uncovered slugs:
   fox
   ge-healthcare
   gen-digital
-  genuine-parts
   godaddy
   google
   honeywell
@@ -64,9 +66,12 @@ Uncovered slugs:
   seagate
   servicenow
   skyworks
+  smurfit-westrock
   spacex
   super-micro
+  synchrony-financial
   tesla
+  texas-instruments
   tjx
   tractor-supply
   united-airlines
