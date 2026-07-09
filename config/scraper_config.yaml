@@ -33,8 +33,9 @@ q4_ir:
 investorroom:
   scraper: scrape_investorroom
   sources:
-    - slug: chipotle
     - slug: axon
+    - slug: chipotle
+    - slug: genuine-parts
 
 notified:
   scraper: scrape_notified

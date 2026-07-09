@@ -220,6 +220,7 @@ sources:
     name: Genuine Parts Company
     ticker: GPC
     ir_url: https://www.genpt.com/overview
+    news_releases_path: press-releases
   - slug: godaddy
     name: GoDaddy Inc.
     ticker: GDDY
