@@ -1,9 +1,13 @@
 ====== primary_wire ======
 
 **Work in progress.** This project is at an early stage. Coverage is sparse —
-sources.yaml currently has entries for roughly 60 companies out of the ~500 in
-the S&P 500. Press release links are added manually on an ad hoc basis. If you
-are interested in helping expand coverage, contributions are welcome.
+sources.yaml currently has entries for 87 companies out of the ~500 in the
+S&P 500. Press release links are added manually on an ad hoc basis, with a
+small and growing set of sources covered by automated scrapers (see
+''Scrapers'' below). If you are interested in helping expand coverage,
+contributions are welcome. (This count includes only current S&P 500
+tickers — see [[docs/sources.txt]] for why it doesn't match a raw count of
+''sources.yaml'' entries.)
 
 ==== Goal ====
 
@@ -76,6 +80,9 @@ is not financial advice.
   - Contributions are made via GitHub pull requests
   - Automated link collection is welcome, provided contributors follow the
     guidelines below. Links are verified before merging.
+  - As of now, ''config/scraper_config.yaml'' drives automated scraping for
+    10 of these sources, across three IR platforms (Q4, InvestorRoom,
+    Notified). The rest are still added by hand.
 
 ===== Scrapers =====
 

@@ -46,6 +46,25 @@ Government agencies and other non-public organizations should omit the ''ticker'
     notes: Covers monetary policy decisions, FOMC statements, and regulatory actions.
 </code>
 
+===== Why the counts in README.txt don't match len(sources.yaml) =====
+
+README.txt reports coverage as "N companies out of the ~500 in the S&P 500."
+That number comes from ''missing_tickers.py'', which counts only tickers that
+are *currently* constituents of the S&P 500. It will not match a simple count
+of entries in ''sources/sources.yaml'', for two reasons:
+
+  - Entries without a ''ticker'' (government agencies, other non-public
+    sources) are not companies and are excluded from the count entirely.
+  - Some tickers in ''sources.yaml'' may not currently be in the S&P 500 —
+    e.g. the company was removed from the index after being added here, or it
+    was added because it's of interest despite never being a constituent.
+    These are still valid sources, just not counted toward the S&P 500
+    coverage figure.
+
+So ''sources.yaml'' entries = S&P 500 companies counted in README + non-S&P
+tickers + non-ticker sources. Run ''python src/missing_tickers.py'' for the
+current authoritative count.
+
 ===== Disabling a source =====
 
 Do not delete sources that have existing data. Instead add a note:
