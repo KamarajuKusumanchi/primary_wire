@@ -39,18 +39,43 @@ way or isn't on that blocklist. This is a plausible read of the evidence,
 not a confirmed root cause -- if TJX changes their bot-mitigation rules,
 this could stop working just as suddenly as it started.
 
-Similarly unverified against a live fetch, same as before (adapted from
-scrape_notified.py's Notified/Drupal parsing):
-  - the exact HTML structure of the rendered press-release listing (row
-    markup, detail-page URL shape, whether/how a time-of-day is published
-    alongside the date);
-  - whether the year-filtered URL's server-rendered response actually
-    contains the filtered rows (rather than requiring a client-side JS
-    render/AJAX call after load, in which case plain requests would see
-    an unfiltered or empty listing).
-If this comes back with 0 items, run with --debug-dump-html and inspect
-the saved HTML -- both DETAIL_URL_RE and parse_listing_page() below will
-need adjusting to match the real markup.
+CONFIRMED against a live --debug-dump-html fetch (2025-07-10): the
+year-filtered URL's server-rendered response contains the filtered rows
+directly -- no client-side JS render/AJAX call needed, plain
+urllib.request sees the real listing. The rendered markup is a classic
+Notified/Drupal table:
+
+    <table class="nirtable ... news-table">
+      <tbody>
+        <tr>
+          <td class="col-date">
+            <div class="nir-widget--field nir-widget--news--date-time">
+              12/09/25 - 3:35 PM EST
+            </div>
+          </td>
+          <td class="col-title">
+            <div class="nir-widget--field nir-widget--news--headline">
+              <a href="/news-releases/news-release-details/SLUG">Title</a>
+            </div>
+          </td>
+        </tr>
+        ...
+
+Detail links are served at
+  /news-releases/news-release-details/<slug>
+with NO "/investors/" prefix -- despite the base listing page itself
+living at /investors/press-releases. (The /investors/... paths seen in
+the page's nav menu, e.g. /investors/tjx-stock/stock-quote, are a
+different, unrelated URL space and must NOT be matched.) DETAIL_URL_RE
+and parse_listing_page() below have been updated to match this and are
+confirmed working end-to-end against a real fetch: correct item count,
+correct dates (including across the Mar/Nov DST boundary, e.g. "1:29 PM
+EDT" vs. "3:35 PM EST"), and correctly resolved absolute URLs.
+
+If TJX changes their markup in the future and this starts returning 0
+items again, run with --debug-dump-html and inspect the saved HTML --
+DETAIL_URL_RE and parse_listing_page() below will need re-adjusting to
+match whatever the new real markup is.
 
 Usage
 -----
@@ -118,24 +143,27 @@ DATA_DIR = REPO_ROOT / "data"
 SLUG = "tjx"
 TICKER = "TJX"
 
-# Best-effort match for press-release detail links on TJX's IR site. Not
-# verified against a live fetch (see module docstring) -- broad enough to
-# catch the common Notified/Drupal-style "news-release-details" slug path
-# as well as a flatter "/investors/press-releases/<slug>" shape, while still
-# excluding the bare listing/section landing pages themselves.
+# Match for press-release detail links on TJX's IR site. CONFIRMED against
+# a live --debug-dump-html fetch (see module docstring): real detail links
+# look like
+#   /news-releases/news-release-details/tjx-companies-inc-announces-...
+# with NO "/investors/" prefix. (An earlier version of this regex assumed
+# an "/investors/" prefix by analogy with the site's nav-menu links, e.g.
+# /investors/tjx-stock/stock-quote -- that was wrong and matched zero of
+# the real detail links; fixed here after inspecting the actual markup.)
 DETAIL_URL_RE = re.compile(
-    r"/investors/(?:news-releases|press-releases)/"
-    r"(?:news-release-details/)?[^/#?]+/?$",
+    r"/news-releases/news-release-details/[^/#?]+/?$",
     re.IGNORECASE,
 )
 
 SHORT_DATE_RE = re.compile(r"\b(\d{1,2})/(\d{1,2})/(\d{2})\b")
-# M/D/YY date format seen on Notified/Drupal-family IR listings (e.g.
-# "6/26/26"; two-digit years assumed to be in the 2000s). Not confirmed for
-# TJX specifically (see module docstring), but included as a fallback
-# alongside the long-form parse_date() from scrape_utils, since TJX's
-# exposed-filter widget is the same Drupal Views mechanism used by
-# scrape_notified.py's sites, whose listing tables use this short format.
+# M/D/YY date format (e.g. "12/09/25"; two-digit years assumed to be in the
+# 2000s). CONFIRMED for TJX against a live --debug-dump-html fetch (see
+# module docstring): the "col-date" cell reads e.g. "12/09/25 - 3:35 PM
+# EST", and this pattern correctly parses it, including across the Mar/Nov
+# DST boundary. Kept as a fallback alongside the long-form parse_date() from
+# scrape_utils for consistency with scrape_notified.py's other Drupal-family
+# sites, but for TJX itself this short format is the one actually in use.
 
 logger = logging.getLogger("scrape_tjx")
 
@@ -145,11 +173,11 @@ class NewsItem(_BaseNewsItem):
 
 
 def parse_short_date(text: str):
-    """Parse M/D/YY dates like '6/26/26' (2000s assumed).
+    """Parse M/D/YY dates like '12/09/25' (2000s assumed).
 
-    Not confirmed against TJX's actual markup (see module docstring); added
-    as a fallback since scrape_notified.py's Drupal-family sites use this
-    short format. Returns (date, raw_match) or (None, "").
+    Confirmed against TJX's actual markup (see module docstring) -- this is
+    the format TJX's "col-date" cells actually use. Returns (date,
+    raw_match) or (None, "").
     """
     m = SHORT_DATE_RE.search(text)
     if m:
@@ -234,6 +262,14 @@ def extract_date_and_time_from_row(anchor) -> tuple[Optional[date], str, str]:
     back to scanning nearby ancestor text, in both cases excluding the
     anchor's own (headline) text so a date mentioned in the headline itself
     isn't mistaken for the publish date/time.
+
+    CONFIRMED against a live --debug-dump-html fetch (see module docstring):
+    TJX's real markup is exactly this classic-table shape -- each <tr> has a
+    first <td class="col-date"> holding the "M/D/YY - H:MM AM/PM TZ" text,
+    and a second <td class="col-title"> holding the headline <a>. The
+    walk-up-to-<tr>-then-find("td") branch below hits the date cell directly
+    (a few parent hops up from the anchor); the ancestor-text fallback loops
+    exist for robustness but aren't needed for TJX's own listing.
     """
     anchor_text = anchor.get_text(separator=" ", strip=True)
 
@@ -284,17 +320,20 @@ def extract_date_and_time_from_row(anchor) -> tuple[Optional[date], str, str]:
 
 
 def log_empty_result_diagnostics(soup: "BeautifulSoup") -> None:
-    """DETAIL_URL_RE is an unverified guess (see module docstring). If it
-    matches nothing, print the actual hrefs seen on the page so they can be
-    pasted back directly -- much faster to act on than a full HTML dump.
+    """DETAIL_URL_RE is confirmed against a live fetch (see module
+    docstring), but TJX could change their markup in the future. If the
+    regex ever matches nothing again, print the actual hrefs seen on the
+    page so they can be pasted back directly -- much faster to act on than
+    a full HTML dump.
     """
     all_anchors = soup.find_all("a", href=True)
     logger.warning(
         "No press-release links matched DETAIL_URL_RE out of %d total <a> "
-        "tag(s) on the page. DETAIL_URL_RE is an unverified guess (see "
-        "module docstring) and needs fixing. Candidate hrefs below -- "
-        "paste these (and their link text) back so the regex can be "
-        "corrected against the real markup:",
+        "tag(s) on the page. DETAIL_URL_RE was confirmed working against a "
+        "live fetch (see module docstring), so this likely means TJX has "
+        "changed their markup. Candidate hrefs below -- paste these (and "
+        "their link text) back so the regex can be corrected against the "
+        "new real markup:",
         len(all_anchors),
     )
 
@@ -335,6 +374,11 @@ def parse_listing_page(html: str, base_url: str) -> list[NewsItem]:
     pd.read_html() discards hrefs, keeping only the visible cell text.
     pd.read_html() would only help here if TJX's dates/titles live in a
     plain <table> with no useful links, which isn't the shape we need.
+
+    CONFIRMED end-to-end against a live --debug-dump-html fetch (see module
+    docstring): correct item count for the requested year, correct dates
+    (including across the Mar/Nov DST boundary), and hrefs correctly
+    resolved to absolute investor.tjx.com URLs via urljoin(site_root, href).
     """
     parsed = urlparse(base_url)
     site_root = urlunparse((parsed.scheme, parsed.netloc, "", "", "", ""))
