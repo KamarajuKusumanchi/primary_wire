@@ -63,7 +63,9 @@ except ImportError:
     sys.exit("Missing dependency. Install with: pip install beautifulsoup4 lxml")
 
 try:
-    from playwright.sync_api import sync_playwright, TimeoutError as PWTimeoutError
+    from playwright.sync_api import sync_playwright
+    from playwright.sync_api import Error as PWError
+    from playwright.sync_api import TimeoutError as PWTimeoutError
 except ImportError:
     sys.exit("Missing dependency. Install with: pip install playwright && playwright install chrome")
 
@@ -270,7 +272,29 @@ def scrape_year(year: int, timeout_ms: int = DEFAULT_TIMEOUT_MS,
         year_url = get_year_url(page, year)
         logger.info("Year-filtered URL for %d: %s", year, year_url)
 
-        page.goto(year_url, wait_until="networkidle")
+        # Navigate to the year-filtered URL with an explicit Referer set to
+        # the base press-releases page. Playwright does NOT set a Referer
+        # by default on page.goto(); a real user picking a year from the
+        # exposed-filter form would generate this navigation *with* one, and
+        # this site's Akamai bot-mitigation is aggressive enough (see
+        # tjx_yearly_url.py's docstring) that a refererless follow-up
+        # request from the same session is a plausible trigger for a
+        # connection-level reset. Retried once, since this could also just
+        # be a transient network blip rather than anything bot-mitigation
+        # related -- either way a bare retry is cheap and harmless.
+        last_exc = None
+        for attempt in range(2):
+            try:
+                page.goto(year_url, wait_until="networkidle", referer=BASE_URL)
+                last_exc = None
+                break
+            except Exception as exc:  # noqa: BLE001 -- deliberately broad; see comment above
+                last_exc = exc
+                logger.warning("Navigation to year-filtered URL failed (attempt %d/2): %s",
+                                attempt + 1, exc)
+        if last_exc is not None:
+            raise last_exc
+
         html = page.content()
 
         browser.close()
@@ -336,6 +360,9 @@ def main(argv: Optional[list[str]] = None) -> int:
             )
         except PWTimeoutError as exc:
             logger.error("Timed out scraping %d: %s", year, exc)
+            continue
+        except PWError as exc:
+            logger.error("Browser/navigation error scraping %d: %s", year, exc)
             continue
         except RuntimeError as exc:
             logger.error("Scraping error for %d: %s", year, exc)
