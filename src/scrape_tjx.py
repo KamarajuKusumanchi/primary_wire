@@ -6,45 +6,51 @@ Scrape The TJX Companies' investor-relations press-release listing for a
 given year and print the release links with their publish times, following
 the same conventions as scrape_notified.py.
 
-IMPORTANT CAVEAT (read before relying on this): TJX's IR site sits behind
-Akamai bot-mitigation that returns 403 to headless HTTP clients -- this is
-documented in tjx_yearly_url.py, and is why that script drives a *headed*
-(non-headless) Chromium via Playwright rather than a plain HTTP GET. This
-script reuses that same headed browser session throughout. That also means
-this script inherits tjx_yearly_url.py's environment requirement: it needs
-a display (a desktop machine, or a VM with Xvfb) and will not run as-is on
-a headless server/CI box.
+Design: Playwright is used for exactly one thing -- getting the
+year-filtered listing URL out of tjx_yearly_url.py (build_year_url() /
+get_form_tokens()), because that requires reading a one-time
+form_build_id token out of the live, JS-rendered page. Once that URL is
+in hand, this script drops Playwright entirely and fetches + parses the
+listing with plain urllib.request + BeautifulSoup, the same shape as
+scrape_notified.py but a different HTTP client (see the CAVEAT below for
+why).
 
-How the year filter is actually applied: an earlier version of this script
-took tjx_yearly_url.py's build_year_url() output and hard-navigated
-(page.goto()) straight to it. In practice that gets killed mid-request
-(net::ERR_HTTP2_PROTOCOL_ERROR), with or without a Referer header, on every
-attempt. The working theory: form_id=widget_form_base is a Drupal
-exposed-filter widget whose year selection is applied via an in-page
-AJAX/JS submission, with the URL's query string only ever used for
-history/bookmarking -- a real user's browser never issues a fresh top-level
-GET navigation to that exact URL, so a script doing so looks anomalous
-enough to the origin/Akamai to get reset. This script therefore instead
-fills in the real on-page year field and submits the real form/control,
-the way a human would, and then reads the resulting DOM -- see
-submit_year_filter() and scrape_year(). tjx_yearly_url.py's
-get_form_tokens()/build_year_url() are still used, but only to log the
-"bookmark" URL for reference, not to fetch data.
+IMPORTANT CAVEAT (read before relying on this): tjx_yearly_url.py's own
+docstring documents that TJX's IR site sits behind Akamai bot-mitigation
+that returns 403 to *headless* HTTP clients for the base (unfiltered)
+listing page, and that a headed browser is required just to load that
+page once. The year-filtered URL built from it behaves differently, and
+this has now been confirmed live rather than guessed at:
 
-None of the following has been verified against a live fetch -- this
-environment's network egress does not include investor.tjx.com -- so all of
-it is a best-effort guess, adapted from scrape_notified.py's Notified/Drupal
-parsing:
+  - A plain `requests.get()` of the year-filtered URL hangs and times out.
+  - `curl_cffi` with Chrome TLS/JA3 impersonation *also* hangs and times
+    out against the same URL.
+  - A bare `urllib.request.urlopen()` -- no impersonation, no extra
+    headers, nothing -- goes through immediately and returns the real
+    filtered listing HTML. This is also, incidentally, all that
+    pandas.read_html() uses internally, which is how this was noticed.
+
+The likely explanation is that Akamai's bot-mitigation here is fingerprinting
+and blocking the specific TLS/HTTP client signatures of known scraping
+libraries (python-requests' default signature, and curl_cffi's
+impersonation profiles are both well-documented and easy to blocklist),
+while a generic stdlib urllib request either isn't fingerprinted the same
+way or isn't on that blocklist. This is a plausible read of the evidence,
+not a confirmed root cause -- if TJX changes their bot-mitigation rules,
+this could stop working just as suddenly as it started.
+
+Similarly unverified against a live fetch, same as before (adapted from
+scrape_notified.py's Notified/Drupal parsing):
   - the exact HTML structure of the rendered press-release listing (row
     markup, detail-page URL shape, whether/how a time-of-day is published
     alongside the date);
-  - the year field's element type (assumed to be a <select> or text
-    <input> named "..._year[value]") and how the form is actually
-    submitted (assumed to be a nearby submit button, falling back to
-    pressing Enter in the field).
-If this still comes back with 0 items, run with --debug-dump-html and send
-me (or read yourself) the saved HTML -- both DETAIL_URL_RE and
-submit_year_filter() below will need adjusting to match the real markup.
+  - whether the year-filtered URL's server-rendered response actually
+    contains the filtered rows (rather than requiring a client-side JS
+    render/AJAX call after load, in which case plain requests would see
+    an unfiltered or empty listing).
+If this comes back with 0 items, run with --debug-dump-html and inspect
+the saved HTML -- both DETAIL_URL_RE and parse_listing_page() below will
+need adjusting to match the real markup.
 
 Usage
 -----
@@ -61,6 +67,13 @@ Requires
 --------
   pip install playwright beautifulsoup4 lxml
   playwright install chrome   # if Playwright can't find your Chrome install
+
+  The listing fetch uses only the Python standard library (urllib.request)
+  -- no requests, no curl_cffi. This is not a style choice: both were tried
+  and timed out against this site (confirmed live), while a bare
+  urllib.request.urlopen() -- which is also all pd.read_html() uses
+  internally -- goes through immediately. See fetch_listing_html()'s
+  docstring for the details.
 """
 
 from __future__ import annotations
@@ -69,6 +82,8 @@ import argparse
 import logging
 import re
 import sys
+import urllib.error
+import urllib.request
 from datetime import date, datetime
 from pathlib import Path
 from typing import Optional
@@ -80,21 +95,21 @@ except ImportError:
     sys.exit("Missing dependency. Install with: pip install beautifulsoup4 lxml")
 
 try:
-    from playwright.sync_api import sync_playwright
-    from playwright.sync_api import Error as PWError
-    from playwright.sync_api import TimeoutError as PWTimeoutError
+    from bs4 import BeautifulSoup
 except ImportError:
-    sys.exit("Missing dependency. Install with: pip install playwright && playwright install chrome")
+    sys.exit("Missing dependency. Install with: pip install beautifulsoup4 lxml")
 
 from tjx_yearly_url import BASE_URL, DEFAULT_TIMEOUT_MS, build_year_url, get_form_tokens
 from utils.scrape_utils import (
     NewsItem as _BaseNewsItem,
     add_common_args,
+    add_network_and_debug_args,
     configure_logging,
     dedupe_by_url,
     finalize_and_output,
     parse_date,
     parse_time,
+    parse_year_args,
 )
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -149,113 +164,63 @@ def parse_short_date(text: str):
 
 
 # ---------------------------------------------------------------------------
-# Getting the year-filtered URL (delegates to tjx_yearly_url.py's logic,
-# used only for logging -- see module docstring for why we don't navigate
-# to it directly)
+# Step 1: get the year-filtered URL (Playwright, one-time, headed browser)
 # ---------------------------------------------------------------------------
 
-def get_year_url(page, year: int) -> str:
-    """Read the exposed-filter form tokens off *page* and build the
-    year-filtered press-releases URL, using tjx_yearly_url.py's own
-    get_form_tokens()/build_year_url() so the URL-building logic lives in
-    exactly one place. Used only to log a human-readable "bookmark" URL;
-    we don't page.goto() it (see module docstring).
+def get_year_url(year: int, timeout_ms: int = DEFAULT_TIMEOUT_MS) -> str:
+    """Return the year-filtered press-releases URL for *year*.
+
+    This is the ONLY function in this module that touches Playwright. It
+    launches a headed Chromium session (required -- see tjx_yearly_url.py's
+    docstring for why headless gets 403'd), loads the base listing page just
+    long enough to read the exposed-filter form's tokens, builds the URL via
+    tjx_yearly_url.build_year_url(), and closes the browser immediately.
+    Everything downstream of this call is plain HTTP.
     """
-    tokens = get_form_tokens(page)
-    return build_year_url(year, tokens)
-
-
-def submit_year_filter(page, year: int, timeout_ms: int = DEFAULT_TIMEOUT_MS) -> None:
-    """Fill in and submit the real on-page year-filter form/control, the
-    way a human would, instead of hard-navigating to a hand-built URL (see
-    module docstring for why that approach fails).
-
-    Guesses, unverified against the live site:
-      - the year field is named "..._year[value]" (matches the field name
-        tjx_yearly_url.py's build_year_url() uses in its query string) and
-        is either a <select> or a text <input>;
-      - submission happens via a nearby <button type="submit"> /
-        <input type="submit"> inside the same <form>; if none is found,
-        falls back to pressing Enter in the field itself.
-    """
-    year_field = None
-    for frame in page.frames:
-        candidate = frame.locator('[name$="_year\\[value\\]"]').first
-        try:
-            count = candidate.count()
-        except Exception:
-            count = 0
-        if count > 0:
-            year_field = candidate
-            break
-
-    if year_field is None:
-        raise RuntimeError(
-            "Could not locate the year filter field (looked for an element "
-            "whose name ends in '_year[value]'). Run with --debug-dump-html "
-            "and inspect the saved HTML to find the real field, then update "
-            "submit_year_filter()."
-        )
-
-    # Confirmed against a live run: the year field is a real <select>, but
-    # it is NOT visible (almost certainly a native <select> hidden behind a
-    # custom-styled dropdown widget, a common pattern with JS-enhanced
-    # selects). Playwright's normal select_option()/click()/fill() refuse
-    # to act on invisible elements, so force the interaction and dispatch
-    # the events directly instead of relying on Playwright's
-    # visibility-gated actions.
-    tag_name = year_field.evaluate("el => el.tagName.toLowerCase()")
-    if tag_name == "select":
-        year_field.select_option(str(year), force=True, timeout=timeout_ms)
-    else:
-        year_field.evaluate(
-            """(el, val) => {
-                el.focus();
-                el.value = val;
-                el.dispatchEvent(new Event('input', { bubbles: true }));
-                el.dispatchEvent(new Event('change', { bubbles: true }));
-            }""",
-            str(year),
-        )
-
-    # select_option()/the manual dispatch above already fire 'change', which
-    # is enough to trigger an auto-submit-on-change handler if the site has
-    # one (common for Drupal exposed-filter year selects). Also try an
-    # explicit submit control in case it doesn't auto-submit, and fall back
-    # to a synthetic Enter keydown (dispatched via JS, so it isn't blocked
-    # by the same invisibility issue) if no submit control is found.
-    submitted = False
     try:
-        form = year_field.locator("xpath=ancestor::form[1]")
-        if form.count() > 0:
-            submit_btn = form.locator(
-                'button[type="submit"], input[type="submit"], button:not([type])'
-            ).first
-            if submit_btn.count() > 0:
-                submit_btn.click(force=True, timeout=timeout_ms)
-                submitted = True
-    except Exception as exc:  # noqa: BLE001 -- fall through to Enter-key fallback
-        logger.debug("Submit-button lookup/click failed, falling back to Enter key: %s", exc)
+        from playwright.sync_api import sync_playwright
+        from playwright.sync_api import Error as PWError
+        from playwright.sync_api import TimeoutError as PWTimeoutError
+    except ImportError:
+        sys.exit(
+            "Missing dependency. Install with: pip install playwright && "
+            "playwright install chrome"
+        )
 
-    if not submitted:
-        page.wait_for_timeout(500)  # give an auto-submit-on-change handler a moment to fire
-        try:
-            year_field.evaluate(
-                "el => el.dispatchEvent(new KeyboardEvent('keydown', "
-                "{ key: 'Enter', code: 'Enter', bubbles: true }))"
-            )
-        except Exception as exc:  # noqa: BLE001 -- best-effort fallback
-            logger.debug("Enter-key dispatch fallback failed: %s", exc)
-
-    # Give the resulting AJAX update (or full navigation) time to settle.
-    # See module docstring: we don't know whether this is a full page
-    # reload or an in-place AJAX swap, so networkidle covers both cases.
-    page.wait_for_load_state("networkidle", timeout=timeout_ms)
+    try:
+        with sync_playwright() as p:
+            browser = p.chromium.launch(channel="chrome", headless=False)
+            try:
+                page = browser.new_page()
+                page.set_default_timeout(timeout_ms)
+                page.goto(BASE_URL, wait_until="networkidle")
+                tokens = get_form_tokens(page)
+                return build_year_url(year, tokens)
+            finally:
+                browser.close()
+    except PWTimeoutError as exc:
+        raise RuntimeError(f"Timed out loading {BASE_URL} to read form tokens: {exc}") from exc
+    except PWError as exc:
+        raise RuntimeError(f"Browser/navigation error reading form tokens: {exc}") from exc
 
 
 # ---------------------------------------------------------------------------
-# Listing-page parsing
+# Step 2: fetch + parse the listing page (plain HTTP, no Playwright)
 # ---------------------------------------------------------------------------
+
+def fetch_listing_html(url: str, timeout: int = 30) -> str:
+    """Fetch *url* via stdlib urllib.request and return its HTML.
+
+    Confirmed live: both requests.get() and curl_cffi's Chrome-impersonating
+    session hang and time out against this URL, while a plain
+    urllib.request.urlopen() -- no custom headers, no TLS impersonation --
+    returns the page immediately (see module docstring). Raises
+    urllib.error.URLError/HTTPError on failure.
+    """
+    with urllib.request.urlopen(url, timeout=timeout) as resp:
+        charset = resp.headers.get_content_charset() or "utf-8"
+        return resp.read().decode(charset, errors="replace")
+
 
 def is_detail_url(href: str) -> bool:
     return bool(DETAIL_URL_RE.search(href))
@@ -348,9 +313,10 @@ def log_empty_result_diagnostics(soup: "BeautifulSoup") -> None:
     if not candidates:
         logger.warning(
             "  (none of the %d unique hrefs contain 'press-release', "
-            "'news-release', or 'investor' either -- the year filter "
-            "submission likely isn't actually updating the listing. "
-            "Try --debug-dump-html to inspect the full page.)",
+            "'news-release', or 'investor' either -- the fetched page "
+            "likely isn't the filtered listing, or requires a client-side "
+            "render/AJAX call plain requests can't do. Try "
+            "--debug-dump-html to inspect the full page.)",
             len(seen),
         )
         return
@@ -362,7 +328,14 @@ def log_empty_result_diagnostics(soup: "BeautifulSoup") -> None:
 
 
 def parse_listing_page(html: str, base_url: str) -> list[NewsItem]:
-    """Parse one rendered listing page; return the NewsItems found."""
+    """Parse one fetched listing page; return the NewsItems found.
+
+    Link discovery uses BeautifulSoup (not pd.read_html()) because the
+    press-release links themselves -- the hrefs -- are what's needed, and
+    pd.read_html() discards hrefs, keeping only the visible cell text.
+    pd.read_html() would only help here if TJX's dates/titles live in a
+    plain <table> with no useful links, which isn't the shape we need.
+    """
     parsed = urlparse(base_url)
     site_root = urlunparse((parsed.scheme, parsed.netloc, "", "", "", ""))
 
@@ -406,46 +379,28 @@ def parse_listing_page(html: str, base_url: str) -> list[NewsItem]:
 
 
 # ---------------------------------------------------------------------------
-# Driving the headed browser
+# Putting it together
 # ---------------------------------------------------------------------------
 
-def scrape_year(year: int, timeout_ms: int = DEFAULT_TIMEOUT_MS,
+def scrape_year(year: int, timeout: int = 30, timeout_ms: int = DEFAULT_TIMEOUT_MS,
                  debug_dump_html: Optional[Path] = None) -> list[NewsItem]:
-    """Launch a headed Chromium session, load the base press-releases page,
-    submit the real on-page year filter (see submit_year_filter() and the
-    module docstring for why we don't hard-navigate to a built URL), and
-    parse out press releases from the resulting DOM.
+    """Scrape TJX's press releases for *year*.
 
-    Headed (not headless) for the same Akamai bot-mitigation reason
-    documented in tjx_yearly_url.py -- see this module's docstring.
+    1. get_year_url() -- the one Playwright touchpoint (see its docstring).
+    2. fetch_listing_html() -- plain HTTP GET of that URL.
+    3. parse_listing_page() -- BeautifulSoup parse, same shape as
+       scrape_notified.py.
     """
-    with sync_playwright() as p:
-        browser = p.chromium.launch(channel="chrome", headless=False)
-        page = browser.new_page()
-        page.set_default_timeout(timeout_ms)
+    year_url = get_year_url(year, timeout_ms=timeout_ms)
+    logger.info("Year-filtered URL for %d: %s", year, year_url)
 
-        page.goto(BASE_URL, wait_until="networkidle")
-
-        # Logged for reference/debugging only -- not navigated to directly.
-        try:
-            bookmark_url = get_year_url(page, year)
-            logger.info("Year-filtered URL for %d (reference only): %s", year, bookmark_url)
-        except RuntimeError as exc:
-            logger.debug("Could not compute reference bookmark URL: %s", exc)
-            bookmark_url = BASE_URL
-
-        submit_year_filter(page, year, timeout_ms=timeout_ms)
-
-        html = page.content()
-        result_url = page.url
-
-        browser.close()
+    html = fetch_listing_html(year_url, timeout=timeout)
 
     if debug_dump_html:
         debug_dump_html.write_text(html, encoding="utf-8")
         logger.info("Saved fetched HTML to %s", debug_dump_html)
 
-    items = parse_listing_page(html, base_url=result_url or bookmark_url)
+    items = parse_listing_page(html, base_url=year_url)
     return dedupe_by_url(items)
 
 
@@ -465,14 +420,21 @@ def build_arg_parser() -> argparse.ArgumentParser:
     # with the other scrapers.
     add_common_args(parser)
 
-    network = parser.add_argument_group("network")
-    network.add_argument("--timeout", type=int, default=DEFAULT_TIMEOUT_MS // 1000,
-                          metavar="SECONDS", help="Per-navigation timeout (default: %(default)ss).")
+    # Shared: --polite-delay/--timeout/--debug-dump-html/--verbose, same as
+    # scrape_notified.py. --polite-delay isn't used by this script (there's
+    # no pagination loop to space out), but is accepted for CLI consistency.
+    add_network_and_debug_args(parser, default_polite_delay=15.0)
 
-    debug = parser.add_argument_group("debug")
-    debug.add_argument("--debug-dump-html", type=Path, default=None, metavar="PATH",
-                        help="Save the fetched (rendered) listing page HTML to PATH.")
-    debug.add_argument("--verbose", "-v", action="store_true", help="Enable DEBUG-level logging.")
+    browser = parser.add_argument_group("browser")
+    browser.add_argument(
+        "--browser-timeout", type=int, default=DEFAULT_TIMEOUT_MS // 1000,
+        metavar="SECONDS",
+        help=(
+            "Timeout for the one-time headed-browser step that reads the "
+            "year-filter form tokens (default: %(default)ss). Separate from "
+            "--timeout, which governs the plain-HTTP listing fetch."
+        ),
+    )
 
     return parser
 
@@ -483,13 +445,12 @@ def main(argv: Optional[list[str]] = None) -> int:
 
     configure_logging(args.verbose)
 
-    # --year is a repeatable list on the shared parser (add_common_args), so
-    # a bare "--year 2024" gives [2024]; default to the current year if none
-    # was given at all.
-    if args.year:
-        years_to_scrape = list(dict.fromkeys(args.year))
-    else:
-        years_to_scrape = [datetime.now().year]
+    years = parse_year_args(args)
+    # --year is a repeatable list on the shared parser (add_common_args); if
+    # neither --year/--start-year/--end-year was given, default to the
+    # current year only for the *scrape* (years stays None so finalize_and_
+    # output()'s own filtering step doesn't additionally restrict anything).
+    years_to_scrape = sorted(years) if years else [datetime.now().year]
 
     all_items: list[NewsItem] = []
     for year in years_to_scrape:
@@ -497,27 +458,24 @@ def main(argv: Optional[list[str]] = None) -> int:
         try:
             items = scrape_year(
                 year,
-                timeout_ms=args.timeout * 1000,
+                timeout=args.timeout,
+                timeout_ms=args.browser_timeout * 1000,
                 debug_dump_html=args.debug_dump_html,
             )
-        except PWTimeoutError as exc:
-            logger.error("Timed out scraping %d: %s", year, exc)
-            continue
-        except PWError as exc:
-            logger.error("Browser/navigation error scraping %d: %s", year, exc)
-            continue
         except RuntimeError as exc:
             logger.error("Scraping error for %d: %s", year, exc)
+            continue
+        except urllib.error.URLError as exc:
+            logger.error("HTTP error scraping %d: %s", year, exc)
             continue
         logger.info("Found %d item(s) for %d.", len(items), year)
         all_items.extend(items)
 
     all_items = dedupe_by_url(all_items)
 
-    years_filter = set(years_to_scrape)
     finalize_and_output(
         all_items,
-        years=years_filter,
+        years=years,
         since=args.since,
         until=args.until,
         limit=None,
