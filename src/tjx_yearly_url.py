@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-scrape_tjx.py
+scrape_tjx_yearly_url.py
 
 Build the year-filtered press-releases URL for TJX Companies' investor
 relations site.
