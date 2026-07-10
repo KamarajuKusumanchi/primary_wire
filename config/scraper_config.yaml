@@ -21,15 +21,6 @@
 # the source's site, not a per-run scraper behavior flag, and scripts run
 # directly (outside scrape_all.py) still need to pick them up.
 
-q4_ir:
-  scraper: scrape_q4_ir
-  sources:
-    - slug: costco
-      args: [--fallback-to-visible]
-    - slug: cdw
-    - slug: coinbase
-      args: [--fallback-to-visible]
-
 investorroom:
   scraper: scrape_investorroom
   sources:
@@ -43,4 +34,14 @@ notified:
     - slug: abbvie
     - slug: amd
     - slug: apollo
+#    - slug: paramount
     - slug: teradyne
+
+q4_ir:
+  scraper: scrape_q4_ir
+  sources:
+    - slug: costco
+      args: [--fallback-to-visible]
+    - slug: cdw
+    - slug: coinbase
+      args: [--fallback-to-visible]

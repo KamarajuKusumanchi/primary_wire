@@ -317,6 +317,7 @@ sources:
     name: Paramount Skydance Corporation
     ticker: PSKY
     ir_url: https://ir.paramount.com/
+    news_releases_path: press-releases
   - slug: qualcomm
     name: QUALCOMM Incorporated
     ticker: QCOM
