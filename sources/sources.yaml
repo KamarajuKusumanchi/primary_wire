@@ -95,6 +95,8 @@ sources:
     name: Bio-Techne Corporation
     ticker: TECH
     ir_url: https://investors.bio-techne.com/
+    news_releases_path: press-releases
+    first_page_index: 1
   - slug: blackstone
     name: Blackstone Inc.
     ticker: BX
