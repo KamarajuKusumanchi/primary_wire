@@ -69,7 +69,7 @@ nvidia                           NVDA    unknown       https://investor.nvidia.c
 o-reilly-auto-parts              ORLY    unknown       https://corporate.oreillyauto.com/investor-relations-information/
 onsemi                           ON      notified      https://investor.onsemi.com/                                     
 palantir                         PLTR    unknown       https://investors.palantir.com/                                  
-paramount-skydance               PSKY    notified      https://ir.paramount.com/                                        
+paramount                        PSKY    notified      https://ir.paramount.com/                                        
 qualcomm                         QCOM    unknown       https://investor.qualcomm.com/                                   
 robinhood                        HOOD    notified      https://investors.robinhood.com/                                 
 ross-stores                      ROST    notified      https://investors.rossstores.com/                                

@@ -1,6 +1,6 @@
 Sources in sources.yaml:     96
-With automated scraper:      10 (10.4%)
-Without automated scraper:   86
+With automated scraper:      11 (11.5%)
+Without automated scraper:   85
 
 Uncovered slugs:
   accenture
@@ -13,7 +13,6 @@ Uncovered slugs:
   ares
   arista-networks
   autozone
-  bio-techne
   blackstone
   bls
   booking
@@ -63,7 +62,7 @@ Uncovered slugs:
   o-reilly-auto-parts
   onsemi
   palantir
-  paramount-skydance
+  paramount
   qualcomm
   robinhood
   ross-stores
