@@ -10,24 +10,41 @@ IMPORTANT CAVEAT (read before relying on this): TJX's IR site sits behind
 Akamai bot-mitigation that returns 403 to headless HTTP clients -- this is
 documented in tjx_yearly_url.py, and is why that script drives a *headed*
 (non-headless) Chromium via Playwright rather than a plain HTTP GET. This
-script reuses that same headed browser session for both steps (getting the
-year-filtered URL, and then loading it) rather than handing the URL off to
-a bare HTTP client like curl_cffi -- a second, unauthenticated HTTP request
-to an Akamai-protected origin has no reason to succeed just because the
-first (browser) request did. That also means this script inherits
-tjx_yearly_url.py's environment requirement: it needs a display (a desktop
-machine, or a VM with Xvfb) and will not run as-is on a headless server/CI
-box.
+script reuses that same headed browser session throughout. That also means
+this script inherits tjx_yearly_url.py's environment requirement: it needs
+a display (a desktop machine, or a VM with Xvfb) and will not run as-is on
+a headless server/CI box.
 
-The exact HTML structure of the rendered press-release listing (row markup,
-detail-page URL shape, whether/how a time-of-day is published alongside the
-date) was not verified against a live fetch -- this environment's network
-egress does not include investor.tjx.com, so the parsing logic below is a
-best-effort adaptation of scrape_notified.py's Notified/Drupal parsing
-(TJX's exposed year-filter form -- widget_form_base -- is the same kind of
-Drupal Views exposed filter that Notified sites use). If TJX's actual detail
-links don't match DETAIL_URL_RE below, run with --debug-dump-html and adjust
-the regex against the real markup.
+How the year filter is actually applied: an earlier version of this script
+took tjx_yearly_url.py's build_year_url() output and hard-navigated
+(page.goto()) straight to it. In practice that gets killed mid-request
+(net::ERR_HTTP2_PROTOCOL_ERROR), with or without a Referer header, on every
+attempt. The working theory: form_id=widget_form_base is a Drupal
+exposed-filter widget whose year selection is applied via an in-page
+AJAX/JS submission, with the URL's query string only ever used for
+history/bookmarking -- a real user's browser never issues a fresh top-level
+GET navigation to that exact URL, so a script doing so looks anomalous
+enough to the origin/Akamai to get reset. This script therefore instead
+fills in the real on-page year field and submits the real form/control,
+the way a human would, and then reads the resulting DOM -- see
+submit_year_filter() and scrape_year(). tjx_yearly_url.py's
+get_form_tokens()/build_year_url() are still used, but only to log the
+"bookmark" URL for reference, not to fetch data.
+
+None of the following has been verified against a live fetch -- this
+environment's network egress does not include investor.tjx.com -- so all of
+it is a best-effort guess, adapted from scrape_notified.py's Notified/Drupal
+parsing:
+  - the exact HTML structure of the rendered press-release listing (row
+    markup, detail-page URL shape, whether/how a time-of-day is published
+    alongside the date);
+  - the year field's element type (assumed to be a <select> or text
+    <input> named "..._year[value]") and how the form is actually
+    submitted (assumed to be a nearby submit button, falling back to
+    pressing Enter in the field).
+If this still comes back with 0 items, run with --debug-dump-html and send
+me (or read yourself) the saved HTML -- both DETAIL_URL_RE and
+submit_year_filter() below will need adjusting to match the real markup.
 
 Usage
 -----
@@ -132,17 +149,108 @@ def parse_short_date(text: str):
 
 
 # ---------------------------------------------------------------------------
-# Getting the year-filtered URL (delegates to tjx_yearly_url.py's logic)
+# Getting the year-filtered URL (delegates to tjx_yearly_url.py's logic,
+# used only for logging -- see module docstring for why we don't navigate
+# to it directly)
 # ---------------------------------------------------------------------------
 
 def get_year_url(page, year: int) -> str:
     """Read the exposed-filter form tokens off *page* and build the
     year-filtered press-releases URL, using tjx_yearly_url.py's own
     get_form_tokens()/build_year_url() so the URL-building logic lives in
-    exactly one place.
+    exactly one place. Used only to log a human-readable "bookmark" URL;
+    we don't page.goto() it (see module docstring).
     """
     tokens = get_form_tokens(page)
     return build_year_url(year, tokens)
+
+
+def submit_year_filter(page, year: int, timeout_ms: int = DEFAULT_TIMEOUT_MS) -> None:
+    """Fill in and submit the real on-page year-filter form/control, the
+    way a human would, instead of hard-navigating to a hand-built URL (see
+    module docstring for why that approach fails).
+
+    Guesses, unverified against the live site:
+      - the year field is named "..._year[value]" (matches the field name
+        tjx_yearly_url.py's build_year_url() uses in its query string) and
+        is either a <select> or a text <input>;
+      - submission happens via a nearby <button type="submit"> /
+        <input type="submit"> inside the same <form>; if none is found,
+        falls back to pressing Enter in the field itself.
+    """
+    year_field = None
+    for frame in page.frames:
+        candidate = frame.locator('[name$="_year\\[value\\]"]').first
+        try:
+            count = candidate.count()
+        except Exception:
+            count = 0
+        if count > 0:
+            year_field = candidate
+            break
+
+    if year_field is None:
+        raise RuntimeError(
+            "Could not locate the year filter field (looked for an element "
+            "whose name ends in '_year[value]'). Run with --debug-dump-html "
+            "and inspect the saved HTML to find the real field, then update "
+            "submit_year_filter()."
+        )
+
+    # Confirmed against a live run: the year field is a real <select>, but
+    # it is NOT visible (almost certainly a native <select> hidden behind a
+    # custom-styled dropdown widget, a common pattern with JS-enhanced
+    # selects). Playwright's normal select_option()/click()/fill() refuse
+    # to act on invisible elements, so force the interaction and dispatch
+    # the events directly instead of relying on Playwright's
+    # visibility-gated actions.
+    tag_name = year_field.evaluate("el => el.tagName.toLowerCase()")
+    if tag_name == "select":
+        year_field.select_option(str(year), force=True, timeout=timeout_ms)
+    else:
+        year_field.evaluate(
+            """(el, val) => {
+                el.focus();
+                el.value = val;
+                el.dispatchEvent(new Event('input', { bubbles: true }));
+                el.dispatchEvent(new Event('change', { bubbles: true }));
+            }""",
+            str(year),
+        )
+
+    # select_option()/the manual dispatch above already fire 'change', which
+    # is enough to trigger an auto-submit-on-change handler if the site has
+    # one (common for Drupal exposed-filter year selects). Also try an
+    # explicit submit control in case it doesn't auto-submit, and fall back
+    # to a synthetic Enter keydown (dispatched via JS, so it isn't blocked
+    # by the same invisibility issue) if no submit control is found.
+    submitted = False
+    try:
+        form = year_field.locator("xpath=ancestor::form[1]")
+        if form.count() > 0:
+            submit_btn = form.locator(
+                'button[type="submit"], input[type="submit"], button:not([type])'
+            ).first
+            if submit_btn.count() > 0:
+                submit_btn.click(force=True, timeout=timeout_ms)
+                submitted = True
+    except Exception as exc:  # noqa: BLE001 -- fall through to Enter-key fallback
+        logger.debug("Submit-button lookup/click failed, falling back to Enter key: %s", exc)
+
+    if not submitted:
+        page.wait_for_timeout(500)  # give an auto-submit-on-change handler a moment to fire
+        try:
+            year_field.evaluate(
+                "el => el.dispatchEvent(new KeyboardEvent('keydown', "
+                "{ key: 'Enter', code: 'Enter', bubbles: true }))"
+            )
+        except Exception as exc:  # noqa: BLE001 -- best-effort fallback
+            logger.debug("Enter-key dispatch fallback failed: %s", exc)
+
+    # Give the resulting AJAX update (or full navigation) time to settle.
+    # See module docstring: we don't know whether this is a full page
+    # reload or an in-place AJAX swap, so networkidle covers both cases.
+    page.wait_for_load_state("networkidle", timeout=timeout_ms)
 
 
 # ---------------------------------------------------------------------------
@@ -257,8 +365,10 @@ def parse_listing_page(html: str, base_url: str) -> list[NewsItem]:
 
 def scrape_year(year: int, timeout_ms: int = DEFAULT_TIMEOUT_MS,
                  debug_dump_html: Optional[Path] = None) -> list[NewsItem]:
-    """Launch a headed Chromium session, build the year-filtered URL via
-    tjx_yearly_url.py's logic, load it, and parse out press releases.
+    """Launch a headed Chromium session, load the base press-releases page,
+    submit the real on-page year filter (see submit_year_filter() and the
+    module docstring for why we don't hard-navigate to a built URL), and
+    parse out press releases from the resulting DOM.
 
     Headed (not headless) for the same Akamai bot-mitigation reason
     documented in tjx_yearly_url.py -- see this module's docstring.
@@ -269,33 +379,19 @@ def scrape_year(year: int, timeout_ms: int = DEFAULT_TIMEOUT_MS,
         page.set_default_timeout(timeout_ms)
 
         page.goto(BASE_URL, wait_until="networkidle")
-        year_url = get_year_url(page, year)
-        logger.info("Year-filtered URL for %d: %s", year, year_url)
 
-        # Navigate to the year-filtered URL with an explicit Referer set to
-        # the base press-releases page. Playwright does NOT set a Referer
-        # by default on page.goto(); a real user picking a year from the
-        # exposed-filter form would generate this navigation *with* one, and
-        # this site's Akamai bot-mitigation is aggressive enough (see
-        # tjx_yearly_url.py's docstring) that a refererless follow-up
-        # request from the same session is a plausible trigger for a
-        # connection-level reset. Retried once, since this could also just
-        # be a transient network blip rather than anything bot-mitigation
-        # related -- either way a bare retry is cheap and harmless.
-        last_exc = None
-        for attempt in range(2):
-            try:
-                page.goto(year_url, wait_until="networkidle", referer=BASE_URL)
-                last_exc = None
-                break
-            except Exception as exc:  # noqa: BLE001 -- deliberately broad; see comment above
-                last_exc = exc
-                logger.warning("Navigation to year-filtered URL failed (attempt %d/2): %s",
-                                attempt + 1, exc)
-        if last_exc is not None:
-            raise last_exc
+        # Logged for reference/debugging only -- not navigated to directly.
+        try:
+            bookmark_url = get_year_url(page, year)
+            logger.info("Year-filtered URL for %d (reference only): %s", year, bookmark_url)
+        except RuntimeError as exc:
+            logger.debug("Could not compute reference bookmark URL: %s", exc)
+            bookmark_url = BASE_URL
+
+        submit_year_filter(page, year, timeout_ms=timeout_ms)
 
         html = page.content()
+        result_url = page.url
 
         browser.close()
 
@@ -303,7 +399,7 @@ def scrape_year(year: int, timeout_ms: int = DEFAULT_TIMEOUT_MS,
         debug_dump_html.write_text(html, encoding="utf-8")
         logger.info("Saved fetched HTML to %s", debug_dump_html)
 
-    items = parse_listing_page(html, base_url=year_url)
+    items = parse_listing_page(html, base_url=result_url or bookmark_url)
     return dedupe_by_url(items)
 
 
