@@ -318,6 +318,49 @@ def extract_date_and_time_from_row(anchor) -> tuple[Optional[date], str, str]:
     return None, "", ""
 
 
+def log_empty_result_diagnostics(soup: "BeautifulSoup") -> None:
+    """DETAIL_URL_RE is an unverified guess (see module docstring). If it
+    matches nothing, print the actual hrefs seen on the page so they can be
+    pasted back directly -- much faster to act on than a full HTML dump.
+    """
+    all_anchors = soup.find_all("a", href=True)
+    logger.warning(
+        "No press-release links matched DETAIL_URL_RE out of %d total <a> "
+        "tag(s) on the page. DETAIL_URL_RE is an unverified guess (see "
+        "module docstring) and needs fixing. Candidate hrefs below -- "
+        "paste these (and their link text) back so the regex can be "
+        "corrected against the real markup:",
+        len(all_anchors),
+    )
+
+    candidates = []
+    seen = set()
+    for a in all_anchors:
+        href = a["href"].strip()
+        if href in seen:
+            continue
+        seen.add(href)
+        lowered = href.lower()
+        if any(kw in lowered for kw in ("press-release", "news-release", "investor")):
+            text = a.get_text(separator=" ", strip=True)
+            candidates.append((href, text[:80]))
+
+    if not candidates:
+        logger.warning(
+            "  (none of the %d unique hrefs contain 'press-release', "
+            "'news-release', or 'investor' either -- the year filter "
+            "submission likely isn't actually updating the listing. "
+            "Try --debug-dump-html to inspect the full page.)",
+            len(seen),
+        )
+        return
+
+    for href, text in candidates[:40]:
+        logger.warning("  href=%r text=%r", href, text)
+    if len(candidates) > 40:
+        logger.warning("  ... and %d more", len(candidates) - 40)
+
+
 def parse_listing_page(html: str, base_url: str) -> list[NewsItem]:
     """Parse one rendered listing page; return the NewsItems found."""
     parsed = urlparse(base_url)
@@ -355,6 +398,9 @@ def parse_listing_page(html: str, base_url: str) -> list[NewsItem]:
             raw_date_text=raw_date_text,
             publish_time=publish_time,
         ))
+
+    if not items:
+        log_empty_result_diagnostics(soup)
 
     return items
 
