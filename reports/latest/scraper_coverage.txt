@@ -1,6 +1,6 @@
-Sources in sources.yaml:     96
-With automated scraper:      11 (11.5%)
-Without automated scraper:   85
+Sources in sources.yaml:     100
+With automated scraper:      11 (11.0%)
+Without automated scraper:   89
 
 Uncovered slugs:
   accenture
@@ -21,8 +21,10 @@ Uncovered slugs:
   caseys
   charter
   ciena
+  cinfin
   cognizant
   coherent
+  coke
   conagra
   constellation-brands
   corning
@@ -43,6 +45,7 @@ Uncovered slugs:
   godaddy
   google
   honeywell
+  hp
   ibm
   intel
   intercontinental-exchange
@@ -63,6 +66,7 @@ Uncovered slugs:
   onsemi
   palantir
   paramount
+  pepsi
   qualcomm
   robinhood
   ross-stores

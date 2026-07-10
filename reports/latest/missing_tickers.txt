@@ -1,7 +1,7 @@
 
 S&P 500 companies:  503
-Covered in sources: 92
-Missing:            411
+Covered in sources: 96
+Missing:            407
 
 Missing tickers:
   A
@@ -75,7 +75,6 @@ Missing tickers:
   CHD
   CHRW
   CI
-  CINF
   CL
   CLX
   CMCSA
@@ -187,7 +186,6 @@ Missing tickers:
   HII
   HLT
   HON
-  HPE
   HPQ
   HRL
   HSIC
@@ -225,7 +223,6 @@ Missing tickers:
   KKR
   KMB
   KMI
-  KO
   KR
   KVUE
   L
@@ -299,7 +296,6 @@ Missing tickers:
   PCAR
   PCG
   PEG
-  PEP
   PFE
   PFG
   PG
