@@ -138,6 +138,10 @@ sources:
     name: Ciena Corporation
     ticker: CIEN
     ir_url: https://investor.ciena.com/
+  - slug: cinfin
+    name: Cincinnati Financial Corporation
+    ticker: CINF
+    ir_url: https://investors.cinfin.com/
   - slug: cognizant
     name: Cognizant Technology Solutions Corporation
     ticker: CTSH
@@ -150,6 +154,10 @@ sources:
     name: Coinbase Global, Inc.
     ticker: COIN
     ir_url: https://investor.coinbase.com/
+  - slug: coke
+    name: The Coca-Cola Company
+    ticker: KO
+    ir_url: https://investors.coca-colacompany.com/
   - slug: conagra
     name: Conagra Brands, Inc.
     ticker: CAG
@@ -239,6 +247,10 @@ sources:
     name: Honeywell Aerospace Inc.
     ticker: HONA
     ir_url: https://investor.honeywell.com/investor-relations
+  - slug: hp
+    name: Hewlett Packard Enterprise Company
+    ticker: HPE
+    ir_url: https://investor.hp.com/
   - slug: ibm
     name: International Business Machines Corporation
     ticker: IBM
@@ -320,6 +332,10 @@ sources:
     ticker: PSKY
     ir_url: https://ir.paramount.com/
     news_releases_path: press-releases
+  - slug: pepsi
+    name: PepsiCo, Inc.
+    ticker: PEP
+    ir_url: https://www.pepsico.com/investors
   - slug: qualcomm
     name: QUALCOMM Incorporated
     ticker: QCOM
