@@ -6,6 +6,7 @@ akamai                           AKAM    notified      https://www.ir.akamai.com
 alexandria-real-estate-equities  ARE     q4            https://investor.are.com/                                        
 amcor                            AMCR    unknown       https://www.amcor.com/investors                                  
 amd                              AMD     notified      https://ir.amd.com/                                              
+apa                              APA     notified      https://investor.apacorp.com/                                    
 apollo                           APO     notified      https://ir.apollo.com/                                           
 apple                            AAPL    unknown       https://investor.apple.com/                                      
 applied-materials                AMAT    notified      https://ir.appliedmaterials.com/                                 
@@ -51,9 +52,11 @@ google                           GOOGL   q4            https://abc.xyz/investor/
 honeywell                        HONA    notified      https://investor.honeywell.com/investor-relations                
 ibm                              IBM     unknown       https://www.ibm.com/investor                                     
 intel                            INTC    notified      https://www.intc.com/                                            
+intercontinental-exchange        ICE     unknown       https://ir.theice.com/                                           
 iqvia                            IQV     unknown       https://ir.iqvia.com/                                            
 kla                              KLAC    notified      https://ir.kla.com/                                              
 lam-research                     LRCX    investorroom  https://investor.lamresearch.com/                                
+lumentum                         LITE    unknown       https://investor.lumentum.com/                                   
 micron                           MU      notified      https://investors.micron.com/                                    
 moderna                          MRNA    unknown       https://investors.modernatx.com/                                 
 molson-coors                     TAP     q4            https://ir.molsoncoors.com/                                      
@@ -61,10 +64,12 @@ msci                             MSCI    notified      https://ir.msci.com/
 netapp                           NTAP    q4            https://investors.netapp.com/                                    
 netflix                          NFLX    unknown       https://ir.netflix.net                                           
 nike                             NKE     unknown       https://investors.nike.com/                                      
+norwegian-cruise-line            NCLH    notified      https://www.nclhltd.com/investors                                
 nvidia                           NVDA    unknown       https://investor.nvidia.com/news/press-releases/default.aspx     
 o-reilly-auto-parts              ORLY    unknown       https://corporate.oreillyauto.com/investor-relations-information/
 onsemi                           ON      notified      https://investor.onsemi.com/                                     
 palantir                         PLTR    unknown       https://investors.palantir.com/                                  
+paramount-skydance               PSKY    notified      https://ir.paramount.com/                                        
 qualcomm                         QCOM    unknown       https://investor.qualcomm.com/                                   
 robinhood                        HOOD    notified      https://investors.robinhood.com/                                 
 ross-stores                      ROST    notified      https://investors.rossstores.com/                                
