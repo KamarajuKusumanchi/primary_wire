@@ -22,8 +22,21 @@ notified  (scrape_notified.py)
   * <meta name="Generator" content="Drupal 10 ..."> in the page <head>
   * Links matching /news-releases/news-release-details/<slug>
 
+notified_gated  (scrape_notified_gated.py)
+  * Same underlying markup/fingerprints as notified above -- these are
+    Notified/Drupal sites that are ALSO protected by bot mitigation (e.g.
+    Akamai) strict enough to block the year-filter widget for plain/headless
+    requests, so they need scrape_notified_gated.py's headed-browser step
+    instead of scrape_notified.py's plain-HTTP pagination.
+  * There is no general-purpose signal yet to detect "gated" automatically
+    (that would mean probing bot-mitigation behavior, not just page
+    content) -- for now this is a hardcoded override by slug, applied AFTER
+    the normal notified/investorroom/q4 signal checks below. See
+    GATED_SLUGS. Real sub-classification signals are future work.
+
 Priority when multiple signals fire: notified > investorroom > q4
 (Notified and InvestorRoom share some URL shapes; Drupal meta tag is definitive.)
+notified_gated overrides a "notified" result for slugs in GATED_SLUGS.
 
 unknown
   * No signal matched.
@@ -126,6 +139,16 @@ NOTIFIED_DETAIL_RE = re.compile(
     r"/(?:news-releases|press-releases|financial-releases)/[^/#?]+/[^/#?]+",
     re.IGNORECASE,
 )
+
+# Slugs known to be Notified/Drupal sites gated by bot mitigation strict
+# enough to need scrape_notified_gated.py's headed-browser step (see module
+# docstring's "notified_gated" entry). This is a manual, temporary list --
+# there's no content-based signal yet to detect "gated" automatically, since
+# that requires probing bot-mitigation behavior rather than page content.
+# Confirmed gated: TJX. Add a slug here once you've confirmed (by testing
+# headless vs. headed Chrome, as documented in scrape_notified_gated.py)
+# that a site needs the gated variant.
+GATED_SLUGS = {"tjx"}
 
 # ---------------------------------------------------------------------------
 # HTTP fetch
@@ -278,11 +301,17 @@ def detect_platform_from_html(html: str) -> str:
     return "unknown"
 
 
-def detect_platform(ir_url: str, timeout: int) -> str:
+def detect_platform(ir_url: str, timeout: int, slug: str = "") -> str:
     """Fetch *ir_url* and return the detected platform name.
 
     Returns 'unknown' on any network or HTTP error so callers always get a
     string rather than an exception.
+
+    *slug*, if given and present in GATED_SLUGS, promotes a "notified"
+    result to "notified_gated" (see module docstring and GATED_SLUGS --
+    there's no content-based signal for "gated" yet, so this is a manual
+    override keyed by slug rather than something detect_platform_from_html
+    can determine from the page alone).
     """
     if not ir_url:
         return "unknown"
@@ -290,10 +319,15 @@ def detect_platform(ir_url: str, timeout: int) -> str:
         final_url, html = fetch_html(ir_url, timeout=timeout)
         if final_url != ir_url:
             logger.debug("Redirected: %s → %s", ir_url, final_url)
-        return detect_platform_from_html(html)
+        platform = detect_platform_from_html(html)
     except Exception as exc:
         logger.warning("fetch failed for %s: %s", ir_url, exc)
         return "unknown"
+
+    if platform == "notified" and slug.strip().lower() in GATED_SLUGS:
+        logger.debug("Gated-slug override: %s → notified_gated", slug)
+        return "notified_gated"
+    return platform
 
 # ---------------------------------------------------------------------------
 # sources.yaml helpers
@@ -374,7 +408,7 @@ def detect_platforms_parallel(df: pd.DataFrame, workers: int, timeout: int) -> p
 
     def detect_one(idx_row: tuple[int, dict]) -> tuple[int, str]:
         idx, row = idx_row
-        platform = detect_platform(row["ir_url"], timeout=timeout)
+        platform = detect_platform(row["ir_url"], timeout=timeout, slug=row.get("slug", ""))
         return idx, platform
 
     with concurrent.futures.ThreadPoolExecutor(max_workers=workers) as pool:
@@ -508,7 +542,7 @@ def main(argv: Optional[list[str]] = None) -> int:
         print(f"error: no sources.yaml record found for '{query}'", file=sys.stderr)
         return 1
 
-    platform = detect_platform(ir_url, timeout=args.timeout)
+    platform = detect_platform(ir_url, timeout=args.timeout, slug=slug)
     result = pd.DataFrame([{
         "slug":     slug,
         "ticker":   ticker,
