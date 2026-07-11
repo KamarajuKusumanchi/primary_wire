@@ -2,90 +2,91 @@ Sources in sources.yaml:     100
 With automated scraper:      14 (14.0%)
 Without automated scraper:   86
 
-Uncovered slugs:
-  accenture
-  akamai
-  alexandria-real-estate-equities
-  amcor
-  apa
-  apple
-  applied-materials
-  ares
-  arista-networks
-  autozone
-  blackstone
-  bls
-  booking
-  broadcom
-  builders-firstsource
-  caseys
-  charter
-  ciena
-  cinfin
-  cognizant
-  coherent
-  coke
-  conagra
-  constellation-brands
-  corning
-  criver
-  datadog
-  dell
-  doordash
-  equifax
-  expedia
-  factset
-  fedex
-  fis-global
-  flex
-  fox
-  ge-healthcare
-  gen-digital
-  godaddy
-  google
-  honeywell
-  hp
-  ibm
-  intel
-  intercontinental-exchange
-  iqvia
-  kla
-  lam-research
-  lumentum
-  micron
-  moderna
-  molson-coors
-  msci
-  netapp
-  netflix
-  nike
-  norwegian-cruise-line
-  nvidia
-  o-reilly-auto-parts
-  onsemi
-  palantir
-  pepsi
-  qualcomm
-  robinhood
-  ross-stores
-  sandisk
-  seagate
-  servicenow
-  skyworks
-  smurfit-westrock
-  spacex
-  super-micro
-  synchrony-financial
-  tesla
-  texas-instruments
-  tractor-supply
-  united-airlines
-  universal-health-services
-  verisign
-  verizon
-  vertex-pharmaceuticals
-  vertiv
-  virtu
-  visa
-  western-digital
-  workday
+Missing scraper coverage (slug,ticker,platform,ir_url):
+slug,ticker,platform,ir_url
+accenture,ACN,unknown,https://investor.accenture.com/
+akamai,AKAM,notified,https://www.ir.akamai.com/
+alexandria-real-estate-equities,ARE,q4,https://investor.are.com/
+amcor,AMCR,unknown,https://www.amcor.com/investors
+apa,APA,notified,https://investor.apacorp.com/
+apple,AAPL,unknown,https://investor.apple.com/
+applied-materials,AMAT,notified,https://ir.appliedmaterials.com/
+ares,ARES,unknown,https://ir.ares.com/
+arista-networks,ANET,unknown,https://investors.arista.com/
+autozone,AZO,notified,https://about.autozone.com/investor-overview
+blackstone,BX,unknown,https://ir.blackstone.com/
+bls,,unknown,https://www.bls.gov/newsrelease/
+booking,BKNG,q4,https://ir.bookingholdings.com/
+broadcom,AVGO,notified,https://investors.broadcom.com/
+builders-firstsource,BLDR,q4,https://investors.bldr.com/
+caseys,CASY,notified,https://investor.caseys.com/
+charter,CHTR,notified,https://ir.charter.com/
+ciena,CIEN,q4,https://investor.ciena.com/
+cinfin,CINF,investorroom,https://investors.cinfin.com/
+cognizant,CTSH,q4,https://investors.cognizant.com/
+coherent,COHR,unknown,https://www.coherent.com/company/investor-relations
+coke,KO,notified,https://investors.coca-colacompany.com/
+conagra,CAG,unknown,https://www.conagrabrands.com/investor-relations
+constellation-brands,STZ,notified,https://ir.cbrands.com/
+corning,GLW,q4,https://investor.corning.com/
+criver,CRL,notified,https://ir.criver.com/
+datadog,DDOG,notified,https://investors.datadoghq.com/
+dell,DELL,notified,https://investors.delltechnologies.com/
+doordash,DASH,q4,https://ir.doordash.com/
+equifax,EFX,notified,https://investor.equifax.com/
+expedia,EXPE,q4,https://ir.expediagroup.com/
+factset,FDS,notified,https://investor.factset.com/
+fedex,FDX,unknown,https://investors.fedex.com/
+fis-global,FIS,notified,https://www.investor.fisglobal.com/
+flex,FLEX,q4,https://investors.flex.com/
+fox,FOXA,unknown,https://investor.foxcorporation.com/
+ge-healthcare,GEHC,notified,https://investor.gehealthcare.com/
+gen-digital,GEN,q4,https://investor.gendigital.com/
+godaddy,GDDY,notified,https://aboutus.godaddy.net/investor-relations/
+google,GOOGL,q4,https://abc.xyz/investor/
+honeywell,HONA,notified,https://investor.honeywell.com/investor-relations
+hp,HPE,q4,https://investor.hp.com/
+ibm,IBM,unknown,https://www.ibm.com/investor
+intel,INTC,notified,https://www.intc.com/
+intercontinental-exchange,ICE,unknown,https://ir.theice.com/
+iqvia,IQV,unknown,https://ir.iqvia.com/
+kla,KLAC,notified,https://ir.kla.com/
+lam-research,LRCX,investorroom,https://investor.lamresearch.com/
+lumentum,LITE,unknown,https://investor.lumentum.com/
+micron,MU,notified,https://investors.micron.com/
+moderna,MRNA,unknown,https://investors.modernatx.com/
+molson-coors,TAP,q4,https://ir.molsoncoors.com/
+msci,MSCI,notified,https://ir.msci.com/
+netapp,NTAP,q4,https://investors.netapp.com/
+netflix,NFLX,unknown,https://ir.netflix.net
+nike,NKE,unknown,https://investors.nike.com/
+norwegian-cruise-line,NCLH,notified,https://www.nclhltd.com/investors
+nvidia,NVDA,unknown,https://investor.nvidia.com/news/press-releases/default.aspx
+o-reilly-auto-parts,ORLY,unknown,https://corporate.oreillyauto.com/investor-relations-information/
+onsemi,ON,notified,https://investor.onsemi.com/
+palantir,PLTR,unknown,https://investors.palantir.com/
+pepsi,PEP,unknown,https://www.pepsico.com/investors
+qualcomm,QCOM,unknown,https://investor.qualcomm.com/
+robinhood,HOOD,notified,https://investors.robinhood.com/
+ross-stores,ROST,notified,https://investors.rossstores.com/
+sandisk,SNDK,notified,https://investor.sandisk.com/
+seagate,STX,q4,https://investors.seagate.com/
+servicenow,NOW,unknown,https://investor.servicenow.com/
+skyworks,SWKS,unknown,https://www.skyworksinc.com/investors
+smurfit-westrock,SW,unknown,http://investors.smurfitwestrock.com/
+spacex,SPCX,unknown,https://ir.spacex.com/
+super-micro,SMCI,q4,https://ir.supermicro.com/
+synchrony-financial,SYF,unknown,https://investors.synchrony.com/
+tesla,TSLA,unknown,https://ir.tesla.com/
+texas-instruments,TXN,notified,https://investor.ti.com/
+tractor-supply,TSCO,unknown,https://ir.tractorsupply.com/
+united-airlines,UAL,notified,https://ir.united.com/
+universal-health-services,UHS,notified,https://ir.uhs.com/
+verisign,VRSN,notified,https://investor.verisign.com/
+verizon,VZ,notified,https://www.verizon.com/about/investors
+vertex-pharmaceuticals,VRTX,notified,https://investors.vrtx.com/
+vertiv,VRT,q4,https://investors.vertiv.com/
+virtu,VIRT,notified,https://ir.virtu.com/
+visa,V,q4,https://investor.visa.com/
+western-digital,WDC,notified,https://investor.wdc.com/
+workday,WDAY,notified,https://investor.workday.com/

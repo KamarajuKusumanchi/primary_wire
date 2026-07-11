@@ -24,6 +24,19 @@ by hand-editing YAML and scrape_all.py won't catch them until run time:
     or a source that was renamed/removed)
   - a slug configured under more than one scraper group (it would be
     scraped twice by scrape_all.py)
+
+Missing-coverage rows (both the "Uncovered slugs" section of the default
+report and the --missing-only output) are printed as CSV -- header
+"slug,ticker,platform,ir_url" -- so you can see everything needed to add a
+scraper for a source in one place, without cross-referencing sources.yaml
+and reports/latest/ir_platform.csv by hand.
+
+The platform column is read from reports/latest/ir_platform.csv (produced
+separately by detect_ir_platform.py). That file is a snapshot from whenever
+it was last regenerated -- it is not recomputed here -- so a slug added to
+sources.yaml since then will show platform "unknown" with a warning on
+stderr. Run `invoke reports` (or `invoke ir-platform`) first if you want it
+current.
 """
 
 from __future__ import annotations
@@ -45,6 +58,7 @@ from utils.sources_utils import load_sources  # noqa: E402
 REPO_ROOT = Path(__file__).resolve().parent.parent
 SOURCES_PATH = REPO_ROOT / "sources" / "sources.yaml"
 SCRAPER_CONFIG_PATH = REPO_ROOT / "config" / "scraper_config.yaml"
+IR_PLATFORM_CSV_PATH = REPO_ROOT / "reports" / "latest" / "ir_platform.csv"
 
 
 def load_scraper_config(path: Path = SCRAPER_CONFIG_PATH) -> dict:
@@ -88,6 +102,61 @@ def configured_slugs(config: dict) -> tuple[dict[str, list[str]], list[str]]:
     return groups_by_slug, problems
 
 
+def load_platform_map(path: Path = IR_PLATFORM_CSV_PATH) -> pd.DataFrame:
+    """Return a (slug, platform) DataFrame read from ir_platform.csv.
+
+    ir_platform.csv is produced by a separate, network-fetching script
+    (detect_ir_platform.py) and is not regenerated here, so it can be
+    absent or stale relative to sources.yaml. Both cases are handled by
+    the caller (missing platform values are left as NaN, filled with
+    "unknown", and reported on stderr) rather than treated as fatal --
+    this script is documented as read-only/offline and shouldn't be
+    blocked on another report being fresh.
+    """
+    if not path.exists():
+        print(
+            f"warning: {path} not found -- platform column will be 'unknown' "
+            f"for every row. Regenerate it with: "
+            f"python src/detect_ir_platform.py --all > {path}",
+            file=sys.stderr,
+        )
+        return pd.DataFrame(columns=["slug", "platform"])
+    return pd.read_csv(path, usecols=["slug", "platform"], dtype=str, keep_default_na=False)
+
+
+def missing_coverage_csv(uncovered: list[dict], platform_map: pd.DataFrame) -> str:
+    """Return CSV text (with header) for slug,ticker,platform,ir_url of *uncovered*.
+
+    *uncovered* is a list of sources.yaml records (dicts with at least slug/
+    ticker/ir_url). Platform is looked up from *platform_map* by slug; a
+    slug with no match (ir_platform.csv missing or stale) gets "unknown"
+    and is called out on stderr so the gap is visible instead of silently
+    blank.
+    """
+    df = pd.DataFrame(uncovered, columns=["slug", "ticker", "ir_url"])
+    if df.empty:
+        # Nothing uncovered -- skip the merge (platform_map may not even
+        # have a "slug" column in this case) and emit a header-only CSV.
+        return pd.DataFrame(columns=["slug", "ticker", "platform", "ir_url"]).to_csv(
+            index=False, lineterminator="\n"
+        )
+    df = df.merge(platform_map, on="slug", how="left")
+
+    unknown_mask = df["platform"].isna()
+    if unknown_mask.any():
+        stale_slugs = ", ".join(df.loc[unknown_mask, "slug"])
+        print(
+            f"warning: no platform data for: {stale_slugs} "
+            "(missing from ir_platform.csv, or it predates these entries "
+            "in sources.yaml)",
+            file=sys.stderr,
+        )
+    df["platform"] = df["platform"].fillna("unknown")
+
+    df = df[["slug", "ticker", "platform", "ir_url"]]
+    return df.to_csv(index=False, lineterminator="\n")
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
@@ -98,6 +167,11 @@ def main(argv: list[str] | None = None) -> int:
                         help="Print only the sources with no scraper coverage")
     parser.add_argument("--strict", action="store_true",
                         help="Exit 1 if coverage is incomplete or config problems were found")
+    parser.add_argument(
+        "--ir-platform", metavar="PATH", type=Path, default=IR_PLATFORM_CSV_PATH,
+        help=f"Path to ir_platform.csv, used for the platform column in "
+             f"missing-coverage CSV output (default: {IR_PLATFORM_CSV_PATH}).",
+    )
     args = parser.parse_args(argv)
 
     sources = load_sources(SOURCES_PATH)
@@ -134,11 +208,13 @@ def main(argv: list[str] | None = None) -> int:
             return f"config: {'/'.join(groups_by_slug[slug])}"
         return "none"
 
-    if args.verbose or args.missing_only:
-        rows = uncovered if args.missing_only else sources
-        label = "Missing scraper coverage" if args.missing_only else "Per-source coverage"
-        print(f"{label}:\n")
-        for record in rows:
+    platform_map = load_platform_map(args.ir_platform) if uncovered else pd.DataFrame()
+
+    if args.missing_only:
+        print(missing_coverage_csv(uncovered, platform_map), end="")
+    elif args.verbose:
+        print("Per-source coverage:\n")
+        for record in sources:
             slug = record.get("slug", "")
             name = record.get("name", "")
             status = "MISSING" if slug in {r["slug"] for r in uncovered} else "covered"
@@ -150,9 +226,8 @@ def main(argv: list[str] | None = None) -> int:
     print(f"Without automated scraper:   {total - n_covered}")
 
     if uncovered and not (args.verbose or args.missing_only):
-        print("\nUncovered slugs:")
-        for record in uncovered:
-            print(f"  {record.get('slug', '')}")
+        print("\nMissing scraper coverage (slug,ticker,platform,ir_url):")
+        print(missing_coverage_csv(uncovered, platform_map), end="")
 
     if problems:
         print("\nConfig problems found:")
