@@ -36,7 +36,7 @@ notified:
     - slug: apollo
     - slug: bio-techne
     - slug: fedex-freight
-#    - slug: paramount
+    - slug: paramount
     - slug: teradyne
 
 notified_gated:

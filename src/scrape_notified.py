@@ -188,6 +188,22 @@ DETAIL_URL_RE = re.compile(
 # Two-digit years are in the 2000s.
 SHORT_DATE_RE = re.compile(r"\b(\d{1,2})/(\d{1,2})/(\d{2})\b")
 
+# Some Notified/Drupal sites (e.g. Paramount) lay out each release as a
+# heading + summary + a separate "Read more" call-to-action link, rather
+# than making the headline itself the link. When the *only* text inside the
+# detail-page anchor is one of these generic CTAs (or nothing at all), the
+# anchor's own text is useless as a title and we must look elsewhere in the
+# row/card for the actual headline. See _row_container() / _find_title_in_container().
+GENERIC_LINK_TEXT_RE = re.compile(
+    r"^(?:read|learn|view|see|find\s+out)\s+more$|^(?:more|details?)$",
+    re.IGNORECASE,
+)
+
+# Class-name substrings that, by Drupal's common "field--name-title" /
+# "views-field-title" naming convention, typically mark the element holding
+# a listing row's headline.
+TITLE_HINT_CLASS_RE = re.compile(r"title|headline", re.IGNORECASE)
+
 logger = logging.getLogger("scrape_notified")
 
 
@@ -391,6 +407,74 @@ def find_last_page(soup: BeautifulSoup) -> Optional[int]:
     return max_page
 
 
+def _row_container(anchor, max_up: int = 8):
+    """Return the tightest ancestor of ``anchor`` that still contains only
+    this one press-release detail link.
+
+    Card/row layouts (no <table>) nest a release's heading, summary, and
+    "Read more" link inside some shared container, but the exact tag/class
+    varies by site and isn't worth hardcoding. What's true on every such
+    site is that a row's container holds exactly one detail-page link (its
+    own); the next ancestor up starts pulling in a sibling row's link too.
+    So climb from the anchor while the ancestor still has exactly one
+    matching link, and stop just before that would no longer hold.
+    """
+    container = anchor
+    for _ in range(max_up):
+        parent = container.parent
+        if parent is None or parent.name in ("body", "html", "[document]"):
+            break
+        detail_links = [
+            a for a in parent.find_all("a", href=True) if is_detail_url(a["href"])
+        ]
+        if len(detail_links) > 1:
+            break
+        container = parent
+    return container
+
+
+def _find_title_in_container(container, anchor_text: str) -> str:
+    """Best-effort headline extraction from a row/card container, for sites
+    (e.g. Paramount) where the only link in the row is a generic "Read
+    more" CTA and the actual headline is a separate, non-linked text block.
+
+    Tries, in order:
+      1. A heading tag (h1-h6) inside the container.
+      2. An element whose class name hints at a title/headline field,
+         following Drupal's common "field--name-title" / "views-field-title"
+         naming convention.
+      3. The first substantial top-level text block in the container that
+         isn't a date and isn't the (generic) anchor text itself.
+
+    Returns "" if nothing plausible is found, so callers can fall back to
+    their existing behavior.
+    """
+    heading = container.find(["h1", "h2", "h3", "h4", "h5", "h6"])
+    if heading:
+        text = heading.get_text(separator=" ", strip=True)
+        if text and not GENERIC_LINK_TEXT_RE.match(text):
+            return text
+
+    for el in container.find_all(class_=True):
+        classes = " ".join(el.get("class", []))
+        if TITLE_HINT_CLASS_RE.search(classes):
+            text = el.get_text(separator=" ", strip=True)
+            if text and text != anchor_text and not GENERIC_LINK_TEXT_RE.match(text):
+                return text
+
+    for child in container.find_all(recursive=False):
+        text = child.get_text(separator=" ", strip=True)
+        if not text or text == anchor_text:
+            continue
+        if GENERIC_LINK_TEXT_RE.match(text):
+            continue
+        if parse_short_date(text)[0] or parse_date(text)[0]:
+            continue
+        return text
+
+    return ""
+
+
 def parse_listing_page(
     html: str, base_url: str, slug: str, ticker: str
 ) -> list[NewsItem]:
@@ -414,6 +498,13 @@ def parse_listing_page(
             continue
 
         title = anchor.get_text(separator=" ", strip=True)
+        if not title or GENERIC_LINK_TEXT_RE.match(title):
+            # The anchor itself is just a "Read more"-style CTA (e.g.
+            # Paramount's IR site); the real headline is a separate,
+            # non-linked text block elsewhere in the row/card.
+            row_title = _find_title_in_container(_row_container(anchor), title)
+            if row_title:
+                title = row_title
         if not title:
             span = anchor.find("span")
             title = span.get_text(strip=True) if span else ""
