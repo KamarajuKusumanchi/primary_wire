@@ -11,39 +11,15 @@ year-filtered listing URL out of tjx_yearly_url.py (build_year_url() /
 get_form_tokens()), because that requires reading a one-time
 form_build_id token out of the live, JS-rendered page. Once that URL is
 in hand, this script drops Playwright entirely and fetches + parses the
-listing with plain urllib.request + BeautifulSoup, the same shape as
-scrape_notified.py but a different HTTP client (see the CAVEAT below for
-why).
-
-IMPORTANT CAVEAT (read before relying on this): tjx_yearly_url.py's own
-docstring documents that TJX's IR site sits behind Akamai bot-mitigation
-that returns 403 to *headless* HTTP clients for the base (unfiltered)
-listing page, and that a headed browser is required just to load that
-page once. The year-filtered URL built from it behaves differently, and
-this has now been confirmed live rather than guessed at:
-
-  - A plain `requests.get()` of the year-filtered URL hangs and times out.
-  - `curl_cffi` with Chrome TLS/JA3 impersonation *also* hangs and times
-    out against the same URL.
-  - A bare `urllib.request.urlopen()` -- no impersonation, no extra
-    headers, nothing -- goes through immediately and returns the real
-    filtered listing HTML. This is also, incidentally, all that
-    pandas.read_html() uses internally, which is how this was noticed.
-
-The likely explanation is that Akamai's bot-mitigation here is fingerprinting
-and blocking the specific TLS/HTTP client signatures of known scraping
-libraries (python-requests' default signature, and curl_cffi's
-impersonation profiles are both well-documented and easy to blocklist),
-while a generic stdlib urllib request either isn't fingerprinted the same
-way or isn't on that blocklist. This is a plausible read of the evidence,
-not a confirmed root cause -- if TJX changes their bot-mitigation rules,
-this could stop working just as suddenly as it started.
+listing with curl_cffi + BeautifulSoup, the same shape as
+scrape_notified.py: curl_cffi impersonates Chrome's TLS/JA3 fingerprint,
+which is what gets the year-filtered listing page past TJX's Akamai
+bot-mitigation.
 
 CONFIRMED against a live --debug-dump-html fetch (2025-07-10): the
 year-filtered URL's server-rendered response contains the filtered rows
-directly -- no client-side JS render/AJAX call needed, plain
-urllib.request sees the real listing. The rendered markup is a classic
-Notified/Drupal table:
+directly -- no client-side JS render/AJAX call needed. The rendered
+markup is a classic Notified/Drupal table:
 
     <table class="nirtable ... news-table">
       <tbody>
@@ -90,15 +66,12 @@ Usage
 
 Requires
 --------
-  pip install playwright beautifulsoup4 lxml
+  pip install playwright curl_cffi beautifulsoup4 lxml
   playwright install chrome   # if Playwright can't find your Chrome install
 
-  The listing fetch uses only the Python standard library (urllib.request)
-  -- no requests, no curl_cffi. This is not a style choice: both were tried
-  and timed out against this site (confirmed live), while a bare
-  urllib.request.urlopen() -- which is also all pd.read_html() uses
-  internally -- goes through immediately. See fetch_listing_html()'s
-  docstring for the details.
+  The listing fetch uses curl_cffi (Chrome TLS/JA3 impersonation) to get
+  past TJX's Akamai bot-mitigation. See fetch_listing_html()'s docstring
+  for details.
 """
 
 from __future__ import annotations
@@ -107,17 +80,15 @@ import argparse
 import logging
 import re
 import sys
-import urllib.error
-import urllib.request
 from datetime import date, datetime
 from pathlib import Path
 from typing import Optional
 from urllib.parse import urljoin, urlparse, urlunparse
 
 try:
-    from bs4 import BeautifulSoup
+    from curl_cffi import requests
 except ImportError:
-    sys.exit("Missing dependency. Install with: pip install beautifulsoup4 lxml")
+    sys.exit("Missing dependency. Install with: pip install curl_cffi")
 
 try:
     from bs4 import BeautifulSoup
@@ -236,18 +207,29 @@ def get_year_url(year: int, timeout_ms: int = DEFAULT_TIMEOUT_MS) -> str:
 # Step 2: fetch + parse the listing page (plain HTTP, no Playwright)
 # ---------------------------------------------------------------------------
 
-def fetch_listing_html(url: str, timeout: int = 30) -> str:
-    """Fetch *url* via stdlib urllib.request and return its HTML.
+_SESSION = None
 
-    Confirmed live: both requests.get() and curl_cffi's Chrome-impersonating
-    session hang and time out against this URL, while a plain
-    urllib.request.urlopen() -- no custom headers, no TLS impersonation --
-    returns the page immediately (see module docstring). Raises
-    urllib.error.URLError/HTTPError on failure.
+
+def get_session():
+    """Return a persistent HTTP session.
+
+    Uses curl_cffi to impersonate Chrome's TLS fingerprint (JA3/JA4), which
+    is what gets the year-filtered listing page past TJX's Akamai
+    bot-mitigation (see module docstring).
     """
-    with urllib.request.urlopen(url, timeout=timeout) as resp:
-        charset = resp.headers.get_content_charset() or "utf-8"
-        return resp.read().decode(charset, errors="replace")
+    global _SESSION
+    if _SESSION is None:
+        # impersonate="chrome124" sets the TLS fingerprint + HTTP/2 SETTINGS
+        # to match a real Chrome 124 client, bypassing TLS-fingerprint blocks.
+        _SESSION = requests.Session(impersonate="chrome124")
+    return _SESSION
+
+
+def fetch_listing_html(url: str, timeout: int = 30) -> str:
+    """Fetch *url* via curl_cffi and return its HTML. Raises on HTTP errors."""
+    resp = get_session().get(url, timeout=timeout)
+    resp.raise_for_status()
+    return resp.text
 
 
 def is_detail_url(href: str) -> bool:
@@ -509,7 +491,7 @@ def main(argv: Optional[list[str]] = None) -> int:
         except RuntimeError as exc:
             logger.error("Scraping error for %d: %s", year, exc)
             continue
-        except urllib.error.URLError as exc:
+        except Exception as exc:
             logger.error("HTTP error scraping %d: %s", year, exc)
             continue
         logger.info("Found %d item(s) for %d.", len(items), year)
