@@ -210,6 +210,7 @@ sources:
     name: FedEx Freight Holding Company, Inc.
     ticker: FDXF
     ir_url: https://ir.fedexfreight.com/
+    news_releases_path: news-events/press-releases
   - slug: fis-global
     name: Fidelity National Information Services, Inc.
     ticker: FIS
