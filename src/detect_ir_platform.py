@@ -56,16 +56,19 @@ Usage
   # Custom sources file
   python src/detect_ir_platform.py --all --sources /path/to/sources.yaml
 
-  # Redirect-friendly: output is plain fixed-width text, no ANSI
-  python src/detect_ir_platform.py --all > platforms.txt
+  # Redirect-friendly: output is CSV, no ANSI
+  python src/detect_ir_platform.py --all > platforms.csv
 
   # Control concurrency and per-request timeout
   python src/detect_ir_platform.py --all --workers 8 --timeout 15
 
 Output
 ------
-Fixed-width table: slug | ticker | platform | ir_url
-Column widths auto-size to content. Header + separator on the first two lines.
+CSV with header row: slug,ticker,platform,ir_url
+To view this as a human-friendly fixed-width table, pipe it through the
+companion script, e.g.:
+  python src/detect_ir_platform.py --all | python src/print_csv_table.py
+  python src/print_csv_table.py reports/latest/ir_platform.csv
 
 Requires
 --------
@@ -425,24 +428,14 @@ def detect_platforms_parallel(df: pd.DataFrame, workers: int, timeout: int) -> p
 # Output formatting
 # ---------------------------------------------------------------------------
 
-def print_table(df: pd.DataFrame) -> None:
-    """Print *df* as a clean fixed-width table to stdout.
+def print_csv(df: pd.DataFrame) -> None:
+    """Print *df* to stdout as machine-readable CSV, header row included.
 
-    Plain ASCII, no ANSI codes — trivially redirectable with >, tee, etc.
+    Column order is whatever *df* already has (callers pass
+    slug, ticker, platform, ir_url). Use print_csv_table.py to render this
+    back into a human-friendly fixed-width table.
     """
-    cols = list(df.columns)
-    widths = {col: len(col) for col in cols}
-    for _, row in df.iterrows():
-        for col in cols:
-            widths[col] = max(widths[col], len(str(row[col])))
-
-    def fmt_row(values: list[str]) -> str:
-        return "  ".join(v.ljust(widths[col]) for col, v in zip(cols, values))
-
-    print(fmt_row(cols))
-    print("  ".join("-" * widths[col] for col in cols))
-    for _, row in df.iterrows():
-        print(fmt_row([str(row[col]) for col in cols]))
+    df.to_csv(sys.stdout, index=False, lineterminator="\n")
 
 # ---------------------------------------------------------------------------
 # CLI
@@ -522,7 +515,7 @@ def main(argv: Optional[list[str]] = None) -> int:
     # --all: parallel detection across every row
     if args.all:
         result = detect_platforms_parallel(df, workers=args.workers, timeout=args.timeout)
-        print_table(result)
+        print_csv(result)
         return 0
 
     # Single-target lookups
@@ -549,7 +542,7 @@ def main(argv: Optional[list[str]] = None) -> int:
         "platform": platform,
         "ir_url":   ir_url,
     }])
-    print_table(result[["slug", "ticker", "platform", "ir_url"]])
+    print_csv(result[["slug", "ticker", "platform", "ir_url"]])
     return 0
 
 

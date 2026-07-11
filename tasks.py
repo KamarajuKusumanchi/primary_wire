@@ -4,15 +4,20 @@ tasks.py - task automation for primary_wire, using Invoke (https://www.pyinvoke.
 Regenerates the files under reports/latest/ by running the report scripts in
 src/ and capturing their stdout, replacing the old manual workflow of:
 
-    python.exe src/detect_ir_platform.py      > reports/latest/ir_platform.txt
+    python.exe src/detect_ir_platform.py      > reports/latest/ir_platform.csv
     python.exe src/missing_tickers.py         > reports/latest/missing_tickers.txt
     python.exe src/check_scraper_coverage.py  > reports/latest/scraper_coverage.txt
+
+ir_platform.csv is machine-readable (slug,ticker,platform,ir_url). To view it
+as a human-friendly fixed-width table, run:
+
+    uv run python src/print_csv_table.py reports/latest/ir_platform.csv
 
 Usage
 -----
     invoke --list              # show all available tasks
     invoke reports              # regenerate all three reports (default task)
-    invoke ir-platform           # regenerate just reports/latest/ir_platform.txt
+    invoke ir-platform           # regenerate just reports/latest/ir_platform.csv
     invoke missing-tickers       # regenerate just reports/latest/missing_tickers.txt
     invoke scraper-coverage      # regenerate just reports/latest/scraper_coverage.txt
     invoke smoke-test            # quick "is anything broken?" check (see below)
@@ -31,7 +36,7 @@ REPORTS_DIR = ROOT / "reports" / "latest"
 
 # name -> (script path relative to ROOT, output filename in reports/latest/)
 REPORT_SPECS = {
-    "ir-platform": ("src/detect_ir_platform.py", "ir_platform.txt"),
+    "ir-platform": ("src/detect_ir_platform.py", "ir_platform.csv"),
     "missing-tickers": ("src/missing_tickers.py", "missing_tickers.txt"),
     "scraper-coverage": ("src/check_scraper_coverage.py", "scraper_coverage.txt"),
 }
@@ -65,7 +70,7 @@ def _run_report(c, name):
 
 @task
 def ir_platform(c):
-    """Regenerate reports/latest/ir_platform.txt (detect_ir_platform.py --all)."""
+    """Regenerate reports/latest/ir_platform.csv (detect_ir_platform.py --all)."""
     _run_report(c, "ir-platform")
 
 
