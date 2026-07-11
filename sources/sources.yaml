@@ -398,6 +398,7 @@ sources:
     name: The TJX Companies, Inc.
     ticker: TJX
     ir_url: https://investor.tjx.com/
+    news_releases_path: investors/press-releases
   - slug: tractor-supply
     name: Tractor Supply Company
     ticker: TSCO

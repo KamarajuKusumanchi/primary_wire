@@ -38,6 +38,11 @@ notified:
 #    - slug: paramount
     - slug: teradyne
 
+notified_gated:
+  scraper: scrape_notified_gated
+  sources:
+    - slug: tjx
+
 q4_ir:
   scraper: scrape_q4_ir
   sources:

@@ -1,6 +1,6 @@
 Sources in sources.yaml:     100
-With automated scraper:      11 (11.0%)
-Without automated scraper:   89
+With automated scraper:      12 (12.0%)
+Without automated scraper:   88
 
 Uncovered slugs:
   accenture
@@ -80,7 +80,6 @@ Uncovered slugs:
   synchrony-financial
   tesla
   texas-instruments
-  tjx
   tractor-supply
   united-airlines
   universal-health-services
