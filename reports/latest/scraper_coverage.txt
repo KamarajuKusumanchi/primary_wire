@@ -1,6 +1,6 @@
 Sources in sources.yaml:     100
-With automated scraper:      13 (13.0%)
-Without automated scraper:   87
+With automated scraper:      14 (14.0%)
+Without automated scraper:   86
 
 Uncovered slugs:
   accenture
@@ -64,7 +64,6 @@ Uncovered slugs:
   o-reilly-auto-parts
   onsemi
   palantir
-  paramount
   pepsi
   qualcomm
   robinhood
