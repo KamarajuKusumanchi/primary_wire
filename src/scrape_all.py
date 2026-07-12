@@ -15,6 +15,9 @@ Usage:
     python src/scrape_all.py --year 2026 --dry-run -v          # verbose
     python src/scrape_all.py --smoke-test --dry-run            # quick "is anything broken?" check
     python src/scrape_all.py --smoke-test --dry-run --seed 42  # reproducible smoke test
+    python src/scrape_all.py --smoke-test --platform notified --dry-run
+                                                                 # smoke-test just one platform,
+                                                                 # e.g. after touching its scraper
 
 --smoke-test runs one randomly-picked source per distinct (scraper, extra
 args, durable source facts) signature instead of every configured source --
@@ -146,7 +149,7 @@ def _normalize_for_signature(value: object) -> object:
 
 
 def group_sources_by_signature(
-    config: dict, sources_lookup: dict[str, dict]
+    config: dict, sources_lookup: dict[str, dict], platform: str | None = None
 ) -> dict[Signature, list[Source]]:
     """Group every configured source by its (scraper module, extra args,
     durable source facts) signature.
@@ -178,11 +181,15 @@ def group_sources_by_signature(
     durable field to a new or existing scraper only requires registering it
     in DURABLE_SIGNATURE_FIELDS, no changes needed here.
 
+    If `platform` is given, only sources under that platform group are
+    considered -- this is what lets --smoke-test --platform X scope its
+    signature coverage to just X instead of the whole config.
+
     Returns a dict preserving config order, mapping each signature to the
     list of sources that share it.
     """
     groups: dict[Signature, list[Source]] = {}
-    for group_name, module_name, entry in iter_selected_sources(config, platform=None, slug=None):
+    for group_name, module_name, entry in iter_selected_sources(config, platform=platform, slug=None):
         extra_args = tuple(sorted(entry.get("args", [])))
 
         source_facts = sources_lookup.get(entry["slug"], {})
@@ -198,7 +205,8 @@ def group_sources_by_signature(
 
 
 def pick_smoke_test_selection(
-    config: dict, sources_lookup: dict[str, dict], rng: random.Random
+    config: dict, sources_lookup: dict[str, dict], rng: random.Random,
+    platform: str | None = None,
 ) -> list[Source]:
     """Pick one representative source per (scraper, args, durable facts) signature.
 
@@ -210,9 +218,15 @@ def pick_smoke_test_selection(
 
     `rng` is injected (rather than using the `random` module's global state)
     so callers can pass a seeded random.Random for reproducible picks.
+
+    If `platform` is given, only signatures found under that platform group
+    are sampled from -- e.g. --smoke-test --platform notified picks one
+    random slug from 'notified' (or, if that platform happens to span more
+    than one signature, one per signature within it) instead of touching
+    every configured source.
     """
     selection: list[Source] = []
-    for signature, candidates in group_sources_by_signature(config, sources_lookup).items():
+    for signature, candidates in group_sources_by_signature(config, sources_lookup, platform=platform).items():
         chosen = rng.choice(candidates)
         if len(candidates) > 1:
             siblings = ", ".join(entry["slug"] for _, _, entry in candidates)
@@ -231,13 +245,16 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--slug", help="Scrape only this slug (omit for all configured)")
     parser.add_argument("--platform",
                         help="Scrape only sources under this IR platform group in "
-                             "scraper_config.yaml, e.g. 'investorroom' (omit for all)")
+                             "scraper_config.yaml, e.g. 'investorroom' (omit for all). "
+                             "Combine with --smoke-test to smoke-test just this platform.")
     parser.add_argument("--smoke-test", action="store_true",
                         help="Scrape one randomly-picked source per distinct (scraper, "
                              "extra args, durable source facts) signature, instead of "
                              "every configured source -- a quick 'is anything broken?' "
-                             "check. Cannot be combined with --slug/--platform. Combine "
-                             "with --dry-run to avoid writing data.")
+                             "check. Combine with --platform to scope the signatures "
+                             "sampled from to just that platform (e.g. after changing "
+                             "code for one platform's scraper). Cannot be combined with "
+                             "--slug. Combine with --dry-run to avoid writing data.")
     parser.add_argument("--seed", type=int,
                         help="Random seed for --smoke-test, for reproducible picks")
     parser.add_argument("--dry-run", action="store_true", help="Pass --dry-run to every scraper")
@@ -246,8 +263,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("-v", "--verbose", action="store_true")
     args = parser.parse_args(argv)
 
-    if args.smoke_test and (args.slug or args.platform):
-        parser.error("--smoke-test cannot be combined with --slug or --platform")
+    if args.smoke_test and args.slug:
+        parser.error("--smoke-test cannot be combined with --slug")
     if args.seed is not None and not args.smoke_test:
         parser.error("--seed only has an effect together with --smoke-test")
 
@@ -268,10 +285,12 @@ def main(argv: list[str] | None = None) -> int:
     ran = 0
 
     if args.smoke_test:
-        sources = pick_smoke_test_selection(config, sources_lookup, random.Random(args.seed))
-        signature_count = len(group_sources_by_signature(config, sources_lookup))
-        logger.info("Smoke test: %d source(s) selected across %d signature group(s): %s",
-                    len(sources), signature_count,
+        sources = pick_smoke_test_selection(
+            config, sources_lookup, random.Random(args.seed), platform=args.platform)
+        signature_count = len(group_sources_by_signature(config, sources_lookup, platform=args.platform))
+        scope = f" in platform %r" % args.platform if args.platform else ""
+        logger.info("Smoke test: %d source(s) selected across %d signature group(s)%s: %s",
+                    len(sources), signature_count, scope,
                     ", ".join(entry["slug"] for _, _, entry in sources))
     else:
         sources = list(iter_selected_sources(config, args.platform, args.slug))
@@ -293,7 +312,13 @@ def main(argv: list[str] | None = None) -> int:
 
     if ran == 0:
         if args.smoke_test:
-            logger.error("No sources found in scraper_config.yaml to smoke-test")
+            if args.platform:
+                logger.error(
+                    "No sources found in scraper_config.yaml to smoke-test for platform=%r",
+                    args.platform,
+                )
+            else:
+                logger.error("No sources found in scraper_config.yaml to smoke-test")
         else:
             logger.error(
                 "No matching entries found in scraper_config.yaml for platform=%r slug=%r",

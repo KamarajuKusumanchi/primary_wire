@@ -136,11 +136,6 @@ from typing import Optional
 from urllib.parse import parse_qsl, urlencode, urljoin, urlparse, urlunparse
 
 try:
-    from curl_cffi import requests
-except ImportError:
-    sys.exit("Missing dependency. Install with: pip install curl_cffi")
-
-try:
     from bs4 import BeautifulSoup
 except ImportError:
     sys.exit("Missing dependency. Install with: pip install beautifulsoup4 lxml")
@@ -156,6 +151,13 @@ from utils.scrape_utils import (
     parse_date,
     parse_time,
     parse_year_args,
+)
+from utils.scrape_notified_utils import (
+    MAX_PAGES,
+    extract_date_and_time_from_row as _shared_extract_date_and_time_from_row,
+    fetch_html as fetch_listing_html,
+    find_last_page,
+    parse_short_date,
 )
 
 # ---------------------------------------------------------------------------
@@ -183,8 +185,6 @@ DEBUG_HTML_PATH = "notified_gated_debug_page.html"
 # be found (see get_form_tokens()). Separate from --debug-dump-html, which
 # dumps the *fetched listing* HTML instead.
 
-MAX_PAGES = 100  # safety cap on pagination loops, same as scrape_notified.py
-
 # Detail-page links, e.g. /news-releases/news-release-details/<slug>.
 # Same shape as scrape_notified.py's DETAIL_URL_RE, but anchored to a single
 # trailing segment (no intermediate section) since that's what this site's
@@ -194,10 +194,10 @@ DETAIL_URL_RE = re.compile(
     re.IGNORECASE,
 )
 
-# M/D/YY date format (e.g. "12/09/25"; two-digit years assumed to be in the
-# 2000s). Confirmed for TJX's "col-date" cell text ("12/09/25 - 3:35 PM
-# EST"), including correctly across the Mar/Nov DST boundary.
-SHORT_DATE_RE = re.compile(r"\b(\d{1,2})/(\d{1,2})/(\d{2})\b")
+# M/D/YY date parsing (e.g. "12/09/25"; two-digit years assumed to be in the
+# 2000s), confirmed for TJX's "col-date" cell text ("12/09/25 - 3:35 PM
+# EST") including correctly across the Mar/Nov DST boundary, is shared with
+# scrape_notified.py -- see parse_short_date() in utils/scrape_notified_utils.py.
 
 logger = logging.getLogger("scrape_notified_gated")
 
@@ -215,23 +215,6 @@ class FormTokens:
     """The dynamic bits of the exposed-filter form we need to resubmit it."""
     widget_hash: str      # e.g. "3a25328c5338...845ec"
     form_build_id: str    # e.g. "form-49Stth9OoGllrf5hEHjBfQRqZlJy2MD7DPcs-I1nQFs"
-
-
-def parse_short_date(text: str):
-    """Parse M/D/YY dates like '12/09/25' (2000s assumed).
-
-    Returns (date, raw_match) or (None, "").
-    """
-    m = SHORT_DATE_RE.search(text)
-    if m:
-        month, day, yy = int(m.group(1)), int(m.group(2)), int(m.group(3))
-        year = 2000 + yy
-        raw = m.group(0)
-        try:
-            return date(year, month, day), raw
-        except ValueError:
-            pass
-    return None, ""
 
 
 # ---------------------------------------------------------------------------
@@ -369,63 +352,14 @@ def get_year_url(base_url: str, year: int, timeout_ms: int = DEFAULT_TIMEOUT_MS,
 # Step 2: fetch + parse the listing page (plain HTTP, no Playwright)
 # ---------------------------------------------------------------------------
 
-_SESSION = None
-
-
-def get_session():
-    """Return a persistent HTTP session.
-
-    Uses curl_cffi to impersonate Chrome's TLS fingerprint (JA3/JA4), which
-    is what gets the year-filtered listing page past this site's bot
-    mitigation (see module docstring).
-    """
-    global _SESSION
-    if _SESSION is None:
-        # impersonate="chrome124" sets the TLS fingerprint + HTTP/2 SETTINGS
-        # to match a real Chrome 124 client, bypassing TLS-fingerprint blocks.
-        _SESSION = requests.Session(impersonate="chrome124")
-    return _SESSION
-
-
-def fetch_listing_html(url: str, timeout: int = 30) -> str:
-    """Fetch *url* via curl_cffi and return its HTML. Raises on HTTP errors."""
-    resp = get_session().get(url, timeout=timeout)
-    resp.raise_for_status()
-    return resp.text
-
+# get_session()/fetch_html() (imported above as fetch_listing_html) --
+# curl_cffi Chrome-TLS-impersonation session, which is what gets the
+# year-filtered listing page past this site's bot mitigation (see module
+# docstring) -- are shared with scrape_notified.py and now live in
+# utils/scrape_notified_utils.py.
 
 def is_detail_url(href: str) -> bool:
     return bool(DETAIL_URL_RE.search(href))
-
-
-def find_last_page(soup: "BeautifulSoup") -> Optional[int]:
-    """Read the last page index from the 'last »' pagination link.
-
-    Ported verbatim from scrape_notified.py's find_last_page(). The
-    year-filtered listing still uses the same Drupal Views pager markup as
-    the unfiltered listing, so the same 'last »' link (or, failing that,
-    the highest ?page= value seen among pagination links) tells us how many
-    pages this year's filtered result set spans.
-
-    Returns the 0-based page index, or None if not found (e.g. the result
-    set fits on a single page and no pager is rendered at all).
-    """
-    for a in soup.find_all("a", href=True, title=True):
-        title = a.get("title", "").lower()
-        if "last page" in title or title == "go to last page":
-            href = a["href"]
-            m = re.search(r"[?&]page=(\d+)", href)
-            if m:
-                return int(m.group(1))
-    # Fallback: scan all pagination links for the highest ?page= value
-    max_page: Optional[int] = None
-    for a in soup.find_all("a", href=True):
-        m = re.search(r"[?&]page=(\d+)", a["href"])
-        if m:
-            val = int(m.group(1))
-            if max_page is None or val > max_page:
-                max_page = val
-    return max_page
 
 
 def add_page_param(year_url: str, page: int) -> str:
@@ -453,65 +387,23 @@ def add_page_param(year_url: str, page: int) -> str:
 def extract_date_and_time_from_row(anchor) -> tuple[Optional[date], str, str]:
     """Find the publish date/time near a press-release link.
 
-    Adapted from scrape_notified.py's extract_date_and_time_from_row(): try
-    the enclosing <tr>'s first <td> first (classic table listing), then fall
-    back to scanning nearby ancestor text, in both cases excluding the
-    anchor's own (headline) text so a date mentioned in the headline itself
-    isn't mistaken for the publish date/time.
+    Thin wrapper around the shared implementation in
+    utils/scrape_notified_utils.py (see that function's docstring for the
+    full strategy). This script passes try_long_date_in_cell=True and
+    try_short_date_in_row=True -- its original, TJX-tuned behavior of
+    trying both the short M/D/YY format and the long-form date in both the
+    date cell and the row text.
 
     Confirmed against TJX's actual markup (see module docstring): each <tr>
     has a first <td class="col-date"> holding the "M/D/YY - H:MM AM/PM TZ"
     text, and a second <td class="col-title"> holding the headline <a>. The
-    walk-up-to-<tr>-then-find("td") branch below hits the date cell directly
-    (a few parent hops up from the anchor); the ancestor-text fallback loops
+    walk-up-to-<tr>-then-find("td") branch hits the date cell directly (a
+    few parent hops up from the anchor); the ancestor-text fallback loops
     exist for robustness on other sites using this same setup.
     """
-    anchor_text = anchor.get_text(separator=" ", strip=True)
-
-    def _without_anchor_text(text: str) -> str:
-        if anchor_text and anchor_text in text:
-            text = text.replace(anchor_text, " ")
-        return text
-
-    node = anchor
-    for _ in range(10):
-        node = node.parent
-        if node is None:
-            break
-        if node.name == "tr":
-            first_td = node.find("td")
-            if first_td:
-                cell_text = first_td.get_text(separator=" ", strip=True)
-                d, raw = parse_short_date(cell_text)
-                if d:
-                    return d, raw, parse_time(cell_text)
-                d, raw = parse_date(cell_text)
-                if d:
-                    return d, raw, parse_time(cell_text)
-            row_text = _without_anchor_text(node.get_text(separator=" ", strip=True))
-            d, raw = parse_short_date(row_text)
-            if d:
-                return d, raw, parse_time(row_text)
-            d, raw = parse_date(row_text)
-            if d:
-                return d, raw, parse_time(row_text)
-            break
-
-    node = anchor
-    for _ in range(5):
-        parent = node.parent
-        if parent is None:
-            break
-        card_text = _without_anchor_text(parent.get_text(separator=" ", strip=True))
-        d, raw = parse_short_date(card_text)
-        if d:
-            return d, raw, parse_time(card_text)
-        d, raw = parse_date(card_text)
-        if d:
-            return d, raw, parse_time(card_text)
-        node = parent
-
-    return None, "", ""
+    return _shared_extract_date_and_time_from_row(
+        anchor, try_long_date_in_cell=True, try_short_date_in_row=True
+    )
 
 
 def log_empty_result_diagnostics(soup: "BeautifulSoup") -> None:

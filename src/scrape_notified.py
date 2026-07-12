@@ -113,16 +113,6 @@ from typing import Optional
 from urllib.parse import urlencode, urljoin, urlparse, urlunparse
 
 try:
-    from curl_cffi import requests
-    _HTTP_BACKEND = "curl_cffi"
-except ImportError:
-    sys.exit(
-        "Missing dependency: curl_cffi is required (plain requests does not work -- "
-        "the server enforces TLS fingerprinting and will reject connections from it).\n"
-        "Install with: pip install curl_cffi"
-    )
-
-try:
     from bs4 import BeautifulSoup
 except ImportError:
     sys.exit("Missing dependency. Install with: pip install beautifulsoup4 lxml")
@@ -140,6 +130,13 @@ from utils.scrape_utils import (
     parse_date,
     parse_time,
     parse_year_args,
+)
+from utils.scrape_notified_utils import (
+    MAX_PAGES,
+    extract_date_and_time_from_row,
+    fetch_html,
+    find_last_page,
+    parse_short_date,
 )
 
 
@@ -173,8 +170,6 @@ DEFAULT_FIRST_PAGE_INDEX = 0
 # first page is ?page=0); some (e.g. Teradyne) are 1-indexed instead
 # (?page=0 404s; the first page is ?page=1).
 
-MAX_PAGES = 100  # safety cap on pagination loops
-
 # Regex to identify detail-page hrefs on Notified/Drupal IR sites.
 # Matches paths like /news-releases/news-release-details/<slug>
 # or /press-releases/<slug> etc.  Deliberately broad: any multi-segment
@@ -183,10 +178,6 @@ DETAIL_URL_RE = re.compile(
     r"/(?:news-releases|press-releases|financial-releases)/[^/#?]+/[^/#?]+",
     re.IGNORECASE,
 )
-
-# M/D/YY date format used in the listing table (e.g. "6/26/26", "11/24/25").
-# Two-digit years are in the 2000s.
-SHORT_DATE_RE = re.compile(r"\b(\d{1,2})/(\d{1,2})/(\d{2})\b")
 
 # Some Notified/Drupal sites (e.g. Paramount) lay out each release as a
 # heading + summary + a separate "Read more" call-to-action link, rather
@@ -221,139 +212,15 @@ class NewsItem(_BaseNewsItem):
 
 
 # ---------------------------------------------------------------------------
-# Date helpers
+# Date helpers, HTTP session, and pagination helpers
 # ---------------------------------------------------------------------------
-
-def parse_short_date(text: str) -> tuple[Optional[date], str]:
-    """Parse M/D/YY dates like '6/26/26' or '11/24/25' (2000s assumed).
-
-    Returns (date, raw_match) or (None, '').
-    """
-    m = SHORT_DATE_RE.search(text)
-    if m:
-        month, day, yy = int(m.group(1)), int(m.group(2)), int(m.group(3))
-        year = 2000 + yy
-        raw = m.group(0)
-        try:
-            return date(year, month, day), raw
-        except ValueError:
-            pass
-    return None, ""
-
-
-def extract_date_and_time_from_row(anchor) -> tuple[Optional[date], str, str]:
-    """Extract the publish date and time for a press-release link on a
-    Notified listing page.
-
-    Returns (publish_date, raw_date_text, publish_time). publish_time is a
-    raw, unconverted "clock time + timezone" substring (e.g. "4:30 am EDT"),
-    or "" if none is found near the date -- see parse_time() in
-    utils/scrape_utils.py. It is extracted from the same candidate text used
-    to find the date (below), since sites that publish a time put it
-    immediately after the date in the same row/card text.
-
-    Strategy 1: The listing table has a Date column as the first <td> in the
-    same <tr> as (or an ancestor of) the link.  Walk up to find the <tr> and
-    read the first <td>'s text.
-
-    Strategy 2: The row's summary text contains a long-form date like
-    "June 26, 2026" -- handed off to scrape_utils.parse_date().
-
-    Strategy 3: Walk up to 5 ancestors scanning all text (same as
-    scrape_investorroom's extract_date_near_link).
-
-    IMPORTANT: headlines themselves often contain a date that is NOT the
-    publish date, e.g. "Apollo to Announce Second Quarter 2026 Financial
-    Results on August 4, 2026" (published Jun 25, but mentions Aug 4).  Sites
-    that lay out releases as cards (a date label followed by an <h3><a>
-    heading) rather than <table> rows have no <tr> ancestor, so Strategy 1
-    never fires and the ancestor walk in Strategy 3 would otherwise match the
-    headline's own embedded date on the very first iteration -- before ever
-    reaching the sibling text that holds the real publish date.  To avoid
-    this, the anchor's own text is stripped out of every candidate string
-    before searching it for a date (and, incidentally, before searching for
-    a time -- a headline is very unlikely to contain a clock time, but this
-    keeps the two extractions consistent).
-    """
-    anchor_text = anchor.get_text(separator=" ", strip=True)
-
-    def _without_anchor_text(text: str) -> str:
-        """Strip the anchor's own (title) text out of a larger text blob.
-
-        Prevents a date mentioned inside the headline from being mistaken
-        for the row's publish date.
-        """
-        if anchor_text and anchor_text in text:
-            text = text.replace(anchor_text, " ")
-        return text
-
-    # Strategy 1: find the enclosing <tr> and read first <td>
-    node = anchor
-    for _ in range(10):
-        node = node.parent
-        if node is None:
-            break
-        if node.name == "tr":
-            first_td = node.find("td")
-            if first_td:
-                cell_text = first_td.get_text(separator=" ", strip=True)
-                d, raw = parse_short_date(cell_text)
-                if d:
-                    return d, raw, parse_time(cell_text)
-            # Also scan the full row text for long-form dates (Strategy 2),
-            # excluding the headline's own text.
-            row_text = _without_anchor_text(node.get_text(separator=" ", strip=True))
-            d, raw = parse_date(row_text)
-            if d:
-                return d, raw, parse_time(row_text)
-            break
-
-    # Strategy 3: walk ancestors, never searching inside the headline's own text
-    node = anchor
-    for _ in range(5):
-        parent = node.parent
-        if parent is None:
-            break
-        card_text = _without_anchor_text(parent.get_text(separator=" ", strip=True))
-        d, raw = parse_short_date(card_text)
-        if d:
-            return d, raw, parse_time(card_text)
-        d, raw = parse_date(card_text)
-        if d:
-            return d, raw, parse_time(card_text)
-        node = parent
-
-    return None, "", ""
-
-
-# ---------------------------------------------------------------------------
-# HTTP helpers
-# ---------------------------------------------------------------------------
-
-_SESSION = None
-
-
-def get_session():
-    """Return a persistent HTTP session.
-
-    Uses curl_cffi to impersonate Chrome's TLS fingerprint (JA3/JA4), which
-    is required for Notified/Drupal IR sites that reject the standard Python
-    TLS stack.
-    """
-    global _SESSION
-    if _SESSION is None:
-        # impersonate="chrome124" sets the TLS fingerprint + HTTP/2 SETTINGS
-        # to match a real Chrome 124 client, bypassing TLS-fingerprint blocks.
-        _SESSION = requests.Session(impersonate="chrome124")
-    return _SESSION
-
-
-def fetch_html(url: str, timeout: int = 30) -> str:
-    """Fetch a URL and return its HTML. Raises on HTTP errors."""
-    resp = get_session().get(url, timeout=timeout)
-    resp.raise_for_status()
-    return resp.text
-
+#
+# parse_short_date(), extract_date_and_time_from_row(), get_session()/
+# fetch_html(), and find_last_page() are shared with scrape_notified_gated.py
+# and now live in utils/scrape_notified_utils.py (imported above). This
+# script calls extract_date_and_time_from_row() with its original behavior
+# (both try_long_date_in_cell and try_short_date_in_row left at their
+# default of False) -- see that function's docstring for why.
 
 def is_detail_url(href: str) -> bool:
     """Return True if ``href`` looks like a Notified/Drupal press-release detail URL."""
@@ -383,29 +250,6 @@ def listing_page_url(
 # ---------------------------------------------------------------------------
 # Listing-page parsing
 # ---------------------------------------------------------------------------
-
-def find_last_page(soup: BeautifulSoup) -> Optional[int]:
-    """Read the last page index from the 'last »' pagination link.
-
-    Returns the 0-based page index, or None if not found.
-    """
-    for a in soup.find_all("a", href=True, title=True):
-        title = a.get("title", "").lower()
-        if "last page" in title or title == "go to last page":
-            href = a["href"]
-            m = re.search(r"[?&]page=(\d+)", href)
-            if m:
-                return int(m.group(1))
-    # Fallback: scan all pagination links for the highest ?page= value
-    max_page: Optional[int] = None
-    for a in soup.find_all("a", href=True):
-        m = re.search(r"[?&]page=(\d+)", a["href"])
-        if m:
-            val = int(m.group(1))
-            if max_page is None or val > max_page:
-                max_page = val
-    return max_page
-
 
 def _row_container(anchor, max_up: int = 8):
     """Return the tightest ancestor of ``anchor`` that still contains only
