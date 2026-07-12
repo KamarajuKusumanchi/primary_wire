@@ -29,11 +29,62 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
-from utils.scrape_utils import NewsItem, dedupe_by_url, finalize_and_output  # noqa: E402
+from utils.scrape_utils import NewsItem, dedupe_by_url, finalize_and_output, parse_date  # noqa: E402
 
 
 def _item(title: str, url: str, d: date | None) -> NewsItem:
     return NewsItem(slug="x", ticker="X", title=title, url=url, publish_date=d)
+
+
+# ---------------------------------------------------------------------------
+# parse_date()
+# ---------------------------------------------------------------------------
+# Regression coverage added after debugging scrape_notified_gated.py against
+# Robinhood: GLOBE NEWSWIRE/PR Newswire datelines abbreviate Jan/Feb (and
+# Aug/Sept/Oct/Nov/Dec) with a trailing period ("Feb. 19, 2026"), which
+# Python's %b strptime directive rejects outright. Combined with parse_date()
+# previously giving up after the *first* regex match instead of trying every
+# match in the text, this silently dropped the publish date -- and therefore
+# the whole item, once the year filter ran -- for any January/February
+# release using this dateline style. Confirmed live against Robinhood's
+# investor-relations site: 3 of 16 2026 press releases were dropped this way.
+
+def test_parse_date_handles_abbreviated_month_with_trailing_period():
+    d, raw = parse_date("MENLO PARK, Calif. , Jan. 02, 2026 (GLOBE NEWSWIRE) -- ...")
+    assert d == date(2026, 1, 2)
+    assert raw == "Jan. 02, 2026"
+
+    d, raw = parse_date("MENLO PARK, Calif., Feb. 19, 2026 (GLOBE NEWSWIRE) today reported ...")
+    assert d == date(2026, 2, 19)
+
+
+def test_parse_date_skips_unparseable_match_and_finds_a_later_good_one():
+    # The headline mentions a *future* event date in full-month-name format
+    # ("February 10, 2026"); the actual dateline is the abbreviated,
+    # period-suffixed publish date ("Feb. 10, 2026") appearing earlier in
+    # the text. Either being found is "correct" in the sense of returning
+    # *a* real 2026 date, but the key regression this guards against is that
+    # parse_date() must not return None just because the first match it
+    # encounters fails to strptime.
+    text = (
+        "Robinhood Markets, Inc. to Announce Fourth Quarter and Full Year "
+        "2025 Results on February 10, 2026 -- MENLO PARK, Calif., Feb. 10, "
+        "2026 (GLOBE NEWSWIRE) -- Today, Robinhood Markets, Inc. announced "
+        "that it will release its fourth quarter and full year 2025 "
+        "financial results on Tuesday, February 10, 2026, after market close."
+    )
+    d, raw = parse_date(text)
+    assert d == date(2026, 2, 10)
+
+
+def test_parse_date_still_handles_unabbreviated_and_other_formats():
+    # Non-regression: the common cases parse_date already handled correctly
+    # must keep working after the fix.
+    assert parse_date("MENLO PARK, Calif., July 02, 2026 (GLOBE NEWSWIRE)")[0] == date(2026, 7, 2)
+    assert parse_date("NORTH CHICAGO, Ill., June 26, 2026")[0] == date(2026, 6, 26)
+    assert parse_date("06/18/2026 some text")[0] == date(2026, 6, 18)
+    assert parse_date("2026-06-18 iso date")[0] == date(2026, 6, 18)
+    assert parse_date("nothing date-like here")[0] is None
 
 
 def test_dedupe_by_url_keeps_first_occurrence_and_ignores_trailing_slash():

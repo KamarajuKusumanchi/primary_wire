@@ -70,6 +70,16 @@ again, run with --debug-dump-html and inspect the saved HTML -- DETAIL_URL_RE
 and parse_listing_page() below will need re-adjusting to match whatever the
 new real markup is.
 
+The year filter only narrows *which* year is returned; it does not disable
+the site's normal 10-items-per-page listing pager. TJX's filtered result
+sets happened to fit on a single page for the years tested, which is why
+earlier versions of this script fetched only page 0. Robinhood does not:
+its year-filtered listing still paginates, so scrape_year() below now walks
+pages the same way scrape_notified.py's scrape_one_pass() does (read the
+'last »' pager link, then fetch page=1, 2, ... by appending &page=N to the
+year-filtered URL) until it runs out of pages, hits an empty page, or a
+page returns nothing new.
+
 Site-specific config (temporary, single-source)
 -------------------------------------------------
 FORM_ID below is a hardcoded module constant tuned for TJX, NOT yet read
@@ -118,11 +128,12 @@ import argparse
 import logging
 import re
 import sys
+import time
 from dataclasses import dataclass
 from datetime import date, datetime
 from pathlib import Path
 from typing import Optional
-from urllib.parse import urlencode, urljoin, urlparse, urlunparse
+from urllib.parse import parse_qsl, urlencode, urljoin, urlparse, urlunparse
 
 try:
     from curl_cffi import requests
@@ -171,6 +182,8 @@ DEBUG_HTML_PATH = "notified_gated_debug_page.html"
 # Where the live-DOM debug dump goes if the year-filter form's tokens can't
 # be found (see get_form_tokens()). Separate from --debug-dump-html, which
 # dumps the *fetched listing* HTML instead.
+
+MAX_PAGES = 100  # safety cap on pagination loops, same as scrape_notified.py
 
 # Detail-page links, e.g. /news-releases/news-release-details/<slug>.
 # Same shape as scrape_notified.py's DETAIL_URL_RE, but anchored to a single
@@ -385,6 +398,58 @@ def is_detail_url(href: str) -> bool:
     return bool(DETAIL_URL_RE.search(href))
 
 
+def find_last_page(soup: "BeautifulSoup") -> Optional[int]:
+    """Read the last page index from the 'last »' pagination link.
+
+    Ported verbatim from scrape_notified.py's find_last_page(). The
+    year-filtered listing still uses the same Drupal Views pager markup as
+    the unfiltered listing, so the same 'last »' link (or, failing that,
+    the highest ?page= value seen among pagination links) tells us how many
+    pages this year's filtered result set spans.
+
+    Returns the 0-based page index, or None if not found (e.g. the result
+    set fits on a single page and no pager is rendered at all).
+    """
+    for a in soup.find_all("a", href=True, title=True):
+        title = a.get("title", "").lower()
+        if "last page" in title or title == "go to last page":
+            href = a["href"]
+            m = re.search(r"[?&]page=(\d+)", href)
+            if m:
+                return int(m.group(1))
+    # Fallback: scan all pagination links for the highest ?page= value
+    max_page: Optional[int] = None
+    for a in soup.find_all("a", href=True):
+        m = re.search(r"[?&]page=(\d+)", a["href"])
+        if m:
+            val = int(m.group(1))
+            if max_page is None or val > max_page:
+                max_page = val
+    return max_page
+
+
+def add_page_param(year_url: str, page: int) -> str:
+    """Return *year_url* with a ``page=<page>`` query param added/updated.
+
+    The year-filtered URL already carries the exposed-filter's own params
+    (``<hash>_year[value]``, ``<hash>_widget_id``, ``form_build_id``,
+    ``form_id``) plus a ``#widget-form-base`` fragment (see build_year_url()).
+    Drupal Views pagers layer their own ``page=N`` (0-based) query param on
+    top of whatever exposed-filter params are already present -- confirmed
+    by the user against a live Robinhood listing, where appending
+    ``&page=1`` to the year-filtered URL reaches the second page of that
+    year's results. This just adds/replaces that one param, leaving
+    everything else (and the fragment) untouched.
+    """
+    parsed = urlparse(year_url)
+    # parse_qsl (not parse_qs) preserves param order and duplicate-free
+    # single values, which is all we need here.
+    params = [(k, v) for k, v in parse_qsl(parsed.query, keep_blank_values=True) if k != "page"]
+    params.append(("page", str(page)))
+    new_query = urlencode(params)
+    return urlunparse(parsed._replace(query=new_query))
+
+
 def extract_date_and_time_from_row(anchor) -> tuple[Optional[date], str, str]:
     """Find the publish date/time near a press-release link.
 
@@ -554,30 +619,90 @@ def parse_listing_page(html: str, base_url: str, slug: str, ticker: str) -> list
 
 def scrape_year(base_url: str, year: int, slug: str, ticker: str, timeout: int = 30,
                  timeout_ms: int = DEFAULT_TIMEOUT_MS, form_id: str = FORM_ID,
-                 debug_dump_html: Optional[Path] = None) -> list[NewsItem]:
+                 debug_dump_html: Optional[Path] = None,
+                 polite_delay: float = 15.0) -> list[NewsItem]:
     """Scrape one gated-Notified site's press releases for *year*.
 
     1. get_year_url() -- the one Playwright touchpoint (see its docstring).
-    2. fetch_listing_html() -- plain HTTP GET of that URL.
-    3. parse_listing_page() -- BeautifulSoup parse, same shape as
-       scrape_notified.py.
+    2. fetch_listing_html() + parse_listing_page() -- plain HTTP GET and
+       BeautifulSoup parse of page 0, same shape as scrape_notified.py.
+    3. Paginate through the rest of the year's results the same way
+       scrape_notified.py's scrape_one_pass() does: read the 'last »' link
+       to learn the total page count, then walk page=1, 2, ... appending
+       &page=N to the year-filtered URL (see add_page_param()), stopping at
+       the last page, on an empty page, or if a page returns nothing new.
+
+    The year filter itself only narrows *which* year's releases are
+    returned -- it does NOT disable the site's normal 10-items-per-page
+    listing pager. Some sites' filtered result sets happen to fit on one
+    page (TJX, at least for the years this was tested against); others
+    (confirmed: Robinhood) still paginate within a single year, so without
+    this loop only the newest 10 items for that year would be returned.
     """
     year_url = get_year_url(base_url, year, timeout_ms=timeout_ms, form_id=form_id)
     logger.info("Year-filtered URL for %d: %s", year, year_url)
 
-    html = fetch_listing_html(year_url, timeout=timeout)
+    all_items: list[NewsItem] = []
+    seen_urls: set[str] = set()
+    last_page: Optional[int] = None  # discovered from page 0
 
-    if debug_dump_html:
-        debug_dump_html.write_text(html, encoding="utf-8")
-        logger.info("Saved fetched HTML to %s", debug_dump_html)
+    for page_num_offset in range(MAX_PAGES):
+        page_idx = page_num_offset
+        url = year_url if page_idx == 0 else add_page_param(year_url, page_idx)
 
-    items = parse_listing_page(html, base_url=year_url, slug=slug, ticker=ticker)
-    return dedupe_by_url(items)
+        logger.info("Fetching listing page %d (page=%d): %s", page_num_offset + 1, page_idx, url)
+        html = fetch_listing_html(url, timeout=timeout)
+
+        if debug_dump_html and page_num_offset == 0:
+            debug_dump_html.write_text(html, encoding="utf-8")
+            logger.info("Saved fetched HTML to %s", debug_dump_html)
+
+        soup = BeautifulSoup(html, "lxml")
+
+        if last_page is None:
+            last_page = find_last_page(soup)
+            if last_page is not None:
+                logger.info("Last page index: %d (%d total pages) for %d", last_page, last_page + 1, year)
+            else:
+                logger.info(
+                    "No pager found for %d; assuming a single page of results.", year
+                )
+
+        page_items = parse_listing_page(html, base_url=url, slug=slug, ticker=ticker)
+
+        new_items = [item for item in page_items if item.url.rstrip("/") not in seen_urls]
+        for item in new_items:
+            seen_urls.add(item.url.rstrip("/"))
+        all_items.extend(new_items)
+
+        logger.info(
+            "Page %d (page=%d) for %d: %d item(s) found, %d new",
+            page_num_offset + 1, page_idx, year, len(page_items), len(new_items),
+        )
+
+        if last_page is not None and page_idx >= last_page:
+            logger.info("Reached last page (page=%d) for %d. Done.", last_page, year)
+            break
+
+        if not page_items:
+            logger.info("Empty page at page=%d for %d. Done.", page_idx, year)
+            break
+
+        if not new_items and page_items:
+            logger.warning(
+                "Page %d (page=%d) for %d: all %d item(s) already seen -- stopping to avoid loop.",
+                page_num_offset + 1, page_idx, year, len(page_items),
+            )
+            break
+
+        time.sleep(polite_delay)
+
+    return dedupe_by_url(all_items)
 
 
 def scrape(base_url: str, slug: str, ticker: str, years: Optional[set[int]],
            timeout: int = 30, timeout_ms: int = DEFAULT_TIMEOUT_MS, form_id: str = FORM_ID,
-           debug_dump_html: Optional[Path] = None) -> list[NewsItem]:
+           debug_dump_html: Optional[Path] = None, polite_delay: float = 15.0) -> list[NewsItem]:
     """Scrape one or more years, tolerating a per-year failure so one bad
     year (e.g. a transient block or timeout) doesn't abort the whole run.
     """
@@ -590,7 +715,7 @@ def scrape(base_url: str, slug: str, ticker: str, years: Optional[set[int]],
             items = scrape_year(
                 base_url, year, slug, ticker,
                 timeout=timeout, timeout_ms=timeout_ms, form_id=form_id,
-                debug_dump_html=debug_dump_html,
+                debug_dump_html=debug_dump_html, polite_delay=polite_delay,
             )
         except RuntimeError as exc:
             logger.error("Scraping error for %d: %s", year, exc)
@@ -674,8 +799,8 @@ def build_arg_parser() -> argparse.ArgumentParser:
     )
 
     # Shared: --polite-delay/--timeout/--debug-dump-html/--verbose, same as
-    # scrape_notified.py. --polite-delay isn't used by this script (there's
-    # no pagination loop to space out), but is accepted for CLI consistency.
+    # scrape_notified.py. --polite-delay now spaces out requests between
+    # pagination pages within a year (see scrape_year()'s pagination loop).
     add_network_and_debug_args(parser, default_polite_delay=15.0)
 
     browser = parser.add_argument_group("browser")
@@ -713,6 +838,7 @@ def main(argv: Optional[list[str]] = None) -> int:
         timeout=args.timeout,
         timeout_ms=args.browser_timeout * 1000,
         debug_dump_html=args.debug_dump_html,
+        polite_delay=args.polite_delay,
     )
     logger.info("Scraped %d item(s) total (before filtering).", len(all_items))
 

@@ -70,18 +70,46 @@ def parse_date(text: str) -> tuple[Optional[date], str]:
     """Return the first parseable date found in *text* and its raw matched string.
 
     Returns (None, "") if no date is recognised.
+
+    Two things make this more robust than a single regex-then-strptime call:
+
+    1. Tries every regex match in *text* (via finditer), not just the first
+       one found. Press-release listing rows/cards routinely contain more
+       than one date-like substring -- e.g. a headline that mentions a
+       future event date ("... Results on February 10, 2026") plus the
+       row's own separate publish-date field ("February 10, 2026") -- and
+       the first one encountered isn't always the one that happens to be
+       parseable (see point 2). Without this, a single bad match early in
+       the text would make the whole call give up and return None even
+       though a perfectly good date exists later in the same string.
+
+    2. Tolerates AP-style abbreviated months with a trailing period, e.g.
+       "Jan. 02, 2026" or "Feb. 19, 2026" -- the standard GLOBE NEWSWIRE /
+       PR Newswire dateline format for Jan./Feb./Aug./Sept./Oct./Nov./Dec.
+       DATE_PATTERNS' regex already matches these fine (the "." is
+       optional in the pattern), but Python's %b strptime directive
+       rejects the trailing period outright (`strptime("Feb. 10, 2026",
+       "%b %d, %Y")` raises ValueError -- %b wants "Feb", not "Feb."). Confirmed
+       via a live fetch of Robinhood's press-releases listing: several
+       January/February 2026 releases use exactly this dateline style and
+       were silently dropped by the year filter downstream because their
+       date extraction returned None. Stripping a lone trailing period
+       directly after the leading month token before the strptime attempt
+       fixes this without weakening the regex match itself.
     """
     for pattern, formats in DATE_PATTERNS:
-        m = pattern.search(text)
-        if not m:
-            continue
-        raw = m.group(0).strip()
-        cleaned = re.sub(r"\s+", " ", raw)
-        for fmt in formats:
-            try:
-                return datetime.strptime(cleaned, fmt).date(), raw
-            except ValueError:
-                continue
+        for m in pattern.finditer(text):
+            raw = m.group(0).strip()
+            cleaned = re.sub(r"\s+", " ", raw)
+            # Also try a period-stripped variant so "Jan. 02, 2026" parses
+            # via %b just as well as "Jan 02, 2026" does.
+            no_period = re.sub(r"^([A-Za-z]+)\.", r"\1", cleaned)
+            for candidate in dict.fromkeys([cleaned, no_period]):  # dedupe, preserve order
+                for fmt in formats:
+                    try:
+                        return datetime.strptime(candidate, fmt).date(), raw
+                    except ValueError:
+                        continue
     return None, ""
 
 
