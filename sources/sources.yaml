@@ -345,6 +345,7 @@ sources:
     name: Robinhood Markets, Inc.
     ticker: HOOD
     ir_url: https://investors.robinhood.com/
+    news_releases_path: press-releases
   - slug: ross-stores
     name: Ross Stores, Inc.
     ticker: ROST

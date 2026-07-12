@@ -72,13 +72,13 @@ new real markup is.
 
 Site-specific config (temporary, single-source)
 -------------------------------------------------
-NEWS_RELEASES_PATH and FORM_ID below are hardcoded module constants tuned
-for TJX, NOT yet read from sources.yaml or exposed as CLI flags. Once this
-has been tested against other companies using the same gated-Notified
-setup, these should move to sources.yaml fields (mirroring how
-scrape_notified.py's news_releases_path/first_page_index work), the same
-way DEFAULT_BASE_URL for TJX is already derived from sources.yaml's ir_url
-via resolve_source() below.
+FORM_ID below is a hardcoded module constant tuned for TJX, NOT yet read
+from sources.yaml or exposed as a CLI flag. news_releases_path, however, is
+now resolved the same way scrape_notified.py does it: --news-releases-path
+CLI flag > sources.yaml "news_releases_path" field for the matched source >
+DEFAULT_NEWS_RELEASES_PATH. Once FORM_ID has been tested against other
+companies using the same gated-Notified setup, it should get the same
+treatment.
 
 Usage
 -----
@@ -92,8 +92,12 @@ Usage
   python src/scrape_notified_gated.py --year 2024 --format json --output tjx_2024.json
 
   # By slug/ticker (looked up in sources.yaml for the site root only --
-  # NEWS_RELEASES_PATH/FORM_ID still come from this script's constants)
+  # FORM_ID still comes from this script's constant)
   python src/scrape_notified_gated.py --slug tjx --dry-run
+
+  # Different listing path (e.g. a new gated site without a sources.yaml
+  # news_releases_path field yet, or a one-off override)
+  python src/scrape_notified_gated.py --slug robinhood --news-releases-path press-releases --dry-run
 
 Requires
 --------
@@ -158,7 +162,7 @@ DEFAULT_BASE_URL = "https://investor.tjx.com"
 # no-flags-at-all fallback, matching scrape_notified.py's convention.
 
 # --- Hardcoded, single-source config (see "Site-specific config" above) ---
-NEWS_RELEASES_PATH = "investors/press-releases"
+DEFAULT_NEWS_RELEASES_PATH = "investors/press-releases"
 FORM_ID = "widget_form_base"
 
 DEFAULT_TIMEOUT_MS = 45_000  # per-navigation timeout for the browser step
@@ -604,18 +608,28 @@ def scrape(base_url: str, slug: str, ticker: str, years: Optional[set[int]],
 # Source resolution (sources.yaml integration)
 # ---------------------------------------------------------------------------
 
-def resolve_source(url: Optional[str], slug: Optional[str], ticker: Optional[str]) -> tuple[str, str, str]:
-    """Resolve (listing_url, slug, ticker) from CLI args and sources.yaml.
+def resolve_source(
+    url: Optional[str], slug: Optional[str], ticker: Optional[str],
+    news_releases_path: Optional[str] = None,
+) -> tuple[str, str, str, str]:
+    """Resolve (listing_url, slug, ticker, news_releases_path) from CLI args
+    and sources.yaml.
 
-    Only the site root (sources.yaml's ir_url) is looked up here; the
-    listing path (NEWS_RELEASES_PATH) and form id (FORM_ID) are this
-    script's own hardcoded constants for now (see "Site-specific config"
-    in the module docstring) -- NOT yet sources.yaml fields. That's future
-    work, once this has been tested against other gated-Notified sites.
+    The site root (sources.yaml's ir_url) is looked up here, same as
+    before. The listing path now follows the same precedence
+    scrape_notified.py uses (highest wins):
+      1. the news_releases_path argument (i.e. --news-releases-path on the CLI)
+      2. the "news_releases_path" field on the matched sources.yaml record
+      3. DEFAULT_NEWS_RELEASES_PATH ("investors/press-releases", tuned for TJX)
+
+    form id (FORM_ID) is still this script's own hardcoded constant for now
+    (see "Site-specific config" in the module docstring) -- NOT yet a
+    sources.yaml field or CLI flag. That's future work, once this has been
+    tested against other gated-Notified sites.
 
     When --url is provided with a path, the path is stripped so only the
     site root is retained (matching scrape_notified.py's convention),
-    before NEWS_RELEASES_PATH is joined onto it.
+    before news_releases_path is joined onto it.
     """
     from utils.sources_utils import resolve_source_identity
 
@@ -625,8 +639,14 @@ def resolve_source(url: Optional[str], slug: Optional[str], ticker: Optional[str
         strip_url_to_root=True, logger=logger,
     )
 
-    listing_url = join_url_path(url, NEWS_RELEASES_PATH)
-    return listing_url, slug, ticker
+    # news_releases_path precedence: explicit CLI arg > sources.yaml field > default.
+    if not news_releases_path:
+        news_releases_path = (record.get("news_releases_path") if record else None) or (
+            DEFAULT_NEWS_RELEASES_PATH
+        )
+
+    listing_url = join_url_path(url, news_releases_path)
+    return listing_url, slug, ticker, news_releases_path
 
 
 # ---------------------------------------------------------------------------
@@ -642,6 +662,16 @@ def build_arg_parser() -> argparse.ArgumentParser:
     # Shared: --url/--slug/--ticker (site root only -- see resolve_source()),
     # year/date filters, and the --format/--output/--dry-run output trinity.
     add_common_args(parser)
+
+    parser.add_argument(
+        "--news-releases-path", default=None, metavar="PATH",
+        help=(
+            "Path segment for the press-releases listing page, joined onto "
+            "the site root (e.g. 'press-releases' or 'news/press-releases'). "
+            "Overrides sources.yaml's news_releases_path field for this run; "
+            f"defaults to {DEFAULT_NEWS_RELEASES_PATH!r} if neither is set."
+        ),
+    )
 
     # Shared: --polite-delay/--timeout/--debug-dump-html/--verbose, same as
     # scrape_notified.py. --polite-delay isn't used by this script (there's
@@ -668,8 +698,10 @@ def main(argv: Optional[list[str]] = None) -> int:
 
     configure_logging(args.verbose)
 
-    base_url, slug, ticker = resolve_source(args.url, args.slug, args.ticker)
-    logger.info("Scraping %s (%s) from %s", slug, ticker, base_url)
+    base_url, slug, ticker, news_releases_path = resolve_source(
+        args.url, args.slug, args.ticker, args.news_releases_path,
+    )
+    logger.info("Scraping %s (%s) from %s (news_releases_path=%r)", slug, ticker, base_url, news_releases_path)
 
     years = parse_year_args(args)
 
