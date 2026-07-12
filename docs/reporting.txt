@@ -1,0 +1,64 @@
+====== primary_wire: Reporting scripts ======
+
+''src/reporting/'' holds the project's read-only diagnostic scripts --
+tools that tell you something about the state of ''sources.yaml'',
+''config/scraper_config.yaml'', or the live IR sites, without scraping or
+writing any press-release data themselves.
+
+===== Current scripts =====
+
+  * ''missing_tickers.py'' -- S&P 500 tickers not yet in ''sources.yaml''
+  * ''detect_ir_platform.py'' -- classify each source's IR platform
+    (q4 / investorroom / notified / notified_gated / unknown) from page
+    fingerprints
+  * ''check_scraper_coverage.py'' -- how many sources in ''sources.yaml''
+    have an automated scraper configured, plus config-drift checks (typo'd
+    slugs, a slug configured under two scraper groups at once)
+
+Run any of them with ''--help'' for full usage. Most of their output feeds
+''reports/latest/'' via ''invoke reports'' -- see [[tasks.txt]].
+
+This list is illustrative, not exhaustive -- see "Adding a new script"
+below for what to do (and not do) when it goes out of date.
+
+===== What belongs here =====
+
+A script belongs in ''src/reporting/'' if it is read-only: it may fetch
+data over the network (e.g. ''detect_ir_platform.py'' fetches IR pages) or
+read local files, but it must never write to ''data/'', ''sources.yaml'',
+or ''config/scraper_config.yaml''. Anything that mutates project state --
+''update_source.py'', ''update_release.py'', the ''scrape_*.py'' scripts
+-- stays directly under ''src/'', not here.
+
+===== Adding a new script =====
+
+  - **Path resolution**: the script lives two levels below the repo root
+    (''src/reporting/<name>.py''), so compute the repo root with
+    ''Path(__file__).resolve().parent.parent.parent'', not
+    ''.parent.parent'' (that would land on ''src/'' instead of the repo
+    root). Derive any default paths (''sources.yaml'', ''scraper_config.yaml'',
+    ''reports/latest/'') from that, the way ''detect_ir_platform.py'' and
+    ''check_scraper_coverage.py'' do -- don't hardcode ''../sources/sources.yaml''
+    or similar relative literals.
+  - **Importing shared utils**: if the script needs anything from
+    ''src/utils/'', add ''src/'' (not the script's own directory) to
+    ''sys.path'' before importing, e.g.:
+      sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+      from utils.sources_utils import load_sources
+    (see ''check_scraper_coverage.py'' for a working example).
+  - **Docstring usage examples**: write them as
+    ''python src/reporting/<name>.py ...'' so copy-pasted commands work
+    from the repo root.
+  - **Wiring into `invoke reports`**: if the script produces a single
+    report file via stdout, add an entry to ''REPORT_SPECS'' in
+    ''tasks.py'' and reuse the existing ''_run_report()'' helper --
+    see the ''ir-platform''/''missing-tickers'' tasks for the pattern. If
+    it produces more than one output file (or needs them to come from a
+    single consistent snapshot), have the script write its own files
+    directly instead, the way ''check_scraper_coverage.py --write-reports''
+    does, and add a small dedicated ''@task'' for it.
+  - **Documentation**: add a one-line bullet to "Current scripts" above.
+    You do *not* need to touch README.txt's project-structure tree for
+    this -- it intentionally just points at ''src/reporting/'' and this
+    file, rather than enumerating every script, so that adding a script
+    here is a one-file doc change instead of two.

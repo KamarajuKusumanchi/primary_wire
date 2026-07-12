@@ -44,30 +44,30 @@ unknown
 Usage
 -----
   # Single lookup
-  python src/detect_ir_platform.py --slug costco
-  python src/detect_ir_platform.py --ticker CMG
-  python src/detect_ir_platform.py --url https://investors.abbvie.com/
+  python src/reporting/detect_ir_platform.py --slug costco
+  python src/reporting/detect_ir_platform.py --ticker CMG
+  python src/reporting/detect_ir_platform.py --url https://investors.abbvie.com/
 
   # Scan everything in sources.yaml (parallel fetches).
   # This is also the default behavior when no target flag is given.
-  python src/detect_ir_platform.py --all
-  python src/detect_ir_platform.py
+  python src/reporting/detect_ir_platform.py --all
+  python src/reporting/detect_ir_platform.py
 
   # Custom sources file
-  python src/detect_ir_platform.py --all --sources /path/to/sources.yaml
+  python src/reporting/detect_ir_platform.py --all --sources /path/to/sources.yaml
 
   # Redirect-friendly: output is CSV, no ANSI
-  python src/detect_ir_platform.py --all > platforms.csv
+  python src/reporting/detect_ir_platform.py --all > platforms.csv
 
   # Control concurrency and per-request timeout
-  python src/detect_ir_platform.py --all --workers 8 --timeout 15
+  python src/reporting/detect_ir_platform.py --all --workers 8 --timeout 15
 
 Output
 ------
 CSV with header row: slug,ticker,platform,ir_url
 To view this as a human-friendly fixed-width table, pipe it through the
 companion script, e.g.:
-  python src/detect_ir_platform.py --all | python src/print_csv_table.py
+  python src/reporting/detect_ir_platform.py --all | python src/print_csv_table.py
   python src/print_csv_table.py reports/latest/ir_platform.csv
 
 Requires
@@ -113,7 +113,7 @@ logger = logging.getLogger("detect_ir_platform")
 # Repository layout
 # ---------------------------------------------------------------------------
 
-REPO_ROOT = Path(__file__).resolve().parent.parent
+REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 DEFAULT_SOURCES_YAML = REPO_ROOT / "sources" / "sources.yaml"
 
 # ---------------------------------------------------------------------------

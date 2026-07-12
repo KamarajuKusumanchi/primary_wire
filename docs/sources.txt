@@ -62,8 +62,8 @@ of entries in ''sources/sources.yaml'', for two reasons:
     coverage figure.
 
 So ''sources.yaml'' entries = S&P 500 companies counted in README + non-S&P
-tickers + non-ticker sources. Run ''python src/missing_tickers.py'' for the
-current authoritative count.
+tickers + non-ticker sources. Run ''python src/reporting/missing_tickers.py''
+for the current authoritative count.
 
 ===== Disabling a source =====
 

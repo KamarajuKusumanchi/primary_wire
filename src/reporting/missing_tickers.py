@@ -5,8 +5,8 @@ Show S&P 500 tickers that are missing from sources/sources.yaml.
 Tickers are printed in yfinance format (e.g. BRK-B instead of BRK.B).
 
 Usage:
-    python missing_tickers.py
-    python missing_tickers.py --sources path/to/sources.yaml
+    python src/reporting/missing_tickers.py
+    python src/reporting/missing_tickers.py --sources path/to/sources.yaml
 """
 
 import argparse
@@ -59,8 +59,8 @@ def main():
     parser.add_argument(
         "--sources",
         type=Path,
-        default=Path(__file__).parent.parent / "sources" / "sources.yaml",
-        help="Path to sources.yaml (default: sources/sources.yaml relative to this script)",
+        default=Path(__file__).parent.parent.parent / "sources" / "sources.yaml",
+        help="Path to sources.yaml (default: sources/sources.yaml relative to the repo root)",
     )
     args = parser.parse_args()
 

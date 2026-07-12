@@ -2,12 +2,12 @@
 tasks.py - task automation for primary_wire, using Invoke (https://www.pyinvoke.org/)
 
 Regenerates the files under reports/latest/. ir_platform.csv and
-missing_tickers.txt are produced the simple way: run the script in src/,
-capture its stdout, write it to a file, replacing the old manual workflow
-of:
+missing_tickers.txt are produced the simple way: run the script in
+src/reporting/, capture its stdout, write it to a file, replacing the old
+manual workflow of:
 
-    python.exe src/detect_ir_platform.py  > reports/latest/ir_platform.csv
-    python.exe src/missing_tickers.py     > reports/latest/missing_tickers.txt
+    python.exe src/reporting/detect_ir_platform.py  > reports/latest/ir_platform.csv
+    python.exe src/reporting/missing_tickers.py     > reports/latest/missing_tickers.txt
 
 check_scraper_coverage.py doesn't fit that pattern, because its output
 used to mix a prose summary with an embedded CSV block in a single file
@@ -17,7 +17,7 @@ scraper_coverage_missing.csv (CSV only, header "slug,ticker,platform,
 ir_url") -- so instead of tasks.py capturing stdout, the script writes
 both files itself in one pass via its --write-reports flag:
 
-    python.exe src/check_scraper_coverage.py --write-reports
+    python.exe src/reporting/check_scraper_coverage.py --write-reports
     # writes reports/latest/scraper_coverage_summary.txt
     #    and reports/latest/scraper_coverage_missing.csv
 
@@ -60,8 +60,8 @@ REPORTS_DIR = ROOT / "reports" / "latest"
 # stdout-capture-and-redirect helper -- see scraper_coverage() below and
 # that script's module docstring for why.
 REPORT_SPECS = {
-    "ir-platform": ("src/detect_ir_platform.py", "ir_platform.csv"),
-    "missing-tickers": ("src/missing_tickers.py", "missing_tickers.txt"),
+    "ir-platform": ("src/reporting/detect_ir_platform.py", "ir_platform.csv"),
+    "missing-tickers": ("src/reporting/missing_tickers.py", "missing_tickers.txt"),
 }
 
 
@@ -113,7 +113,7 @@ def scraper_coverage(c):
     come from the same sources.yaml/scraper_config.yaml snapshot, which
     running the script twice (once per file) couldn't promise.
     """
-    script_path = ROOT / "src" / "check_scraper_coverage.py"
+    script_path = ROOT / "src" / "reporting" / "check_scraper_coverage.py"
     cmd = f'uv run python "{script_path}" --write-reports'
     print(f"[scraper-coverage] running: {cmd}")
     result = c.run(cmd, hide=True, warn=True)

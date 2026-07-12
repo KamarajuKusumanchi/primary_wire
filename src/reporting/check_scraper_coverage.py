@@ -9,11 +9,11 @@ source of truth for whether a scraper exists and works.
 This is a read-only reporting tool -- it does not scrape anything.
 
 Usage:
-    python src/check_scraper_coverage.py
-    python src/check_scraper_coverage.py -v               # per-source table
-    python src/check_scraper_coverage.py --missing-only    # just the gaps, as CSV
-    python src/check_scraper_coverage.py --strict          # exit 1 if <100%
-    python src/check_scraper_coverage.py --write-reports   # write both report files
+    python src/reporting/check_scraper_coverage.py
+    python src/reporting/check_scraper_coverage.py -v               # per-source table
+    python src/reporting/check_scraper_coverage.py --missing-only    # just the gaps, as CSV
+    python src/reporting/check_scraper_coverage.py --strict          # exit 1 if <100%
+    python src/reporting/check_scraper_coverage.py --write-reports   # write both report files
 
 Exit status:
     0  always, unless --strict is given and coverage is incomplete or a
@@ -31,7 +31,7 @@ reports/latest/scraper_coverage_missing.csv (CSV, header
 "slug,ticker,platform,ir_url") in one pass, use --write-reports (this is
 what tasks.py's scraper-coverage task runs):
 
-    python src/check_scraper_coverage.py --write-reports
+    python src/reporting/check_scraper_coverage.py --write-reports
 
 --write-reports computes coverage once and writes both files from that
 single snapshot, so they can't disagree the way running the script twice
@@ -64,10 +64,10 @@ try:
 except ImportError:
     sys.exit("Missing dependency. Install with: pip install ruamel.yaml")
 
-sys.path.insert(0, str(Path(__file__).resolve().parent))
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from utils.sources_utils import load_sources  # noqa: E402
 
-REPO_ROOT = Path(__file__).resolve().parent.parent
+REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 SOURCES_PATH = REPO_ROOT / "sources" / "sources.yaml"
 SCRAPER_CONFIG_PATH = REPO_ROOT / "config" / "scraper_config.yaml"
 IR_PLATFORM_CSV_PATH = REPO_ROOT / "reports" / "latest" / "ir_platform.csv"

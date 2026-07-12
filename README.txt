@@ -248,7 +248,7 @@ functional but not yet complete, and more tooling is planned.
       scrape_cdw.py       Wrapper: scrape CDW's IR page via scrape_q4_ir
       update_source.py    Interactively add or update an entry in sources.yaml
       update_release.py   Interactively add a press release to a daily CSV file
-      missing_tickers.py  Show S&P 500 tickers not yet in sources.yaml
+      reporting/          Read-only diagnostic scripts (see docs/reporting.txt)
       utils/
         csv_utils.py      Shared daily-CSV read/merge/write helpers
         scrape_utils.py   Shared scraper argparse/date/NewsItem helpers
@@ -259,6 +259,7 @@ functional but not yet complete, and more tooling is planned.
       contributing.txt    How to add new data via pull request
       setup.txt           How to install tools and get started
       sources.txt         How to add and manage sources
+      reporting.txt       What lives in src/reporting/ and how to add to it
     sources/
       sources.yaml        Master list of sources and their IR page URLs
     data/
@@ -272,7 +273,7 @@ functional but not yet complete, and more tooling is planned.
 
 To see which S&P 500 companies are not yet covered, run:
 
-  python src/missing_tickers.py
+  python src/reporting/missing_tickers.py
 
 To regenerate all of reports/latest/ in one step, run:
 
