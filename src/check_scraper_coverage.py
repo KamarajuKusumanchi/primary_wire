@@ -10,9 +10,10 @@ This is a read-only reporting tool -- it does not scrape anything.
 
 Usage:
     python src/check_scraper_coverage.py
-    python src/check_scraper_coverage.py -v              # per-source table
-    python src/check_scraper_coverage.py --missing-only   # just the gaps
-    python src/check_scraper_coverage.py --strict         # exit 1 if <100%
+    python src/check_scraper_coverage.py -v               # per-source table
+    python src/check_scraper_coverage.py --missing-only    # just the gaps, as CSV
+    python src/check_scraper_coverage.py --strict          # exit 1 if <100%
+    python src/check_scraper_coverage.py --write-reports   # write both report files
 
 Exit status:
     0  always, unless --strict is given and coverage is incomplete or a
@@ -25,11 +26,22 @@ by hand-editing YAML and scrape_all.py won't catch them until run time:
   - a slug configured under more than one scraper group (it would be
     scraped twice by scrape_all.py)
 
-Missing-coverage rows (both the "Uncovered slugs" section of the default
-report and the --missing-only output) are printed as CSV -- header
-"slug,ticker,platform,ir_url" -- so you can see everything needed to add a
-scraper for a source in one place, without cross-referencing sources.yaml
-and reports/latest/ir_platform.csv by hand.
+To regenerate reports/latest/scraper_coverage_summary.txt (prose) and
+reports/latest/scraper_coverage_missing.csv (CSV, header
+"slug,ticker,platform,ir_url") in one pass, use --write-reports (this is
+what tasks.py's scraper-coverage task runs):
+
+    python src/check_scraper_coverage.py --write-reports
+
+--write-reports computes coverage once and writes both files from that
+single snapshot, so they can't disagree the way running the script twice
+(once plain, once with --missing-only, each redirected to a file) could if
+sources.yaml or scraper_config.yaml changed in between the two runs.
+
+For a quick look in the terminal instead of writing files, use the
+default (prose summary) or --missing-only (pure CSV, no prose mixed in --
+just the header and gap rows) exactly as documented under Usage above.
+--write-reports can't be combined with -v/--missing-only.
 
 The platform column is read from reports/latest/ir_platform.csv (produced
 separately by detect_ir_platform.py). That file is a snapshot from whenever
@@ -59,6 +71,9 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 SOURCES_PATH = REPO_ROOT / "sources" / "sources.yaml"
 SCRAPER_CONFIG_PATH = REPO_ROOT / "config" / "scraper_config.yaml"
 IR_PLATFORM_CSV_PATH = REPO_ROOT / "reports" / "latest" / "ir_platform.csv"
+REPORTS_LATEST_DIR = REPO_ROOT / "reports" / "latest"
+SUMMARY_OUT_PATH = REPORTS_LATEST_DIR / "scraper_coverage_summary.txt"
+MISSING_OUT_PATH = REPORTS_LATEST_DIR / "scraper_coverage_missing.csv"
 
 
 def load_scraper_config(path: Path = SCRAPER_CONFIG_PATH) -> dict:
@@ -157,6 +172,26 @@ def missing_coverage_csv(uncovered: list[dict], platform_map: pd.DataFrame) -> s
     return df.to_csv(index=False, lineterminator="\n")
 
 
+def render_summary(total: int, n_covered: int, pct: float, problems: list[str]) -> str:
+    """Render the prose summary block shared by stdout mode and --write-reports.
+
+    Kept as one function so the two never drift apart: the same counts and
+    problem list back both scraper_coverage_summary.txt and the plain-stdout
+    default output.
+    """
+    lines = [
+        f"Sources in sources.yaml:     {total}",
+        f"With automated scraper:      {n_covered} ({pct:.1f}%)",
+        f"Without automated scraper:   {total - n_covered}",
+    ]
+    if problems:
+        lines.append("")
+        lines.append("Config problems found:")
+        for problem in problems:
+            lines.append(f"  - {problem}")
+    return "\n".join(lines) + "\n"
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
@@ -168,11 +203,25 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--strict", action="store_true",
                         help="Exit 1 if coverage is incomplete or config problems were found")
     parser.add_argument(
+        "--write-reports", action="store_true",
+        help=f"Write both report files in one pass instead of printing to stdout: "
+             f"{SUMMARY_OUT_PATH.relative_to(REPO_ROOT)} (prose) and "
+             f"{MISSING_OUT_PATH.relative_to(REPO_ROOT)} (CSV). Computes coverage "
+             f"once so the two files are guaranteed to reflect the same "
+             f"sources.yaml/scraper_config.yaml snapshot, rather than the two "
+             f"separate runs `invoke scraper-coverage` used to do. Used by "
+             f"tasks.py; for a quick look in the terminal use -v/--missing-only "
+             f"instead.",
+    )
+    parser.add_argument(
         "--ir-platform", metavar="PATH", type=Path, default=IR_PLATFORM_CSV_PATH,
         help=f"Path to ir_platform.csv, used for the platform column in "
              f"missing-coverage CSV output (default: {IR_PLATFORM_CSV_PATH}).",
     )
     args = parser.parse_args(argv)
+
+    if args.write_reports and (args.verbose or args.missing_only):
+        parser.error("--write-reports can't be combined with -v/--missing-only")
 
     sources = load_sources(SOURCES_PATH)
     if not sources:
@@ -208,11 +257,33 @@ def main(argv: list[str] | None = None) -> int:
             return f"config: {'/'.join(groups_by_slug[slug])}"
         return "none"
 
-    platform_map = load_platform_map(args.ir_platform) if uncovered else pd.DataFrame()
+    # Only modes that actually emit the CSV need ir_platform.csv, so only
+    # load it (and only warn about it being missing/stale) in those modes.
+    # Otherwise a plain summary run would print a spurious warning about a
+    # file it never uses.
+    needs_platform_map = uncovered and (args.missing_only or args.write_reports)
+    platform_map = load_platform_map(args.ir_platform) if needs_platform_map else pd.DataFrame()
+
+    exit_code = 1 if args.strict and (uncovered or problems) else 0
+
+    if args.write_reports:
+        # Single pass: both files are built from the same in-memory
+        # uncovered/problems computed above, so they can't disagree the way
+        # two separate `check_scraper_coverage.py` invocations could if
+        # sources.yaml or scraper_config.yaml changed in between.
+        REPORTS_LATEST_DIR.mkdir(parents=True, exist_ok=True)
+        SUMMARY_OUT_PATH.write_text(render_summary(total, n_covered, pct, problems))
+        MISSING_OUT_PATH.write_text(missing_coverage_csv(uncovered, platform_map))
+        print(f"wrote {SUMMARY_OUT_PATH.relative_to(REPO_ROOT)} "
+              f"and {MISSING_OUT_PATH.relative_to(REPO_ROOT)}")
+        return exit_code
 
     if args.missing_only:
+        # Pure CSV, nothing else -- no summary lines, no problems section.
         print(missing_coverage_csv(uncovered, platform_map), end="")
-    elif args.verbose:
+        return exit_code
+
+    if args.verbose:
         print("Per-source coverage:\n")
         for record in sources:
             slug = record.get("slug", "")
@@ -221,22 +292,8 @@ def main(argv: list[str] | None = None) -> int:
             print(f"  [{status:7}] {slug:28} {name:45} ({describe(slug)})")
         print()
 
-    print(f"Sources in sources.yaml:     {total}")
-    print(f"With automated scraper:      {n_covered} ({pct:.1f}%)")
-    print(f"Without automated scraper:   {total - n_covered}")
-
-    if uncovered and not (args.verbose or args.missing_only):
-        print("\nMissing scraper coverage (slug,ticker,platform,ir_url):")
-        print(missing_coverage_csv(uncovered, platform_map), end="")
-
-    if problems:
-        print("\nConfig problems found:")
-        for problem in problems:
-            print(f"  - {problem}")
-
-    if args.strict and (uncovered or problems):
-        return 1
-    return 0
+    print(render_summary(total, n_covered, pct, problems), end="")
+    return exit_code
 
 
 if __name__ == "__main__":
