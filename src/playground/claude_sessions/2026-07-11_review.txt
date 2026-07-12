@@ -1,0 +1,49 @@
+2026-07-11 10:57 PM
+
+Prompt:
+Please review
+https://github.com/KamarajuKusumanchi/primary_wire/archive/refs/heads/master.zip and tell me what you think? What are the next steps? How to improve the scraper coverage and/or code quality? Ignore files in src/playground , src/prototypes from your review.
+
+Response:
+Good, that's fine and expected — one-off migration scripts. I have enough to give a thorough, honest assessment now.I pulled down the repo and went through it in full (skipping `src/playground` and `src/prototypes` as asked). Here's my honest read.
+
+## Overall verdict
+
+This is unusually good engineering for a "work in progress" side project. The docs are more thorough than most funded startups' docs, the code has real architectural discipline (shared `NewsItem`/`finalize_and_output`/`add_common_args` abstractions instead of copy-pasted scraper boilerplate), and the commit-log comments in `pyproject.toml` show someone actually debugging real Windows/SSL/venv problems rather than cargo-culting. It doesn't feel like a toy. But it's also clearly bottlenecked in one specific place, and that bottleneck is fixable with almost no new code.
+
+## Strengths
+
+- **Docs are excellent and non-decorative.** `docs/tasks.txt`, `docs/sources.txt`, `docs/contributing.txt` explain *why*, not just *how* — e.g. why `check_scraper_coverage.py` writes files itself instead of letting `tasks.py` capture stdout (so the two report files can't drift out of sync).
+- **The scraper abstraction is genuinely well designed.** `scrape_utils.py`'s `finalize_and_output()` docstring explicitly documents three behavioral inconsistencies that existed across the three original scrapers before it was written, and states which behavior it standardized on and why. That's rare — most people unify duplicated code without recording the semantic diffs they just silently resolved.
+- **`sources.yaml` vs `scraper_config.yaml` separation is correct.** Durable site facts (`needs_detail_page_dates`, `news_releases_path`) live in the data file; per-run behavior flags live in the scraper config. This is the right call and it's explained in a comment, not just done.
+- **Politeness is enforced by design, not just a README ask** — `--polite-delay`, `--fallback-to-visible` only as opt-in, smoke-test sampling one representative per code path instead of hammering every source on every dry run.
+- **`--smoke-test` grouping logic is subtle and it's actually tested** (`test_scrape_all.py` covers signature grouping by scraper+args+durable-fact, not just YAML group name).
+
+## The unvarnished problem
+
+Coverage. 96 of 503 S&P 500 tickers (19%) are in `sources.yaml` at all, and of the 100 sources that *are* in there, only 14 (14%) have automated scrapers wired up in `scraper_config.yaml`.
+
+But here's the part worth being blunt about: **that 14% number is misleadingly low relative to the actual work required.** I ran `detect_ir_platform.py`'s own report and cross-referenced it against the scraper config:
+
+- 43 sources are detected as `notified` platform — only 8 are configured to scrape.
+- 21 are `q4` — only 3 configured.
+- 5 are `investorroom` — only 3 configured.
+- 30 are `unknown`.
+
+That means **~57 sources already have a working, generic scraper for their platform and just aren't in the YAML config yet.** This isn't a "write new scraper code" problem, it's a "add entries to `config/scraper_config.yaml` and verify each one" problem. Doing that would take automated coverage from 14 sources to 70+ without touching `src/` at all. That's the highest-leverage thing to do next, by a wide margin, and it's a bit of a miss that it hasn't been done yet given the tooling already exists to detect exactly this gap.
+
+Second-order issue: the 30 `unknown` sources (Apple, Tesla, Nvidia, Netflix, IBM, Qualcomm, etc.) are the ones that will actually require new scraper code or permanently stay manual, since they likely run bespoke IR sites rather than one of the three supported platforms.
+
+## Other real gaps
+
+- **Test coverage is thin where it matters least conveniently, but also where bugs are likeliest.** ~400 lines of tests against ~6,700 lines of source. The three files that actually do HTML parsing and date extraction under real-world messiness — `scrape_q4_ir.py` (820 lines), `scrape_notified.py` (1,046 lines), `scrape_notified_gated.py` (703 lines) — have no direct unit tests. I get that the *scraping* part (browser automation, live HTTP) is inherently hard to unit test, but the *parsing* logic inside them could be tested against saved fixture HTML with zero network dependency, the same way `extract_date_from_detail_html()` in `scrape_utils.py` is structured to allow. Right now a change to a listing-page parser could silently break date extraction for a specific Q4 theme and nothing would catch it except a human running `--dry-run` and eyeballing output.
+- **No CI.** No `.github/workflows` at all. Given `invoke smoke-test` already exists and is designed to be fast and low-load, wiring it (or the fixture-based parsing tests above) into GitHub Actions on PRs would be cheap and would catch platform-breaking changes (IR sites do change their DOM) before they land silently.
+- **Manual data entry is still the default path for 86% of configured sources**, and PR-based CSV editing doesn't scale linearly with contributor count the way automated scraping does. Every source that could move to the "already have a platform scraper" bucket above should.
+
+## Recommended next steps, in priority order
+
+1. **Wire up the ~57 low-hanging `notified`/`q4`/`investorroom` sources into `scraper_config.yaml`.** This alone would be the single biggest coverage jump available and requires no new scraping code — just verifying each source's page structure fits the existing scraper (some `q4` themes will need `needs_detail_page_dates: true`, some `notified` sources may need gating like `tjx`).
+2. **Investigate the 30 `unknown`-platform sources** to see how many cluster into a 4th common platform worth building a generic scraper for, versus truly bespoke sites that stay manual.
+3. **Add fixture-based unit tests for the parsing logic** in the three untested scraper files, using saved HTML snippets — this protects against the most likely real failure mode (a site's markup changing).
+4. **Add a CI workflow** running `pytest` + `invoke smoke-test --dry-run` on PRs.
+5. Longer term: expand `sources.yaml` itself beyond the current 96/503 tickers — but that's less urgent than fixing the scraper-config gap, since manual entries can be added incrementally by contributors regardless.
