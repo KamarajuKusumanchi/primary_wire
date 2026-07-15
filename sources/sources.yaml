@@ -255,7 +255,12 @@ sources:
   - slug: ibm
     name: International Business Machines Corporation
     ticker: IBM
-    ir_url: https://www.ibm.com/investor
+    ir_url: https://newsroom.ibm.com/announcements
+    notes: >
+      Technically, the correct url for IBM's investor relations website is https://www.ibm.com/investor .
+      But this does not have all press releases. For example, it did not have the "Arvind Krishna's Letter to IBM
+      Investors" published on 2026--07-14 which tanked IBM's stock by 25.21%. On the other hand
+      https://newsroom.ibm.com/announcements contains all the press releases.
   - slug: intel
     name: Intel Corporation
     ticker: INTC
