@@ -1,3 +1,3 @@
-Sources in sources.yaml:     107
-With automated scraper:      16 (15.0%)
-Without automated scraper:   91
+Sources in sources.yaml:     114
+With automated scraper:      16 (14.0%)
+Without automated scraper:   98
