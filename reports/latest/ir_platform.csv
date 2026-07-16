@@ -34,6 +34,8 @@ constellation-brands,STZ,notified,https://ir.cbrands.com/
 corning,GLW,q4,https://investor.corning.com/
 costco,COST,q4,https://investor.costco.com/
 criver,CRL,notified,https://ir.criver.com/
+crowdstrike,CRWD,notified,https://ir.crowdstrike.com/
+crown-castle,CCI,notified,https://investor.crowncastle.com/
 datadog,DDOG,notified,https://investors.datadoghq.com/
 dell,DELL,notified,https://investors.delltechnologies.com/
 doordash,DASH,q4,https://ir.doordash.com/
@@ -44,10 +46,12 @@ fedex,FDX,unknown,https://investors.fedex.com/
 fedex-freight,FDXF,notified,https://ir.fedexfreight.com/
 fis-global,FIS,notified,https://www.investor.fisglobal.com/
 flex,FLEX,q4,https://investors.flex.com/
+fortinet,FTNT,notified,https://investor.fortinet.com/
 fox,FOXA,unknown,https://investor.foxcorporation.com/
 ge-healthcare,GEHC,notified,https://investor.gehealthcare.com/
 gen-digital,GEN,q4,https://investor.gendigital.com/
 genuine-parts,GPC,investorroom,https://www.genpt.com/overview
+gilead,GILD,q4,https://investors.gilead.com/
 godaddy,GDDY,notified,https://aboutus.godaddy.net/investor-relations/
 google,GOOGL,q4,https://abc.xyz/investor/
 honeywell,HONA,notified,https://investor.honeywell.com/investor-relations
@@ -59,6 +63,7 @@ iqvia,IQV,unknown,https://ir.iqvia.com/
 kla,KLAC,notified,https://ir.kla.com/
 lam-research,LRCX,investorroom,https://investor.lamresearch.com/
 lumentum,LITE,unknown,https://investor.lumentum.com/
+meta,META,unknown,https://investor.atmeta.com/home/default.aspx
 micron,MU,notified,https://investors.micron.com/
 moderna,MRNA,unknown,https://investors.modernatx.com/
 molson-coors,TAP,q4,https://ir.molsoncoors.com/
@@ -77,6 +82,7 @@ qualcomm,QCOM,unknown,https://investor.qualcomm.com/
 robinhood,HOOD,notified,https://investors.robinhood.com/
 ross-stores,ROST,notified,https://investors.rossstores.com/
 sandisk,SNDK,notified,https://investor.sandisk.com/
+sba-communications,SBAC,unknown,https://ir.sbasite.com/
 seagate,STX,q4,https://investors.seagate.com/
 servicenow,NOW,unknown,https://investor.servicenow.com/
 skyworks,SWKS,notified,https://www.skyworksinc.com/investors
@@ -98,4 +104,5 @@ vertiv,VRT,q4,https://investors.vertiv.com/
 virtu,VIRT,notified,https://ir.virtu.com/
 visa,V,q4,https://investor.visa.com/
 western-digital,WDC,notified,https://investor.wdc.com/
+weyerhaeuser,WY,investorroom,https://investor.weyerhaeuser.com/
 workday,WDAY,notified,https://investor.workday.com/
