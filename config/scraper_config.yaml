@@ -27,6 +27,7 @@ investorroom:
     - slug: axon
     - slug: chipotle
     - slug: genuine-parts
+    - slug: ibm
 
 notified:
   scraper: scrape_notified

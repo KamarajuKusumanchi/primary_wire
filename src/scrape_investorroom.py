@@ -33,19 +33,33 @@ Listing page (paginated by offset):
 
   Note: ?p=2 is NOT supported by InvestorRoom sites.
 
-Press release detail pages come in two styles:
-  Style A (legacy):  {ir_base}/news-releases?item=122457
-  Style B (modern):  {ir_base}/2025-10-29-chipotle-announces-q3-results
+Press release detail pages come in three styles:
+  Style A (legacy):    {ir_base}/news-releases?item=122457
+  Style B (modern):    {ir_base}/2025-10-29-chipotle-announces-q3-results
+  Style C (bare slug): {ir_base}/next-generation-ibm-flashsystem-portfolio
+                       (observed on IBM's newsroom in 2026 -- no date prefix,
+                       no ?item=; confirmed via a headline-length title plus
+                       a real date on the listing page, since the URL alone
+                       looks like an ordinary nav link -- see classify_link())
 
-Both styles are handled. Date extraction:
+All three styles are handled. Date extraction:
 
   1. Listing-page parse (zero extra requests): InvestorRoom listing pages
-     include the date near each link in the card HTML. Style B URLs also
-     embed the date in the URL slug.
+     include the date near each link in the card HTML. This listing-page date
+     is authoritative when present -- Style B/C URLs can also embed a date,
+     but IBM's newsroom has been observed with a Style B slug date that
+     doesn't match the article's real publish date, so the URL-embedded date
+     is used only as a fallback (see resolve_publish_date()). The
+     listing-page date itself is only trusted from a text node that is
+     *entirely* a date and nothing else (see extract_date_near_link()) --
+     press-release cards routinely mention other, unrelated dates in the
+     headline or summary snippet (an upcoming earnings call, a future event),
+     and naively taking "the first date-like text in the card" picks up
+     whichever of those happens to be positioned first, which is often wrong.
 
-  2. Detail-page fallback (opt-in via --fetch-detail-pages): for Style A
-     items where no date was found on the listing page, fetch the detail page
-     and extract the date from the article header.
+  2. Detail-page fallback (opt-in via --fetch-detail-pages): for items where
+     no date was found on the listing page (typically Style A), fetch the
+     detail page and extract the date from the article header.
 
 Usage
 -----
@@ -105,7 +119,7 @@ from dataclasses import dataclass
 from datetime import date
 from pathlib import Path
 from typing import Optional
-from urllib.parse import urlencode, urljoin
+from urllib.parse import urlencode, urljoin, urlsplit
 
 try:
     import requests
@@ -159,6 +173,27 @@ DETAIL_URL_LEGACY_RE = re.compile(r"[?&]item=\d+", re.IGNORECASE)
 # Excludes fragment URLs (e.g. /2026-01-12-TITLE#assets_...) -- those are photo
 # gallery anchors on the same page, not press-release detail pages.
 DETAIL_URL_MODERN_RE = re.compile(r"/\d{4}-\d{2}-\d{2}-[^/#]+/?$", re.IGNORECASE)
+
+# Style C: some InvestorRoom sites (observed on IBM's newsroom in 2026)
+# publish press releases at a bare topic slug with neither a ?item= param
+# nor a date-prefixed slug, e.g.:
+#   https://newsroom.ibm.com/next-generation-ibm-flashsystem-portfolio
+# Such a URL is indistinguishable from an ordinary nav/footer link (About,
+# Subscribe, Media contact...) by shape alone, so is_bare_slug_url() only
+# narrows to same-host/query-free/single-segment links; parse_listing_page()
+# narrows further by requiring a real nearby publish date and a
+# headline-length title before accepting one as a press release.
+MIN_HEADLINE_TITLE_LEN = 20  # chars; real press-release titles clear this easily, nav labels don't
+
+# Known non-article single-segment paths to rule out up front (belt-and-braces
+# alongside the title-length + nearby-date checks above). Extend as needed for
+# other InvestorRoom sites; harmless to leave in for sites that don't have them.
+BARE_SLUG_EXCLUDE_PATHS = frozenset({
+    "index.php", "subscribe", "contacts", "media-center", "b-roll",
+    "global-news-room", "executive-bios", "about-ibm", "awards",
+    "campaign", "announcements", "news-releases",
+})
+BARE_SLUG_EXCLUDE_PREFIXES = ("latest-news-", "latest-new-", "press-releases-")
 
 logger = logging.getLogger("scrape_investorroom")
 
@@ -224,8 +259,52 @@ def fetch_html(url: str, timeout: int = 30) -> str:
 
 
 def is_detail_url(href: str) -> bool:
-    """Return True if ``href`` looks like an InvestorRoom press-release detail URL."""
+    """Return True if ``href`` matches a *known* InvestorRoom detail-URL style
+    (legacy ?item=NNN, or a modern date-prefixed slug)."""
     return bool(DETAIL_URL_LEGACY_RE.search(href) or DETAIL_URL_MODERN_RE.search(href))
+
+
+def is_bare_slug_url(href: str, base_url: str) -> bool:
+    """Return True if ``href`` *might* be a Style C bare-slug detail page.
+
+    Necessary condition only, not sufficient: same host as ``base_url``, no
+    query string or fragment, exactly one path segment, and not one of the
+    known non-article paths. The caller must still confirm it's a real
+    press release (see MIN_HEADLINE_TITLE_LEN / nearby-date check in
+    parse_listing_page) since this alone can't distinguish a headline slug
+    from a stray one-segment nav link.
+    """
+    full_url = urljoin(base_url, href)
+    parsed = urlsplit(full_url)
+    if parsed.netloc != urlsplit(base_url).netloc:
+        return False
+    if parsed.query or parsed.fragment:
+        return False
+
+    path = parsed.path.strip("/").lower()
+    if not path or "/" in path:
+        return False
+    if path in BARE_SLUG_EXCLUDE_PATHS:
+        return False
+    if path.startswith(BARE_SLUG_EXCLUDE_PREFIXES):
+        return False
+    return True
+
+
+def classify_link(href: str, base_url: str) -> Optional[str]:
+    """Classify ``href`` as a detail-link candidate, or None to skip it outright.
+
+    Returns "known" for the two well-established InvestorRoom detail-URL
+    styles (legacy ?item=, modern date-prefixed slug), "bare-slug" for a
+    same-host single-segment URL that needs further confirmation (title
+    length + nearby date) before being accepted, or None for anything else
+    (nav links, external links, paginated/query URLs, etc.).
+    """
+    if is_detail_url(href):
+        return "known"
+    if is_bare_slug_url(href, base_url):
+        return "bare-slug"
+    return None
 
 
 # ---------------------------------------------------------------------------
@@ -272,17 +351,48 @@ def year_filter_url(
 # Listing-page parsing
 # ---------------------------------------------------------------------------
 
+def is_bare_date_text(text: str, raw_match: str) -> bool:
+    """True if ``text`` is (almost) entirely ``raw_match`` and not a longer
+    sentence that merely happens to contain a date somewhere in it."""
+    remainder = text.replace(raw_match, "", 1)
+    return remainder.strip(" \t\r\n-\u2013\u2014|\u00b7\u2022.,:") == ""
+
+
 def extract_date_near_link(anchor) -> tuple[Optional[date], str]:
-    """Walk up to 5 ancestor elements of ``anchor`` looking for a date in text."""
+    """Walk up to 5 ancestor elements of ``anchor`` looking for a standalone
+    date label near the link.
+
+    Press-release cards routinely mention OTHER dates besides the actual
+    publish date -- a headline naming a future event (GPC: "...Results on
+    February 17, 2026", published Jan 27) or a truncated summary snippet
+    doing the same (IBM: "...discuss its fourth-quarter 2025 financial
+    results on Wednesday, January 28, 2026...", published Jan 14). Scanning
+    the card's merged text for "the first date-like substring" -- the
+    previous approach -- just returns whichever of these happens to sit
+    first in reading order, which is often wrong and, worse, wrong in a new
+    way each time a differently-worded card is encountered.
+
+    Instead of merging text, this walks each individual text node under the
+    ancestor and only accepts one whose ENTIRE (stripped) content is a bare
+    date and nothing else (via is_bare_date_text()) -- which is how these
+    platforms actually render the publish-date label, as opposed to a full
+    sentence that merely contains a date. Text inside the anchor itself is
+    skipped outright, since a headline's own wording is never the label.
+    """
     node = anchor
     for _ in range(5):
         parent = node.parent
         if parent is None:
             break
-        card_text = parent.get_text(separator=" ", strip=True)
-        d, raw = parse_date(card_text)
-        if d:
-            return d, raw
+        for text_node in parent.find_all(string=True):
+            if any(p is anchor for p in text_node.parents):
+                continue
+            candidate = text_node.strip()
+            if not candidate:
+                continue
+            d, raw = parse_date(candidate)
+            if d and is_bare_date_text(candidate, raw):
+                return d, raw
         node = parent
     return None, ""
 
@@ -312,6 +422,60 @@ def find_next_page_url(soup: BeautifulSoup, base_url: str) -> Optional[str]:
     return None
 
 
+def extract_link_title(anchor) -> str:
+    """Return the display title for a listing-page anchor, or "" if it has none.
+
+    Falls back to a nested <span> because some InvestorRoom themes wrap the
+    visible title in one (the anchor's direct text is otherwise empty, e.g.
+    when the link is really an image tile).
+    """
+    title = anchor.get_text(separator=" ", strip=True)
+    if title:
+        return title
+    span = anchor.find("span")
+    return span.get_text(strip=True) if span else ""
+
+
+def is_confirmed_bare_slug_item(title: str, card_date: Optional[date]) -> bool:
+    """Second-stage check for a "bare-slug" candidate (see classify_link()).
+
+    A same-host single-segment URL is only accepted as a press release once
+    it also has a headline-length title and a real date sitting next to it
+    on the listing page -- both true for genuine articles, both false for
+    nav/footer links like "Subscribe" or "Media contact".
+    """
+    return len(title) >= MIN_HEADLINE_TITLE_LEN and card_date is not None
+
+
+def resolve_publish_date(
+    card_date: Optional[date],
+    card_raw_text: str,
+    url_date: Optional[date],
+    url_for_logging: str,
+) -> tuple[Optional[date], str]:
+    """Reconcile the two possible date sources for a listing-page item.
+
+    The listing page's own displayed date (``card_date``) takes priority
+    over one parsed out of the URL slug (``url_date``): IBM's newsroom has
+    been observed publishing a URL whose date-prefixed slug doesn't match
+    the article's real publish date (e.g. a slug dated 2025-04-21 for an
+    article actually published 2026-04-21), so the URL can't be trusted as
+    authoritative. It's kept only as a fallback for when the listing page
+    doesn't expose a date at all.
+    """
+    if card_date is not None:
+        if url_date is not None and url_date != card_date:
+            logger.warning(
+                "URL slug date (%s) disagrees with listing-page date (%s) "
+                "for %s -- using the listing-page date.",
+                url_date, card_date, url_for_logging,
+            )
+        return card_date, card_raw_text
+    if url_date is not None:
+        return url_date, url_date.isoformat()
+    return None, ""
+
+
 def parse_listing_page(
     html: str, base_url: str, slug: str, ticker: str
 ) -> tuple[list[NewsItem], Optional[str]]:
@@ -326,7 +490,9 @@ def parse_listing_page(
 
     for anchor in soup.find_all("a", href=True):
         href: str = anchor["href"].strip()
-        if not is_detail_url(href):
+
+        link_kind = classify_link(href, base_url)
+        if link_kind is None:
             continue
 
         full_url = urljoin(base_url, href)
@@ -334,23 +500,24 @@ def parse_listing_page(
         if norm_url in seen_urls:
             continue
 
-        title = anchor.get_text(separator=" ", strip=True)
-        if not title:
-            span = anchor.find("span")
-            title = span.get_text(strip=True) if span else ""
+        title = extract_link_title(anchor)
         if not title:
             logger.debug("Skipping link with no title text: %s", full_url)
             continue
 
+        # Date in the surrounding card HTML -- computed for every candidate,
+        # since a "bare-slug" link (see classify_link()) needs it both to
+        # confirm it's a real article and to know its date.
+        card_date, card_raw_text = extract_date_near_link(anchor)
+
+        if link_kind == "bare-slug" and not is_confirmed_bare_slug_item(title, card_date):
+            logger.debug("Skipping unconfirmed bare-slug link: %s", full_url)
+            continue
+
         seen_urls.add(norm_url)
 
-        # Strategy 1: date embedded in modern URL slug.
-        publish_date = date_from_url(href)
-        raw_date_text = publish_date.isoformat() if publish_date else ""
-
-        # Strategy 2: date in the surrounding card HTML.
-        if publish_date is None:
-            publish_date, raw_date_text = extract_date_near_link(anchor)
+        url_date = date_from_url(href)
+        publish_date, raw_date_text = resolve_publish_date(card_date, card_raw_text, url_date, full_url)
 
         items.append(NewsItem(
             slug=slug,

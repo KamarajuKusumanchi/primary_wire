@@ -256,6 +256,7 @@ sources:
     name: International Business Machines Corporation
     ticker: IBM
     ir_url: https://newsroom.ibm.com/announcements
+    news_releases_path: announcements
     notes: >
       Technically, the correct url for IBM's investor relations website is https://www.ibm.com/investor .
       But this does not have all press releases. For example, it did not have the "Arvind Krishna's Letter to IBM
