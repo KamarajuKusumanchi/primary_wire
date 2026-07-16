@@ -178,6 +178,10 @@ sources:
     name: Charles River Laboratories International, Inc.
     ticker: CRL
     ir_url: https://ir.criver.com/
+  - slug: crowdstrike
+    name: CrowdStrike Holdings, Inc.
+    ticker: CRWD
+    ir_url: https://ir.crowdstrike.com/
   - slug: crown-castle
     name: Crown Castle Inc.
     ticker: CCI
@@ -223,6 +227,10 @@ sources:
     name: Flex Ltd.
     ticker: FLEX
     ir_url: https://investors.flex.com/
+  - slug: fortinet
+    name: Fortinet, Inc.
+    ticker: FTNT
+    ir_url: https://investor.fortinet.com/
   - slug: fox
     name: Fox Corporation
     ticker: FOXA
@@ -240,6 +248,10 @@ sources:
     ticker: GPC
     ir_url: https://www.genpt.com/overview
     news_releases_path: press-releases
+  - slug: gilead
+    name: Gilead Sciences, Inc.
+    ticker: GILD
+    ir_url: https://investors.gilead.com/
   - slug: godaddy
     name: GoDaddy Inc.
     ticker: GDDY
