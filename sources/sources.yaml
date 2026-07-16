@@ -178,6 +178,10 @@ sources:
     name: Charles River Laboratories International, Inc.
     ticker: CRL
     ir_url: https://ir.criver.com/
+  - slug: crown-castle
+    name: Crown Castle Inc.
+    ticker: CCI
+    ir_url: https://investor.crowncastle.com/
   - slug: datadog
     name: Datadog, Inc.
     ticker: DDOG
@@ -258,9 +262,10 @@ sources:
     ir_url: https://newsroom.ibm.com/announcements
     news_releases_path: announcements
     notes: >
-      Technically, the correct url for IBM's investor relations website is https://www.ibm.com/investor .
-      But this does not have all press releases. For example, it did not have the "Arvind Krishna's Letter to IBM
-      Investors" published on 2026--07-14 which tanked IBM's stock by 25.21%. On the other hand
+      Technically, the correct url for IBM's investor relations website is https://www.ibm.com/investor
+      . But this does not have all press releases. For example, it did not have
+      the "Arvind Krishna's Letter to IBM Investors" published on 2026--07-14
+      which tanked IBM's stock by 25.21%. On the other hand
       https://newsroom.ibm.com/announcements contains all the press releases.
   - slug: intel
     name: Intel Corporation
@@ -286,6 +291,10 @@ sources:
     name: Lumentum Holdings Inc.
     ticker: LITE
     ir_url: https://investor.lumentum.com/
+  - slug: meta
+    name: Meta Platforms, Inc.
+    ticker: META
+    ir_url: https://investor.atmeta.com/home/default.aspx
   - slug: micron
     name: Micron Technology, Inc.
     ticker: MU
@@ -360,6 +369,10 @@ sources:
     name: Sandisk Corporation
     ticker: SNDK
     ir_url: https://investor.sandisk.com/
+  - slug: sba-communications
+    name: SBA Communications Corporation
+    ticker: SBAC
+    ir_url: https://ir.sbasite.com/
   - slug: seagate
     name: Seagate Technology Holdings plc
     ticker: STX
@@ -447,6 +460,10 @@ sources:
     name: Western Digital Corporation
     ticker: WDC
     ir_url: https://investor.wdc.com/
+  - slug: weyerhaeuser
+    name: Weyerhaeuser Company
+    ticker: WY
+    ir_url: https://investor.weyerhaeuser.com/
   - slug: workday
     name: Workday, Inc.
     ticker: WDAY
