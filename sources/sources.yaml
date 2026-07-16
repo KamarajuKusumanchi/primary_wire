@@ -30,6 +30,10 @@
 
 sources:
 
+  - slug: abbott
+    name: Abbott Laboratories
+    ticker: ABT
+    ir_url: https://www.abbott.com/en-us/investors
   - slug: abbvie
     name: AbbVie Inc.
     ticker: ABBV
@@ -142,6 +146,10 @@ sources:
     name: Cincinnati Financial Corporation
     ticker: CINF
     ir_url: https://investors.cinfin.com/
+  - slug: cintas
+    name: Cintas Corporation
+    ticker: CTAS
+    ir_url: https://www.cintas.com/investors/
   - slug: cognizant
     name: Cognizant Technology Solutions Corporation
     ticker: CTSH
@@ -194,6 +202,10 @@ sources:
     name: Dell Technologies Inc.
     ticker: DELL
     ir_url: https://investors.delltechnologies.com/
+  - slug: dexcom
+    name: DexCom, Inc.
+    ticker: DXCM
+    ir_url: https://investors.dexcom.com/
   - slug: doordash
     name: DoorDash, Inc.
     ticker: DASH
@@ -202,6 +214,10 @@ sources:
     name: Equifax Inc.
     ticker: EFX
     ir_url: https://investor.equifax.com/
+  - slug: erie-indemnity
+    name: Erie Indemnity Company
+    ticker: ERIE
+    ir_url: https://www.erieinsurance.com/investors
   - slug: expedia
     name: Expedia Group, Inc.
     ticker: EXPE
@@ -279,6 +295,10 @@ sources:
       the "Arvind Krishna's Letter to IBM Investors" published on 2026--07-14
       which tanked IBM's stock by 25.21%. On the other hand
       https://newsroom.ibm.com/announcements contains all the press releases.
+  - slug: ingersoll-rand
+    name: Ingersoll Rand Inc.
+    ticker: IR
+    ir_url: https://investors.irco.com/
   - slug: intel
     name: Intel Corporation
     ticker: INTC
