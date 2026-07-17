@@ -1,5 +1,5 @@
 slug,ticker,platform,ir_url
-abbott,ABT,investorroom,https://www.abbott.com/en-us/investors
+abbott,ABT,unknown,https://www.abbott.com/en-us/investors
 abbvie,ABBV,notified,https://investors.abbvie.com/
 accenture,ACN,unknown,https://investor.accenture.com/
 akamai,AKAM,notified,https://www.ir.akamai.com/
@@ -22,7 +22,7 @@ booking,BKNG,q4,https://ir.bookingholdings.com/
 broadcom,AVGO,notified,https://investors.broadcom.com/
 builders-firstsource,BLDR,q4,https://investors.bldr.com/
 cadence,CDNS,q4,https://investor.cadence.com/
-caseys,CASY,notified,https://investor.caseys.com/
+caseys,CASY,notified_gated,https://investor.caseys.com/
 cdw,CDW,q4,https://investor.cdw.com/
 charter,CHTR,notified,https://ir.charter.com/
 chipotle,CMG,investorroom,https://ir.chipotle.com/
@@ -89,7 +89,7 @@ palantir,PLTR,unknown,https://investors.palantir.com/
 paramount,PSKY,notified,https://ir.paramount.com/
 pepsi,PEP,unknown,https://www.pepsico.com/investors
 qualcomm,QCOM,unknown,https://investor.qualcomm.com/
-robinhood,HOOD,notified,https://investors.robinhood.com/
+robinhood,HOOD,notified_gated,https://investors.robinhood.com/
 ross-stores,ROST,notified,https://investors.rossstores.com/
 sandisk,SNDK,notified,https://investor.sandisk.com/
 sba-communications,SBAC,unknown,https://ir.sbasite.com/

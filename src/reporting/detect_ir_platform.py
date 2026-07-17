@@ -151,7 +151,7 @@ NOTIFIED_DETAIL_RE = re.compile(
 # Confirmed gated: TJX. Add a slug here once you've confirmed (by testing
 # headless vs. headed Chrome, as documented in scrape_notified_gated.py)
 # that a site needs the gated variant.
-GATED_SLUGS = {"tjx"}
+GATED_SLUGS = {"tjx", "robinhood", "caseys"}
 
 # ---------------------------------------------------------------------------
 # HTTP fetch

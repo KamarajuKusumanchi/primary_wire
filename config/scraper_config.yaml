@@ -43,8 +43,8 @@ notified:
 notified_gated:
   scraper: scrape_notified_gated
   sources:
-    - slug: robinhood
     - slug: tjx
+    - slug: robinhood
     - slug: caseys
 
 q4_ir:
