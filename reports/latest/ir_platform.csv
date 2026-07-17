@@ -4,6 +4,7 @@ abbvie,ABBV,notified,https://investors.abbvie.com/
 accenture,ACN,unknown,https://investor.accenture.com/
 akamai,AKAM,notified,https://www.ir.akamai.com/
 alexandria-real-estate-equities,ARE,q4,https://investor.are.com/
+allstate,ALL,notified,https://www.allstateinvestors.com/
 amcor,AMCR,unknown,https://www.amcor.com/investors
 amd,AMD,notified,https://ir.amd.com/
 apa,APA,notified,https://investor.apacorp.com/
@@ -20,6 +21,7 @@ bls,,unknown,https://www.bls.gov/newsrelease/
 booking,BKNG,q4,https://ir.bookingholdings.com/
 broadcom,AVGO,notified,https://investors.broadcom.com/
 builders-firstsource,BLDR,q4,https://investors.bldr.com/
+cadence,CDNS,q4,https://investor.cadence.com/
 caseys,CASY,notified,https://investor.caseys.com/
 cdw,CDW,q4,https://investor.cdw.com/
 charter,CHTR,notified,https://ir.charter.com/
@@ -65,6 +67,7 @@ ibm,IBM,investorroom,https://newsroom.ibm.com/announcements
 ingersoll-rand,IR,q4,https://investors.irco.com/
 intel,INTC,notified,https://www.intc.com/
 intercontinental-exchange,ICE,unknown,https://ir.theice.com/
+intuitive-surgical,ISRG,notified,https://isrg.intuitive.com/
 iqvia,IQV,unknown,https://ir.iqvia.com/
 kla,KLAC,notified,https://ir.kla.com/
 lam-research,LRCX,investorroom,https://investor.lamresearch.com/
@@ -97,11 +100,13 @@ smurfit-westrock,SW,unknown,http://investors.smurfitwestrock.com/
 spacex,SPCX,unknown,https://ir.spacex.com/
 super-micro,SMCI,q4,https://ir.supermicro.com/
 synchrony-financial,SYF,unknown,https://investors.synchrony.com/
+synopsys,SNPS,q4,https://investor.synopsys.com/
 teradyne,TER,notified,https://investors.teradyne.com/
 tesla,TSLA,unknown,https://ir.tesla.com/
 texas-instruments,TXN,notified,https://investor.ti.com/
 tjx,TJX,notified_gated,https://investor.tjx.com/
 tractor-supply,TSCO,unknown,https://ir.tractorsupply.com/
+travelers,TRV,unknown,https://investor.travelers.com/
 united-airlines,UAL,notified,https://ir.united.com/
 universal-health-services,UHS,notified,https://ir.uhs.com/
 verisign,VRSN,notified,https://investor.verisign.com/

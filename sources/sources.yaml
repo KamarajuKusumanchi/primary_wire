@@ -50,6 +50,10 @@ sources:
     name: Alexandria Real Estate Equities, Inc.
     ticker: ARE
     ir_url: https://investor.are.com/
+  - slug: allstate
+    name: The Allstate Corporation
+    ticker: ALL
+    ir_url: https://www.allstateinvestors.com/
   - slug: amcor
     name: Amcor plc
     ticker: AMCR
@@ -121,6 +125,10 @@ sources:
     name: Builders FirstSource, Inc.
     ticker: BLDR
     ir_url: https://investors.bldr.com/
+  - slug: cadence
+    name: Cadence Design Systems, Inc.
+    ticker: CDNS
+    ir_url: https://investor.cadence.com/
   - slug: caseys
     name: Casey's General Stores, Inc.
     ticker: CASY
@@ -310,6 +318,10 @@ sources:
     name: Intercontinental Exchange, Inc.
     ticker: ICE
     ir_url: https://ir.theice.com/
+  - slug: intuitive-surgical
+    name: Intuitive Surgical, Inc.
+    ticker: ISRG
+    ir_url: https://isrg.intuitive.com/
   - slug: iqvia
     name: IQVIA Holdings Inc.
     ticker: IQV
@@ -440,6 +452,10 @@ sources:
     name: Synchrony Financial
     ticker: SYF
     ir_url: https://investors.synchrony.com/
+  - slug: synopsys
+    name: Synopsys, Inc.
+    ticker: SNPS
+    ir_url: https://investor.synopsys.com/
   - slug: teradyne
     name: Teradyne, Inc.
     ticker: TER
@@ -463,6 +479,10 @@ sources:
     name: Tractor Supply Company
     ticker: TSCO
     ir_url: https://ir.tractorsupply.com/
+  - slug: travelers
+    name: The Travelers Companies, Inc.
+    ticker: TRV
+    ir_url: https://investor.travelers.com/
   - slug: united-airlines
     name: United Airlines Holdings, Inc.
     ticker: UAL

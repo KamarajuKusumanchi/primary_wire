@@ -1,7 +1,7 @@
 
 S&P 500 companies:  503
-Covered in sources: 110
-Missing:            393
+Covered in sources: 115
+Missing:            388
 
 Missing tickers:
   A
@@ -21,7 +21,6 @@ Missing tickers:
   AJG
   ALB
   ALGN
-  ALL
   ALLE
   AME
   AMGN
@@ -66,7 +65,6 @@ Missing tickers:
   CBOE
   CBRE
   CCL
-  CDNS
   CEG
   CF
   CFG
@@ -194,7 +192,6 @@ Missing tickers:
   INVH
   IP
   IRM
-  ISRG
   IT
   ITW
   IVZ
@@ -325,7 +322,6 @@ Missing tickers:
   SJM
   SLB
   SNA
-  SNPS
   SO
   SOLV
   SPG
@@ -351,7 +347,6 @@ Missing tickers:
   TRGP
   TRMB
   TROW
-  TRV
   TSN
   TT
   TTD
