@@ -133,6 +133,7 @@ sources:
     name: Casey's General Stores, Inc.
     ticker: CASY
     ir_url: https://investor.caseys.com/
+    news_releases_path: press-releases
   - slug: cdw
     name: CDW Corporation
     ticker: CDW
