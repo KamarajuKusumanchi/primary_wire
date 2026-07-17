@@ -1,4 +1,6 @@
 -------------------------------------------------------------------------------
+today | << 2026-07-17
+
 Commands are run in
 (primary_wire) (base)
 raju@DESKTOP-CRLPVE5 MINGW64 ~/work/github/primary_wire (master)
@@ -12,4 +14,11 @@ $ python src/scrape_investorroom.py --slug chipotle --year 2026
 $ python src/scrape_notified.py --year 2026
 
 $ python src/scrape_all.py --year 2026
+-------------------------------------------------------------------------------
+
+-------------------------------------------------------------------------------
+today | 2026-07-017
+
+$ python src/scrape_q4_ir.py --slug cdw --year 2026 --show-browser --debug-dump-html cdw_dump.html --dry-run
+$ python src/scrape_q4_ir.py --slug cdw --year 2024 --dry-run
 -------------------------------------------------------------------------------

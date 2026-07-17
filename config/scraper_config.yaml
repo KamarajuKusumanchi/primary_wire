@@ -50,7 +50,7 @@ q4_ir:
   scraper: scrape_q4_ir
   sources:
     - slug: costco
-      args: [--fallback-to-visible]
+      args: [--show-browser]
     - slug: cdw
     - slug: coinbase
-      args: [--fallback-to-visible]
+      args: [--show-browser]

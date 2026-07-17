@@ -129,7 +129,6 @@ sources:
     name: CDW Corporation
     ticker: CDW
     ir_url: https://investor.cdw.com/
-    needs_detail_page_dates: true
   - slug: charter
     name: Charter Communications, Inc.
     ticker: CHTR

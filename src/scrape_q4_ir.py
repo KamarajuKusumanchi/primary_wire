@@ -17,33 +17,38 @@ reads exactly what a human visiting the page would see.
 
 Date extraction works in two stages:
 
-  1. Listing-page parse (fast, zero extra requests): walk up to 5 ancestor
-     elements around each news link looking for a date in the card text.
-     Works on many Q4 themes (e.g. Costco).
+  1. Listing-page parse (fast, zero extra requests): for each news link, try
+     the anchor's own "aria-label" attribute first (some Q4 themes, e.g. CDW,
+     render an accessible label like "CDW Reports First Quarter 2026
+     Earnings, May 6, 2026" right on the link -- no DOM climbing needed).
+     Failing that, walk up to 5 ancestor elements around the link looking for
+     a date in the surrounding card text, deduplicating sibling news links by
+     href so a card's headline link and its separate "Continue Reading" link
+     to the same article aren't mistaken for two different sibling items.
+     Between the two, this covers every Q4 theme seen so far (Costco, CDW).
 
   2. Detail-page fallback (opt-in via --fetch-detail-pages, or automatically
      enabled by a source's "needs_detail_page_dates: true" field in
      sources.yaml): for any item still missing a date after stage 1, fetch
-     its individual detail page and parse the date from there. Required for
-     some Q4 themes (e.g. CDW) where the listing page does not include dates
-     in the card HTML. Fetches are spaced by --polite-delay. Each detail page
-     is loaded in the same already-open browser session to avoid repeated
-     launch overhead.
+     its individual detail page and parse the date from there. Fetches are
+     spaced by --polite-delay. Each detail page is loaded in the same
+     already-open browser session to avoid repeated launch overhead. Kept
+     around as a safety net for future Q4 themes whose listing page truly
+     omits the date anywhere in stage 1's reach.
 
 Examples:
     # Costco -- dates found on listing page, no detail fetches needed
     python src/scrape_q4_ir.py --dry-run
 
-    # CDW -- dates only on detail pages; sources.yaml marks cdw with
-    # needs_detail_page_dates: true, so --fetch-detail-pages is applied
-    # automatically and does not need to be passed here
+    # CDW -- dates come from the news link's aria-label on the listing page;
+    # no --fetch-detail-pages needed
     python src/scrape_q4_ir.py --slug cdw --dry-run
     python src/scrape_q4_ir.py --ticker CDW --dry-run
 
-    # A raw --url not resolvable against sources.yaml still needs the flag
-    # passed explicitly, since there's no record to read it from
+    # A source whose listing page truly omits dates still needs the flag
+    # passed explicitly (or "needs_detail_page_dates: true" in sources.yaml)
     python src/scrape_q4_ir.py \\
-        --url https://investor.cdw.com/news/default.aspx \\
+        --url https://investor.example.com/news/default.aspx \\
         --fetch-detail-pages --dry-run
 
     # Scrape a specific year
@@ -397,15 +402,31 @@ def render_news_page(
 def parse_news_items(html: str, base_url: str, slug: str, ticker: str) -> list[NewsItem]:
     """Extract news items from the rendered listing-page HTML.
 
-    Strategy: find every <a> matching the news-details URL shape, then walk
-    up to 5 ancestor elements looking for a date (and category) in the
-    surrounding card. Stops climbing as soon as the ancestor contains more
-    than one news link -- that means we've crossed into the shared list
-    wrapper and would pick up sibling items' dates.
+    Date extraction tries two sources, in order:
+
+      1. The news anchor's own `aria-label` attribute, if present. Some Q4
+         themes (e.g. CDW) render an accessible label like "CDW Reports
+         First Quarter 2026 Earnings, May 6, 2026" directly on the link --
+         the date is right there, scoped to exactly this item, with no DOM
+         climbing needed. parse_date() finds the trailing "Month Day, Year"
+         even when the headline text itself contains commas.
+
+      2. Walk up to 5 ancestor elements looking for a date (and category) in
+         the surrounding card. Stops climbing as soon as the ancestor
+         contains more than one *distinct* news-item URL -- that means we've
+         crossed into the shared list wrapper and would pick up sibling
+         items' dates. Sibling links are deduplicated by href before this
+         count: several Q4 themes (CDW included) render both a headline link
+         and a separate "Continue Reading" link pointing at the same
+         article within one card, and without deduping, that pair alone
+         looks like "more than one news item" and stops the climb one level
+         too early -- one level before the ancestor that actually holds the
+         date text.
 
     This works on Q4 themes that embed the date in each card (e.g. Costco).
-    For themes that don't (e.g. CDW), items come back with publish_date=None;
-    use fetch_missing_dates() to fill them in from individual detail pages.
+    For themes where neither stage finds anything, items come back with
+    publish_date=None; use fetch_missing_dates() to fill them in from
+    individual detail pages.
     """
     soup = BeautifulSoup(html, "html.parser")
     items: list[NewsItem] = []
@@ -428,16 +449,21 @@ def parse_news_items(html: str, base_url: str, slug: str, ticker: str) -> list[N
             continue
 
         publish_date, raw_date_text, category = None, "", ""
+
+        aria_label = anchor.get("aria-label", "")
+        if aria_label:
+            publish_date, raw_date_text = parse_date(aria_label)
+
         node = anchor
         for _ in range(5):
             node = node.find_parent(["li", "article", "div", "section"])
             if node is None:
                 break
-            sibling_links = [
-                a for a in node.find_all("a", href=True)
+            sibling_hrefs = {
+                a["href"] for a in node.find_all("a", href=True)
                 if NEWS_LINK_RE.search(a["href"])
-            ]
-            if len(sibling_links) > 1:
+            }
+            if len(sibling_hrefs) > 1:
                 break
             context_text = node.get_text(" ", strip=True)
             if publish_date is None:
