@@ -127,13 +127,62 @@ DEFAULT_URL = "https://investor.costco.com/news/default.aspx"
 DEFAULT_SLUG = "costco"
 DEFAULT_TICKER = "COST"
 
-NEWS_PATH = "/news/default.aspx"
+# Listing-page path appended to a slug/ticker-derived ir_url. Most Q4 themes
+# (Costco, CDW) use a fixed listing URL and select the year via an in-page
+# dropdown instead (see _try_select_year()). Some themes (e.g. Netflix) embed
+# the year directly in the listing URL's path; for those, sources.yaml's
+# "news_path" field (or --news-path) should contain a "{year}" placeholder
+# segment, e.g. "investor-news-and-events/financial-releases/{year}/default.aspx".
+# See _resolve_year_url() for how the placeholder is filled in (or dropped
+# when no year is requested).
+DEFAULT_NEWS_PATH = "news/default.aspx"
+
+# The "-details" path segment used by press-release detail links, e.g. the
+# "news-details" in /news/news-details/<year>/<slug>/default.aspx. Most Q4
+# themes (Costco, CDW) share this literal segment; some (e.g. Netflix, whose
+# detail links use /investor-news-and-events/financial-releases/
+# press-release-details/<year>/<slug>/default.aspx) use a different word.
+# Overridable via sources.yaml's "news_details_segment" field or
+# --news-details-segment.
+DEFAULT_NEWS_DETAILS_SEGMENT = "news-details"
 
 CATEGORY_CHOICES = ["All News", "Sales Releases", "Earnings Releases", "Other Company Releases"]
 
-# Matches /news/news-details/<year>/<slug>[/default.aspx] on any Q4 IR hostname.
-NEWS_LINK_RE = re.compile(r"/news/news-details/\d{4}/[^/]+/?(?:default\.aspx)?", re.IGNORECASE)
-NEWS_LINK_SELECTOR = "a[href*='/news/news-details/']"
+
+def _news_link_matcher(details_segment: str) -> tuple[re.Pattern, str]:
+    """Build the (regex, CSS selector) pair that identifies a press-release
+    detail link for one source's Q4 theme, e.g. for the default
+    "news-details" segment: matches /news/news-details/<year>/<slug>
+    [/default.aspx] on any Q4 IR hostname.
+    """
+    escaped = re.escape(details_segment)
+    link_re = re.compile(rf"/{escaped}/\d{{4}}/[^/]+/?(?:default\.aspx)?", re.IGNORECASE)
+    link_selector = f"a[href*='/{details_segment}/']"
+    return link_re, link_selector
+
+
+def _resolve_year_url(url_template: str, year: Optional[int]) -> str:
+    """Fill in (or drop) the "{year}" path placeholder in a listing URL.
+
+    Themes whose listing URL is year-specific (e.g. Netflix) put "{year}" in
+    their news_path template. When a concrete `year` is requested, it's
+    substituted directly. When `year` is None -- no --year/--start-year was
+    given, or this theme selects the year via an in-page dropdown instead
+    (no "{year}" in the template at all) -- the "{year}/" segment is dropped,
+    falling back to the theme's undated default listing (which, for Netflix,
+    happens to show the current year).
+    """
+    if "{year}" not in url_template:
+        return url_template
+    if year is not None:
+        return url_template.format(year=year)
+    return url_template.replace("{year}/", "")
+
+
+# Default pair, used as a fallback default arg where a per-source one hasn't
+# been resolved yet (main() always resolves and passes a source-specific
+# pair explicitly; see resolve_source()).
+NEWS_LINK_RE_DEFAULT, NEWS_LINK_SELECTOR_DEFAULT = _news_link_matcher(DEFAULT_NEWS_DETAILS_SEGMENT)
 
 logger = logging.getLogger("scrape_q4_ir")
 
@@ -270,11 +319,11 @@ def _click_load_more(page: Page, timeout_ms: int) -> bool:
         return False
 
 
-def _current_news_hrefs(page: Page) -> set[str]:
-    return set(page.locator(NEWS_LINK_SELECTOR).evaluate_all("els => els.map(e => e.getAttribute('href'))"))
+def _current_news_hrefs(page: Page, link_selector: str) -> set[str]:
+    return set(page.locator(link_selector).evaluate_all("els => els.map(e => e.getAttribute('href'))"))
 
 
-def _wait_for_news_links(page: Page, timeout_ms: int) -> None:
+def _wait_for_news_links(page: Page, timeout_ms: int, link_selector: str) -> None:
     """Wait for at least one press-release link to appear in the DOM.
 
     Uses direct selector polling rather than networkidle, which is unreliable
@@ -282,12 +331,12 @@ def _wait_for_news_links(page: Page, timeout_ms: int) -> None:
     content widget has already finished rendering).
     """
     try:
-        page.wait_for_selector(NEWS_LINK_SELECTOR, timeout=timeout_ms, state="attached")
+        page.wait_for_selector(link_selector, timeout=timeout_ms, state="attached")
     except PlaywrightTimeoutError:
         logger.warning(
             "Timed out after %dms waiting for '%s'. Page may be slow or blocked; "
             "continuing so --debug-dump-html can still capture what loaded.",
-            timeout_ms, NEWS_LINK_SELECTOR,
+            timeout_ms, link_selector,
         )
 
 
@@ -295,6 +344,7 @@ def _wait_for_list_change(
     page: Page,
     previous_hrefs: set[str],
     timeout_ms: int,
+    link_selector: str,
     poll_interval_ms: int = 200,
     settle_ms: int = 400,
 ) -> set[str]:
@@ -310,10 +360,10 @@ def _wait_for_list_change(
     deadline = time.monotonic() + timeout_ms / 1000
     current = previous_hrefs
     while time.monotonic() < deadline:
-        current = _current_news_hrefs(page)
+        current = _current_news_hrefs(page, link_selector)
         if current != previous_hrefs:
             time.sleep(settle_ms / 1000)
-            return _current_news_hrefs(page)
+            return _current_news_hrefs(page, link_selector)
         time.sleep(poll_interval_ms / 1000)
     logger.warning(
         "Press-release link set did not change within %dms after last action. "
@@ -339,22 +389,30 @@ def render_news_page(
     polite_delay: float,
     max_load_more: int,
     debug_dump_html: Optional[Path],
+    link_selector: str = NEWS_LINK_SELECTOR_DEFAULT,
 ) -> str:
     """Drive Chrome to the listing page, apply filters, expand pagination, and
-    return the fully rendered HTML."""
+    return the fully rendered HTML.
+
+    `year` here only drives the in-page year dropdown (_try_select_year);
+    pass None when the year is instead already baked into `url` (see
+    _resolve_year_url() / scrape_all_years()) so this doesn't also try --
+    redundantly and noisily -- to click a dropdown control that a
+    year-in-path theme like Netflix's doesn't have.
+    """
     with sync_playwright() as p:
         browser, page = _launch_browser(p, headless, browser_channel, timeout_ms)
 
         logger.info("Loading %s ...", url)
         page.goto(url, wait_until="domcontentloaded", timeout=timeout_ms)
-        _wait_for_news_links(page, timeout_ms)
+        _wait_for_news_links(page, timeout_ms, link_selector)
 
         if category and category != "All News":
             logger.info("Selecting category: %s", category)
-            before = _current_news_hrefs(page)
+            before = _current_news_hrefs(page, link_selector)
             if _try_select_category(page, category, timeout_ms):
                 time.sleep(polite_delay)
-                _wait_for_list_change(page, before, change_timeout_ms)
+                _wait_for_list_change(page, before, change_timeout_ms, link_selector)
             else:
                 logger.warning(
                     "Could not apply category filter '%s'; continuing with default view.", category
@@ -362,10 +420,10 @@ def render_news_page(
 
         if year is not None:
             logger.info("Selecting year: %s", year)
-            before = _current_news_hrefs(page)
+            before = _current_news_hrefs(page, link_selector)
             if _try_select_year(page, year, timeout_ms):
                 time.sleep(polite_delay)
-                _wait_for_list_change(page, before, change_timeout_ms)
+                _wait_for_list_change(page, before, change_timeout_ms, link_selector)
             else:
                 logger.warning(
                     "Could not find/apply year filter for %s. Falling back to default view "
@@ -375,11 +433,11 @@ def render_news_page(
 
         clicks = 0
         while clicks < max_load_more:
-            before = _current_news_hrefs(page)
+            before = _current_news_hrefs(page, link_selector)
             if not _click_load_more(page, timeout_ms):
                 break
             time.sleep(polite_delay)
-            after = _wait_for_list_change(page, before, change_timeout_ms)
+            after = _wait_for_list_change(page, before, change_timeout_ms, link_selector)
             clicks += 1
             logger.debug("Load-more click #%d: %d -> %d links", clicks, len(before), len(after))
             if len(after) <= len(before):
@@ -399,7 +457,13 @@ def render_news_page(
 # Listing-page parse (stage 1)
 # ---------------------------------------------------------------------------
 
-def parse_news_items(html: str, base_url: str, slug: str, ticker: str) -> list[NewsItem]:
+def parse_news_items(
+    html: str,
+    base_url: str,
+    slug: str,
+    ticker: str,
+    link_re: re.Pattern = NEWS_LINK_RE_DEFAULT,
+) -> list[NewsItem]:
     """Extract news items from the rendered listing-page HTML.
 
     Date extraction tries two sources, in order:
@@ -434,7 +498,7 @@ def parse_news_items(html: str, base_url: str, slug: str, ticker: str) -> list[N
 
     for anchor in soup.find_all("a", href=True):
         href = anchor["href"]
-        if not NEWS_LINK_RE.search(href):
+        if not link_re.search(href):
             continue
 
         url = urljoin(base_url, href)
@@ -461,7 +525,7 @@ def parse_news_items(html: str, base_url: str, slug: str, ticker: str) -> list[N
                 break
             sibling_hrefs = {
                 a["href"] for a in node.find_all("a", href=True)
-                if NEWS_LINK_RE.search(a["href"])
+                if link_re.search(a["href"])
             }
             if len(sibling_hrefs) > 1:
                 break
@@ -613,47 +677,101 @@ def resolve_source(
     slug: Optional[str],
     ticker: Optional[str],
     fetch_detail_pages: Optional[bool] = None,
-) -> tuple[str, str, str, bool]:
-    """Resolve (url, slug, ticker, fetch_detail_pages) by consulting sources.yaml.
+    news_path: Optional[str] = None,
+    news_details_segment: Optional[str] = None,
+) -> tuple[str, str, str, bool, re.Pattern, str]:
+    """Resolve (url, slug, ticker, fetch_detail_pages, link_re, link_selector)
+    by consulting sources.yaml.
 
     Thin Q4-specific wrapper around sources_utils.resolve_source_identity():
     Q4 sites want one complete listing URL, so a URL derived from a slug/
-    ticker lookup has NEWS_PATH appended (listing_path_suffix); see that
+    ticker lookup has news_path appended (listing_path_suffix); see that
     function's docstring for the full priority order (slug/ticker -> url ->
-    Costco defaults).
+    Costco defaults). The returned url may still contain a literal "{year}"
+    placeholder segment (see _resolve_year_url()) for a source whose
+    news_path template has one (e.g. Netflix) -- it's resolved per-year later,
+    in scrape_all_years(), not here.
+
+    news_path precedence (highest wins):
+      1. the news_path argument (i.e. --news-path on the CLI)
+      2. the "news_path" field on the matched sources.yaml record
+      3. DEFAULT_NEWS_PATH ("news/default.aspx")
+
+    Because news_path affects how resolve_source_identity builds the URL
+    (it's passed as that function's listing_path_suffix), and *that* function
+    is what looks up the matching sources.yaml record, resolving news_path
+    from the record requires peeking at the record ourselves first when only
+    slug/ticker was given -- a cheap, read-only re-lookup (see
+    sources_utils.find_source/load_sources) before delegating the rest of
+    the resolution (--url precedence, defaults, warnings) to
+    resolve_source_identity as usual.
+
+    news_details_segment precedence follows the same pattern (CLI arg >
+    sources.yaml field > DEFAULT_NEWS_DETAILS_SEGMENT ("news-details")), and
+    is used to build the (link_re, link_selector) pair that identifies
+    press-release detail links on this source's listing page.
 
     fetch_detail_pages precedence (highest wins):
       1. the fetch_detail_pages argument (i.e. --fetch-detail-pages on the CLI)
       2. the "needs_detail_page_dates" field on the matched sources.yaml record
       3. False
 
-    Returns (url, slug, ticker, fetch_detail_pages). url/slug/ticker are plain
-    strings (never None); fetch_detail_pages is a plain bool. Logs warnings for
-    any fields that could not be resolved.
+    Returns (url, slug, ticker, fetch_detail_pages, link_re, link_selector).
+    url/slug/ticker are plain strings (never None); fetch_detail_pages is a
+    plain bool. Logs warnings for any fields that could not be resolved.
     """
-    from utils.sources_utils import resolve_source_identity
+    from utils.sources_utils import find_source, find_source_by_ir_url, load_sources, resolve_source_identity
+
+    peeked_record: Optional[dict] = None
+    try:
+        sources = load_sources()
+        if slug or ticker:
+            peeked_record = find_source(sources, slug or ticker)
+        elif url:
+            peeked_record = find_source_by_ir_url(sources, url)
+    except Exception as exc:
+        logger.warning("Could not pre-load sources.yaml (%s); using defaults.", exc)
+
+    if not news_path:
+        news_path = (peeked_record.get("news_path") if peeked_record else None) or DEFAULT_NEWS_PATH
+    if not news_details_segment:
+        news_details_segment = (
+            (peeked_record.get("news_details_segment") if peeked_record else None)
+            or DEFAULT_NEWS_DETAILS_SEGMENT
+        )
 
     url, slug, ticker, record = resolve_source_identity(
         url, slug, ticker,
         default_slug=DEFAULT_SLUG, default_ticker=DEFAULT_TICKER, default_url=DEFAULT_URL,
-        listing_path_suffix=NEWS_PATH, logger=logger,
+        listing_path_suffix=news_path, logger=logger,
     )
 
     # fetch_detail_pages precedence: explicit CLI flag > sources.yaml field > False.
     if fetch_detail_pages is None:
         fetch_detail_pages = bool(record.get("needs_detail_page_dates")) if record else False
 
-    return url, slug, ticker, fetch_detail_pages
+    link_re, link_selector = _news_link_matcher(news_details_segment)
+
+    return url, slug, ticker, fetch_detail_pages, link_re, link_selector
 
 
 def scrape_all_years(
-    url: str,
+    url_template: str,
     slug: str,
     ticker: str,
     years: Optional[set[int]],
     args: argparse.Namespace,
+    link_re: re.Pattern,
+    link_selector: str,
 ) -> list[NewsItem]:
     """Render the listing page for each requested year and collect all NewsItems.
+
+    `url_template` may contain a "{year}" placeholder segment (see
+    _resolve_year_url()) for themes whose listing URL is year-specific (e.g.
+    Netflix); it's filled in (or dropped) separately for each year visited.
+    For themes without the placeholder (e.g. Costco/CDW), the same URL is
+    used for every year and the year is instead selected via an in-page
+    dropdown inside render_news_page().
 
     When no year filter is active, a single render of the default view is done.
     Multiple years are separated by --polite-delay to avoid hammering the site.
@@ -661,10 +779,13 @@ def scrape_all_years(
     """
     years_to_visit: list[Optional[int]] = sorted(years) if years else [None]
     all_items: list[NewsItem] = []
+    uses_year_in_path = "{year}" in url_template
 
     for i, year in enumerate(years_to_visit):
         if i > 0:
             time.sleep(args.polite_delay)
+
+        url = _resolve_year_url(url_template, year)
 
         debug_path = args.debug_dump_html
         if debug_path and len(years_to_visit) > 1:
@@ -672,7 +793,12 @@ def scrape_all_years(
 
         html = render_news_page(
             url=url,
-            year=year,
+            # If the year is already baked into `url`, don't also pass it
+            # through to the in-page dropdown selector -- that control
+            # doesn't exist on year-in-path themes like Netflix's, and
+            # attempting it just logs a spurious "could not find/apply
+            # year filter" warning.
+            year=None if uses_year_in_path else year,
             category=args.category,
             headless=args.headless,
             browser_channel=args.browser_channel,
@@ -681,8 +807,9 @@ def scrape_all_years(
             polite_delay=args.polite_delay,
             max_load_more=args.max_load_more,
             debug_dump_html=debug_path,
+            link_selector=link_selector,
         )
-        items = parse_news_items(html, base_url=url, slug=slug, ticker=ticker)
+        items = parse_news_items(html, base_url=url, slug=slug, ticker=ticker, link_re=link_re)
         all_items.extend(items)
 
     return all_items
@@ -704,6 +831,29 @@ def build_arg_parser() -> argparse.ArgumentParser:
         help="Category filter to apply on the page (default: All News)",
     )
     filt.add_argument("--limit", type=int, help="Keep at most this many items (after sorting by date)")
+
+    source = parser.add_argument_group("source")
+    source.add_argument(
+        "--news-path", default=None, metavar="PATH",
+        help=(
+            "Listing path appended to a slug/ticker-derived ir_url, e.g. "
+            "'investor-news-and-events/financial-releases/{year}/default.aspx' "
+            "(default: 'news/default.aspx'). Include a literal '{year}' path "
+            "segment for themes whose listing URL is year-specific (e.g. "
+            "Netflix); it's filled in per --year, or dropped for the default "
+            "undated view. Overrides sources.yaml's news_path field for this "
+            "run; most sites don't need this."
+        ),
+    )
+    source.add_argument(
+        "--news-details-segment", default=None, metavar="SEGMENT",
+        help=(
+            "Path segment used by this theme's press-release detail links in "
+            "place of 'news-details', e.g. 'press-release-details' for "
+            "Netflix (default: 'news-details'). Overrides sources.yaml's "
+            "news_details_segment field for this run; most sites don't need this."
+        ),
+    )
 
     # Override --data-dir default (csv_utils default is fine for investorroom, but
     # q4 script historically exposed it explicitly)
@@ -786,8 +936,9 @@ def main(argv: Optional[list[str]] = None) -> int:
     level = {0: _logging.WARNING, 1: _logging.INFO}.get(args.verbose, _logging.DEBUG)
     _logging.basicConfig(level=level, format="%(levelname)s: %(message)s")
 
-    url, slug, ticker, fetch_detail_pages = resolve_source(
-        args.url, args.slug, args.ticker, args.fetch_detail_pages
+    url, slug, ticker, fetch_detail_pages, link_re, link_selector = resolve_source(
+        args.url, args.slug, args.ticker, args.fetch_detail_pages,
+        args.news_path, args.news_details_segment,
     )
     if not url:
         logger.error("Could not determine a news URL. Pass --url, --slug, or --ticker.")
@@ -797,7 +948,7 @@ def main(argv: Optional[list[str]] = None) -> int:
     )
 
     years = parse_year_args(args)
-    all_items = scrape_all_years(url, slug, ticker, years, args)
+    all_items = scrape_all_years(url, slug, ticker, years, args, link_re, link_selector)
 
     if args.fallback_to_visible and args.headless and not all_items:
         logger.warning(
@@ -805,7 +956,7 @@ def main(argv: Optional[list[str]] = None) -> int:
             "Retrying with a visible browser window (--fallback-to-visible)."
         )
         args.headless = False
-        all_items = scrape_all_years(url, slug, ticker, years, args)
+        all_items = scrape_all_years(url, slug, ticker, years, args, link_re, link_selector)
 
     if fetch_detail_pages:
         fetch_missing_dates(

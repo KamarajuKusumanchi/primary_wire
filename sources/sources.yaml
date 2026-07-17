@@ -27,6 +27,21 @@
 #                         This is a durable fact about the site's Q4 theme, not a
 #                         per-run behavior choice, so it lives here rather than as
 #                         an 'args' override in config/scraper_config.yaml.
+#   news_path:            listing path appended to ir_url for a Q4 IR site, e.g.
+#                         "investor-news-and-events/financial-releases/{year}/default.aspx"
+#                         for Netflix. Optional -- omit to use the default
+#                         ("news/default.aspx", e.g. Costco/CDW). Include a
+#                         literal "{year}" path segment for themes whose listing
+#                         URL is year-specific; scrape_q4_ir.py fills it in per
+#                         --year (or drops it for the undated default view).
+#                         Only meaningful for scrape_q4_ir.py; other scrapers
+#                         ignore it.
+#   news_details_segment: the "-details" path segment used by this Q4 theme's
+#                         press-release detail links in place of "news-details",
+#                         e.g. "press-release-details" for Netflix. Optional --
+#                         omit to use the default ("news-details", e.g.
+#                         Costco/CDW). Only meaningful for scrape_q4_ir.py;
+#                         other scrapers ignore it.
 
 sources:
 
@@ -371,6 +386,8 @@ sources:
     name: Netflix, Inc.
     ticker: NFLX
     ir_url: https://ir.netflix.net
+    news_path: investor-news-and-events/financial-releases/{year}/default.aspx
+    news_details_segment: press-release-details
   - slug: nike
     name: NIKE, Inc.
     ticker: NKE
