@@ -10,8 +10,17 @@ Supported platforms (and their fingerprints, as documented by each scraper)
 ---------------------------------------------------------------------------
 
 q4  (scrape_q4_ir.py)
-  * Links with href matching /news/news-details/<year>/<slug>[/default.aspx]
-  * Static assets or links containing /news/default.aspx
+  * Links with href matching /<news_details_segment>/<year>/<slug>[/default.aspx],
+    where news_details_segment defaults to "news-details" (Costco/CDW's
+    theme) but is overridable per-source via sources.yaml's
+    "news_details_segment" field (e.g. Netflix uses
+    "press-release-details"). No literal "/news/" prefix is assumed -- some
+    Q4 themes nest their news-details links elsewhere (e.g. Travelers uses
+    "/newsroom/press-releases/news-details/...").
+  * The source's listing path (sources.yaml's "news_path" field, defaulting
+    to "news/default.aspx") appearing anywhere in the page source. This is
+    also the page fetched for detection -- see _join_news_path() -- since a
+    source's own root page doesn't always carry the Q4 fingerprint.
 
 investorroom  (scrape_investorroom.py)
   * Static assets / PDFs served from filecache.investorroom.com
@@ -120,12 +129,33 @@ DEFAULT_SOURCES_YAML = REPO_ROOT / "sources" / "sources.yaml"
 # Fingerprint regexes — taken verbatim from each scraper's source
 # ---------------------------------------------------------------------------
 
-# Q4 (scrape_q4_ir.py, line 127):
-#   NEWS_LINK_RE = re.compile(r"/news/news-details/\d{4}/[^/]+/?(?:default\.aspx)?", re.IGNORECASE)
-Q4_NEWS_LINK_RE = re.compile(
-    r"/news/news-details/\d{4}/[^/]+/?(?:default\.aspx)?",
-    re.IGNORECASE,
-)
+# Q4 (scrape_q4_ir.py, _news_link_matcher()):
+#   link_re = re.compile(rf"/{escaped}/\d{{4}}/[^/]+/?(?:default\.aspx)?", re.IGNORECASE)
+#   where escaped = re.escape(details_segment), details_segment defaulting to
+#   "news-details" (DEFAULT_NEWS_DETAILS_SEGMENT) but overridable per-source
+#   via sources.yaml's "news_details_segment" field (e.g. Netflix uses
+#   "press-release-details").
+#
+# NOTE: this does NOT require a literal "/news/" path segment before the
+# details segment -- only the Costco/CDW-style default theme happens to nest
+# it under "news/". Other Q4 themes nest it elsewhere (e.g. Travelers uses
+# "/newsroom/press-releases/news-details/<year>/<slug>/default.aspx"), so
+# hardcoding "/news/" here would silently miss them. _check_q4() builds this
+# regex per-source, using the matched sources.yaml record's
+# "news_details_segment" when given.
+DEFAULT_NEWS_DETAILS_SEGMENT = "news-details"
+
+
+def _q4_news_link_re(news_details_segment: str) -> re.Pattern:
+    """Build the Q4 news-details link regex for one source's theme.
+
+    Mirrors scrape_q4_ir.py's _news_link_matcher() exactly (see comment
+    above) rather than importing it, consistent with this module's existing
+    approach of copying each fingerprint rule verbatim from its source
+    script instead of depending on it.
+    """
+    escaped = re.escape(news_details_segment or DEFAULT_NEWS_DETAILS_SEGMENT)
+    return re.compile(rf"/{escaped}/\d{{4}}/[^/]+/?(?:default\.aspx)?", re.IGNORECASE)
 
 # InvestorRoom (scrape_investorroom.py, lines 143–144):
 #   DETAIL_URL_LEGACY_RE = re.compile(r"[?&]item=\d+", re.IGNORECASE)
@@ -152,6 +182,44 @@ NOTIFIED_DETAIL_RE = re.compile(
 # headless vs. headed Chrome, as documented in scrape_notified_gated.py)
 # that a site needs the gated variant.
 GATED_SLUGS = {"tjx", "robinhood", "caseys"}
+
+# ---------------------------------------------------------------------------
+# news_path handling
+# ---------------------------------------------------------------------------
+#
+# Some Q4 sites' listing page lives at a sub-path of ir_url rather than at
+# ir_url itself -- e.g. Travelers' listing page is
+# https://investor.travelers.com/newsroom/press-releases/default.aspx, not
+# https://investor.travelers.com/. sources.yaml records this sub-path in the
+# "news_path" field (the same field scrape_q4_ir.py reads to build the URL it
+# scrapes -- see that script's DEFAULT_NEWS_PATH / resolve_source()). If we
+# only ever fetch ir_url itself, sites like this never show the Q4
+# news-details links and get misclassified as "unknown".
+#
+# _join_news_path mirrors join_url_path() in utils/sources_utils.py (used by
+# every scraper's resolve_source()) rather than importing it, consistent
+# with this module's existing approach of copying each fingerprint/URL rule
+# verbatim from its source script instead of depending on it.
+
+
+def _join_news_path(ir_url: str, news_path: str) -> str:
+    """Join *ir_url* with sources.yaml's "news_path" field, if any.
+
+    Tolerates a missing/extra slash between the two, matching
+    utils.sources_utils.join_url_path(). Returns *ir_url* unchanged if
+    *news_path* is empty.
+
+    A "{year}" placeholder (used by year-specific listing URLs, e.g.
+    Netflix's) is dropped rather than filled in -- detection only needs
+    *some* listing page to check for platform fingerprints, not a
+    particular year, mirroring scrape_q4_ir.py's _resolve_year_url() when no
+    --year is given.
+    """
+    if not news_path:
+        return ir_url
+    path = news_path.replace("{year}/", "").replace("{year}", "")
+    base = ir_url.rstrip("/")
+    return base + "/" + path.lstrip("/")
 
 # ---------------------------------------------------------------------------
 # HTTP fetch
@@ -211,21 +279,36 @@ def fetch_html(url: str, timeout: int) -> tuple[str, str]:
 # Platform detection: signal tests on parsed HTML
 # ---------------------------------------------------------------------------
 
-def _check_q4(soup: BeautifulSoup, html: str) -> bool:
-    """Q4 fingerprints (from scrape_q4_ir.py docstring and constants):
+def _check_q4(
+    soup: BeautifulSoup, html: str,
+    news_details_segment: str = "", news_path: str = "",
+) -> bool:
+    """Q4 fingerprints (from scrape_q4_ir.py's _news_link_matcher() and
+    DEFAULT_NEWS_PATH):
 
-    1. Any <a href> matches the Q4 news-details URL shape.
-    2. Any link/script/src reference to /news/default.aspx.
+    1. Any <a href> matches this source's news-details URL shape (segment
+       defaults to "news-details", overridable via sources.yaml's
+       "news_details_segment" field -- see _q4_news_link_re()).
+    2. Static assets or links referencing this source's listing path
+       (sources.yaml's "news_path" field, defaulting to "news/default.aspx"
+       -- see DEFAULT_NEWS_PATH in scrape_q4_ir.py) appear in the raw HTML.
+       A "{year}" placeholder is stripped first since the literal string
+       won't include a resolved year.
     """
+    link_re = _q4_news_link_re(news_details_segment)
+
     # Signal 1: news-details link pattern
     for tag in soup.find_all("a", href=True):
-        if Q4_NEWS_LINK_RE.search(tag["href"]):
+        if link_re.search(tag["href"]):
             logger.debug("Q4 signal: news-details link → %s", tag["href"])
             return True
 
-    # Signal 2: /news/default.aspx in the raw HTML (covers <link>, <script src>, etc.)
-    if "/news/default.aspx" in html.lower():
-        logger.debug("Q4 signal: /news/default.aspx in page source")
+    # Signal 2: listing-page path referenced in the raw HTML (covers <link>,
+    # <script src>, nav <a href>, etc.) -- this source's news_path if given,
+    # else the Q4 default theme's "news/default.aspx".
+    listing_path = (news_path or "news/default.aspx").replace("{year}/", "").replace("{year}", "")
+    if listing_path.strip("/").lower() in html.lower():
+        logger.debug("Q4 signal: listing path %r in page source", listing_path)
         return True
 
     return False
@@ -286,12 +369,18 @@ def _check_notified(soup: BeautifulSoup, html: str) -> bool:
     return False
 
 
-def detect_platform_from_html(html: str) -> str:
+def detect_platform_from_html(
+    html: str, news_details_segment: str = "", news_path: str = "",
+) -> str:
     """Classify the IR platform from page HTML using documented fingerprints.
 
     Priority: notified > investorroom > q4
     Notified is checked first because its Drupal meta tag is definitive, and
     some Notified sites share link-path patterns with InvestorRoom.
+
+    *news_details_segment* and *news_path* customize the Q4 signal checks
+    for sources whose Q4 theme deviates from the Costco/CDW default (see
+    _check_q4()); both come from the matched sources.yaml record.
     """
     soup = BeautifulSoup(html, "lxml")
 
@@ -299,16 +388,34 @@ def detect_platform_from_html(html: str) -> str:
         return "notified"
     if _check_investorroom(soup, html):
         return "investorroom"
-    if _check_q4(soup, html):
+    if _check_q4(soup, html, news_details_segment=news_details_segment, news_path=news_path):
         return "q4"
     return "unknown"
 
 
-def detect_platform(ir_url: str, timeout: int, slug: str = "") -> str:
-    """Fetch *ir_url* and return the detected platform name.
+def detect_platform(
+    ir_url: str, timeout: int, slug: str = "",
+    news_path: str = "", news_details_segment: str = "",
+) -> str:
+    """Fetch *ir_url* (or its news_path sub-page, if given) and return the
+    detected platform name.
 
     Returns 'unknown' on any network or HTTP error so callers always get a
     string rather than an exception.
+
+    *news_path*, if given (from sources.yaml's "news_path" field -- the same
+    field scrape_q4_ir.py reads to build the listing URL it scrapes), is
+    joined onto *ir_url* via _join_news_path() and that combined URL is
+    fetched instead of ir_url alone. Some Q4 sites' listing page (where the
+    news-details fingerprint links actually live) is a sub-path of ir_url
+    rather than ir_url itself -- e.g. Travelers -- so fetching ir_url alone
+    would never see those links and would misclassify the site as
+    "unknown".
+
+    *news_details_segment*, if given (from sources.yaml's
+    "news_details_segment" field), is passed to the Q4 signal checks so
+    Q4 themes that customize the "-details" path segment (e.g. Netflix's
+    "press-release-details") are still recognized.
 
     *slug*, if given and present in GATED_SLUGS, promotes a "notified"
     result to "notified_gated" (see module docstring and GATED_SLUGS --
@@ -318,13 +425,16 @@ def detect_platform(ir_url: str, timeout: int, slug: str = "") -> str:
     """
     if not ir_url:
         return "unknown"
+    fetch_url = _join_news_path(ir_url, news_path)
     try:
-        final_url, html = fetch_html(ir_url, timeout=timeout)
-        if final_url != ir_url:
-            logger.debug("Redirected: %s → %s", ir_url, final_url)
-        platform = detect_platform_from_html(html)
+        final_url, html = fetch_html(fetch_url, timeout=timeout)
+        if final_url != fetch_url:
+            logger.debug("Redirected: %s → %s", fetch_url, final_url)
+        platform = detect_platform_from_html(
+            html, news_details_segment=news_details_segment, news_path=news_path,
+        )
     except Exception as exc:
-        logger.warning("fetch failed for %s: %s", ir_url, exc)
+        logger.warning("fetch failed for %s: %s", fetch_url, exc)
         return "unknown"
 
     if platform == "notified" and slug.strip().lower() in GATED_SLUGS:
@@ -337,7 +447,17 @@ def detect_platform(ir_url: str, timeout: int, slug: str = "") -> str:
 # ---------------------------------------------------------------------------
 
 def load_sources(yaml_path: Path) -> pd.DataFrame:
-    """Load sources.yaml and return a DataFrame (slug, name, ticker, ir_url)."""
+    """Load sources.yaml and return a DataFrame (slug, name, ticker, ir_url,
+    news_path, news_details_segment).
+
+    news_path (used by Q4 sites whose listing page is a sub-path of ir_url,
+    e.g. Travelers, Netflix -- see scrape_q4_ir.py's DEFAULT_NEWS_PATH) and
+    news_details_segment (used by Q4 sites whose "-details" path segment
+    isn't the default "news-details", e.g. Netflix's
+    "press-release-details") are carried through so detect_platform() can
+    fetch the actual listing page and recognize its actual link shape,
+    instead of assuming every Q4 site looks like the Costco/CDW default.
+    """
     try:
         from ruamel.yaml import YAML
         yaml = YAML()
@@ -352,14 +472,16 @@ def load_sources(yaml_path: Path) -> pd.DataFrame:
     return pd.DataFrame(
         [
             {
-                "slug":   rec.get("slug", ""),
-                "name":   rec.get("name", ""),
-                "ticker": rec.get("ticker", ""),
-                "ir_url": rec.get("ir_url", ""),
+                "slug":                  rec.get("slug", ""),
+                "name":                  rec.get("name", ""),
+                "ticker":                rec.get("ticker", ""),
+                "ir_url":                rec.get("ir_url", ""),
+                "news_path":             rec.get("news_path", ""),
+                "news_details_segment":  rec.get("news_details_segment", ""),
             }
             for rec in records
         ],
-        columns=["slug", "name", "ticker", "ir_url"],
+        columns=["slug", "name", "ticker", "ir_url", "news_path", "news_details_segment"],
     )
 
 
@@ -404,14 +526,18 @@ def detect_platforms_parallel(df: pd.DataFrame, workers: int, timeout: int) -> p
     Returns a new DataFrame with columns: slug, ticker, platform, ir_url.
     Rows retain the same order as *df*.
     """
-    rows = df[["slug", "ticker", "ir_url"]].to_dict("records")
+    rows = df[["slug", "ticker", "ir_url", "news_path", "news_details_segment"]].to_dict("records")
 
     # Pre-allocate results list so we can fill by index (preserves order)
     results = [None] * len(rows)
 
     def detect_one(idx_row: tuple[int, dict]) -> tuple[int, str]:
         idx, row = idx_row
-        platform = detect_platform(row["ir_url"], timeout=timeout, slug=row.get("slug", ""))
+        platform = detect_platform(
+            row["ir_url"], timeout=timeout, slug=row.get("slug", ""),
+            news_path=row.get("news_path", ""),
+            news_details_segment=row.get("news_details_segment", ""),
+        )
         return idx, platform
 
     with concurrent.futures.ThreadPoolExecutor(max_workers=workers) as pool:
@@ -523,19 +649,26 @@ def main(argv: Optional[list[str]] = None) -> int:
     row = find_row(df, query)
 
     if row is not None:
-        ir_url = row["ir_url"]
-        slug   = row.get("slug", "")
-        ticker = row.get("ticker", "")
+        ir_url                = row["ir_url"]
+        slug                  = row.get("slug", "")
+        ticker                = row.get("ticker", "")
+        news_path             = row.get("news_path", "")
+        news_details_segment  = row.get("news_details_segment", "")
     elif args.url:
         # URL not in sources.yaml — detect directly
-        ir_url = args.url
-        slug   = ""
-        ticker = ""
+        ir_url                = args.url
+        slug                  = ""
+        ticker                = ""
+        news_path             = ""
+        news_details_segment  = ""
     else:
         print(f"error: no sources.yaml record found for '{query}'", file=sys.stderr)
         return 1
 
-    platform = detect_platform(ir_url, timeout=args.timeout, slug=slug)
+    platform = detect_platform(
+        ir_url, timeout=args.timeout, slug=slug,
+        news_path=news_path, news_details_segment=news_details_segment,
+    )
     result = pd.DataFrame([{
         "slug":     slug,
         "ticker":   ticker,
