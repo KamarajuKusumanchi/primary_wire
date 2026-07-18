@@ -40,7 +40,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
-from scrape_q4_ir import parse_news_items  # noqa: E402
+from scrape_q4_ir import parse_news_items, _news_link_matcher  # noqa: E402
 
 BASE_URL = "https://investor.example.com/news/default.aspx"
 
@@ -219,3 +219,77 @@ def test_category_is_still_found_when_present_near_the_date():
 
 def test_no_matching_links_returns_empty_list():
     assert parse_news_items("<html><body>no news here</body></html>", BASE_URL, "x", "X") == []
+
+
+# ---------------------------------------------------------------------------
+# Netflix-shaped fixture: regression test for a real bug seen running
+#     python src/scrape_q4_ir.py --slug netflix --year 2026 --show-browser --dry-run
+#
+# Confirmed against a real --debug-dump-html capture of
+# https://ir.netflix.net/investor-news-and-events/financial-releases/default.aspx.
+# Trimmed down to one card (module_item), keeping the exact structure that
+# matters:
+#
+#   - The FIRST <a href> for this article is actually an aria-hidden
+#     thumbnail link with no text at all -- parse_news_items() must fall
+#     through that one (empty title, not added to seen_urls) and pick up the
+#     real headline anchor next.
+#   - The headline anchor's *own* immediate parent (div.module_headline)
+#     wraps nothing but that anchor. Climbing one ancestor only reaches the
+#     headline's own text, which itself mentions an unrelated date
+#     ("Schedules Special Meeting for March 20, 2026, to Approve..."). The
+#     old code fed that straight to parse_date() and got "March 20, 2026" --
+#     wrong.
+#   - The real dateline ("Feb 17, 2026") lives in a sibling div
+#     (module_date-time) one level further up, alongside a *second*
+#     unrelated mention of "March 20, 2026" inside a hidden sr-only span
+#     next to the PDF download link. Feb 17 appears earlier in reading
+#     order than that duplicate, so once the anchor's own text is excluded
+#     from the search, the real date is the first (and correct) match.
+# ---------------------------------------------------------------------------
+
+NETFLIX_LINK_RE, _ = _news_link_matcher("press-release-details")
+
+NETFLIX_CARD = """
+<div id="_ctrl0_ctl57_repeaterContent_ctl05_divItem" class="module_item">
+    <div class="module_thumbnail">
+        <a href="https://ir.netflix.net/investor-news-and-events/financial-releases/press-release-details/2026/WBD-Files-Definitive-Proxy-Statement-and-Schedules-Special-Meeting-for-March-20-2026-to-Approve-the-WBD-Netflix-Transaction/default.aspx" id="_ctrl0_ctl57_repeaterContent_ctl05_hrefThumbnail" class="module_thumbnail-link" aria-hidden="true" aria-label="">
+        </a>
+    </div>
+    <div class="module_date-time">
+        <span class="module_date-text">Feb 17, 2026</span>
+    </div>
+    <div class="module_headline">
+        <a href="https://ir.netflix.net/investor-news-and-events/financial-releases/press-release-details/2026/WBD-Files-Definitive-Proxy-Statement-and-Schedules-Special-Meeting-for-March-20-2026-to-Approve-the-WBD-Netflix-Transaction/default.aspx" id="_ctrl0_ctl57_repeaterContent_ctl05_hrefHeadline" class="module_headline-link">
+            WBD Files Definitive Proxy Statement and Schedules Special Meeting for March 20, 2026, to Approve the WBD-Netflix Transaction
+        </a>
+    </div>
+    <div class="module_links">
+        <a href="//s22.q4cdn.com/959853165/files/doc_news/2026/02/Netflix-Press-Release-FINAL-1.pdf" id="_ctrl0_ctl57_repeaterContent_ctl05_hrefDownload" class="module_link" target="1908922337">
+            <i class="q4-icon_pdf"></i>
+            <span class="module_link-text">Download</span>
+            <span class="sr-only">PDF format download (opens in new window)</span>
+        <span class="sr-only">WBD Files Definitive Proxy Statement and Schedules Special Meeting for March 20, 2026, to Approve the WBD-Netflix Transaction</span></a>
+    </div>
+    <div class="module_body">
+        <span id="_ctrl0_ctl57_repeaterContent_ctl05_spanEllipse" class="module_ellipse"></span>
+    </div>
+    <div class="module_more">
+        <a href="https://ir.netflix.net/investor-news-and-events/financial-releases/press-release-details/2026/WBD-Files-Definitive-Proxy-Statement-and-Schedules-Special-Meeting-for-March-20-2026-to-Approve-the-WBD-Netflix-Transaction/default.aspx" id="_ctrl0_ctl57_repeaterContent_ctl05_hrefMoreLink" class="module_more-link" aria-hidden="true" aria-label="">
+        </a>
+    </div>
+</div>
+"""
+
+
+def test_netflix_style_card_ignores_date_mentioned_inside_headline():
+    """The real publish date (from the card's own module_date-text node)
+    must win, not the unrelated "March 20, 2026" the headline text -- and a
+    duplicate hidden sr-only span -- happen to mention."""
+    items = parse_news_items(
+        NETFLIX_CARD, BASE_URL, slug="netflix", ticker="NFLX", link_re=NETFLIX_LINK_RE
+    )
+    assert len(items) == 1
+    assert items[0].publish_date == date(2026, 2, 17)
+    assert items[0].raw_date_text == "Feb 17, 2026"
+    assert "March 20, 2026" in items[0].title  # sanity check: still in headline

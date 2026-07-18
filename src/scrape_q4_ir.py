@@ -529,7 +529,21 @@ def parse_news_items(
             }
             if len(sibling_hrefs) > 1:
                 break
-            context_text = node.get_text(" ", strip=True)
+            # Exclude the headline anchor's own text from the date search.
+            # A headline can itself mention an unrelated date (e.g. "...
+            # Schedules Special Meeting for March 20, 2026, to Approve...")
+            # that has nothing to do with the release's actual publish date.
+            # parse_date() takes the first match it finds, so if that
+            # in-headline date happens to sit earlier in reading order than
+            # the card's real dateline (e.g. a "Feb 17, 2026" node rendered
+            # after the headline), it would be picked by mistake. Searching
+            # only the surrounding card text -- not the anchor's own label --
+            # keeps the headline's own wording out of the running entirely.
+            own_text_nodes = set(anchor.find_all(string=True))
+            context_text = " ".join(
+                s.strip() for s in node.find_all(string=True)
+                if s not in own_text_nodes and s.strip()
+            )
             if publish_date is None:
                 publish_date, raw_date_text = parse_date(context_text)
             if not category:
