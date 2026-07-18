@@ -40,7 +40,7 @@ equifax,EFX,notified,https://investor.equifax.com/
 erie-indemnity,ERIE,unknown,https://www.erieinsurance.com/investors
 expedia,EXPE,q4,https://ir.expediagroup.com/
 factset,FDS,notified,https://investor.factset.com/
-fedex,FDX,unknown,https://investors.fedex.com/
+fedex,FDX,q4,https://investors.fedex.com/
 fis-global,FIS,notified,https://www.investor.fisglobal.com/
 flex,FLEX,q4,https://investors.flex.com/
 fortinet,FTNT,notified,https://investor.fortinet.com/
@@ -59,9 +59,9 @@ intuitive-surgical,ISRG,notified,https://isrg.intuitive.com/
 iqvia,IQV,unknown,https://ir.iqvia.com/
 kla,KLAC,notified,https://ir.kla.com/
 lam-research,LRCX,investorroom,https://investor.lamresearch.com/
-lumentum,LITE,unknown,https://investor.lumentum.com/
+lumentum,LITE,q4,https://investor.lumentum.com/
 marvell,MRVL,notified,https://investor.marvell.com/
-meta,META,unknown,https://investor.atmeta.com/home/default.aspx
+meta,META,q4,https://investor.atmeta.com/home/default.aspx
 micron,MU,notified,https://investors.micron.com/
 moderna,MRNA,unknown,https://investors.modernatx.com/
 molson-coors,TAP,q4,https://ir.molsoncoors.com/
@@ -81,7 +81,7 @@ sba-communications,SBAC,unknown,https://ir.sbasite.com/
 seagate,STX,q4,https://investors.seagate.com/
 servicenow,NOW,unknown,https://investor.servicenow.com/
 skyworks,SWKS,notified,https://www.skyworksinc.com/investors
-smurfit-westrock,SW,unknown,http://investors.smurfitwestrock.com/
+smurfit-westrock,SW,q4,http://investors.smurfitwestrock.com/
 spacex,SPCX,unknown,https://ir.spacex.com/
 super-micro,SMCI,q4,https://ir.supermicro.com/
 synchrony-financial,SYF,unknown,https://investors.synchrony.com/
@@ -99,4 +99,4 @@ virtu,VIRT,notified,https://ir.virtu.com/
 visa,V,q4,https://investor.visa.com/
 western-digital,WDC,notified,https://investor.wdc.com/
 weyerhaeuser,WY,investorroom,https://investor.weyerhaeuser.com/
-workday,WDAY,notified,https://investor.workday.com/
+workday,WDAY,q4,https://investor.workday.com/
