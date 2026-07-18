@@ -25,26 +25,40 @@ One pass (rather than tasks.py running the script twice, once per file)
 guarantees the prose summary and the CSV of gaps reflect the exact same
 sources.yaml/scraper_config.yaml snapshot.
 
-ir_platform.csv and scraper_coverage_missing.csv are machine-readable. To
-view either as a human-friendly fixed-width table, run:
+press_release_counts.py also writes its own output file rather than going
+through stdout-capture, via its --out flag:
+
+    python.exe src/reporting/press_release_counts.py --out reports/latest/press_release_counts.csv
+
+This is preferred over stdout-capture for any script whose output could
+grow large (one row per (year, slug, ticker)): writing directly avoids
+holding the whole report in memory as a captured-stdout string.
+
+ir_platform.csv, scraper_coverage_missing.csv, and
+press_release_counts.csv are machine-readable. To view any of them as a
+human-friendly fixed-width table, run:
 
     uv run python src/print_csv_table.py reports/latest/ir_platform.csv
     uv run python src/print_csv_table.py reports/latest/scraper_coverage_missing.csv
+    uv run python src/print_csv_table.py reports/latest/press_release_counts.csv
 
 Usage
 -----
-    invoke --list              # show all available tasks
-    invoke reports              # regenerate all reports (default task)
-    invoke ir-platform           # regenerate just reports/latest/ir_platform.csv
-    invoke missing-tickers       # regenerate just reports/latest/missing_tickers.txt
-    invoke scraper-coverage      # regenerate scraper_coverage_summary.txt + scraper_coverage_missing.csv
-    invoke smoke-test            # quick "is anything broken?" check (see below)
+    invoke --list                    # show all available tasks
+    invoke reports                    # regenerate all reports (default task)
+    invoke ir-platform                 # regenerate just reports/latest/ir_platform.csv
+    invoke missing-tickers             # regenerate just reports/latest/missing_tickers.txt
+    invoke scraper-coverage            # regenerate scraper_coverage_summary.txt + scraper_coverage_missing.csv
+    invoke press-release-counts        # regenerate reports/latest/press_release_counts.csv
+    invoke smoke-test                  # quick "is anything broken?" check (see below)
 
 ir-platform and missing-tickers are invoked as "uv run python <script>"
 (using an absolute path to the script, so this works no matter which
 directory you run `invoke` from), so this works whether or not a virtual
-environment is currently activated. scraper-coverage is invoked the same
-way, plus --write-reports -- see scraper_coverage() below.
+environment is currently activated. scraper-coverage and
+press-release-counts are invoked the same way, plus their own
+report-writing flag (--write-reports / --out respectively) -- see
+scraper_coverage() and press_release_counts() below.
 """
 
 from pathlib import Path
@@ -128,7 +142,31 @@ def scraper_coverage(c):
     return result.ok
 
 
-@task(pre=[ir_platform, missing_tickers, scraper_coverage], default=True)
+@task
+def press_release_counts(c):
+    """Regenerate reports/latest/press_release_counts.csv.
+
+    Like scraper-coverage, this script writes its own output file (via
+    --out) rather than tasks.py capturing stdout.
+    """
+    script_path = ROOT / "src" / "reporting" / "press_release_counts.py"
+    out_path = REPORTS_DIR / "press_release_counts.csv"
+    REPORTS_DIR.mkdir(parents=True, exist_ok=True)
+    cmd = f'uv run python "{script_path}" --out "{out_path}"'
+    print(f"[press-release-counts] running: {cmd}")
+    result = c.run(cmd, hide=True, warn=True)
+
+    if result.stdout.strip():
+        print(f"[press-release-counts] {result.stdout.strip()}")
+    if result.stderr:
+        print(f"[press-release-counts] stderr:\n{result.stderr}")
+    if not result.ok:
+        print(f"[press-release-counts] WARNING: exited with code {result.return_code}")
+
+    return result.ok
+
+
+@task(pre=[ir_platform, missing_tickers, scraper_coverage, press_release_counts], default=True)
 def reports(c):
     """Regenerate all reports under reports/latest/."""
     print("Done: reports/latest/ is up to date.")
