@@ -740,7 +740,15 @@ def resolve_source(
     try:
         sources = load_sources()
         if slug or ticker:
-            peeked_record = find_source(sources, slug or ticker)
+            # Match resolve_source_identity()'s field-strict lookup below: a
+            # --slug value is only checked against records' slug field, a
+            # --ticker value only against ticker, and slug takes priority if
+            # both are given. Otherwise this peek could land on a different
+            # record than the one actually resolved a few lines down.
+            if slug:
+                peeked_record = find_source(sources, slug, field="slug")
+            else:
+                peeked_record = find_source(sources, ticker, field="ticker")
         elif url:
             peeked_record = find_source_by_ir_url(sources, url)
     except Exception as exc:

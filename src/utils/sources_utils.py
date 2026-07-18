@@ -68,16 +68,35 @@ def load_sources(sources_path: Path = SOURCES_PATH) -> list[dict]:
     return data.get("sources", [])
 
 
-def find_source(sources: list[dict], query: str) -> Optional[dict]:
+def find_source(
+    sources: list[dict], query: str, field: Optional[str] = None
+) -> Optional[dict]:
     """Return the first record matching *query* as a slug or ticker.
 
     *query* is matched case-insensitively. Returns None if not found.
+
+    *field* restricts which record field is checked:
+      - "slug"   -> only the record's "slug" field is compared
+      - "ticker" -> only the record's "ticker" field is compared
+      - None (default) -> either field may match, in that order
+
+    Use the default (None) only for genuinely ambiguous lookups where the
+    caller doesn't know (or care) whether *query* is a slug or a ticker --
+    e.g. get_source.py's "SLUG_OR_TICKER" CLI argument. Callers that DO know
+    which one they have (e.g. a --slug or --ticker flag was passed
+    explicitly) must pass the matching *field* so that a value which happens
+    to collide with the *other* field isn't silently accepted -- passing
+    --slug cost should not match Costco's ticker "COST".
     """
+    if field not in (None, "slug", "ticker"):
+        raise ValueError(f"field must be 'slug', 'ticker', or None, got {field!r}")
     q = query.strip().lower()
+    check_slug = field in (None, "slug")
+    check_ticker = field in (None, "ticker")
     for record in sources:
-        if record.get("slug", "").lower() == q:
+        if check_slug and record.get("slug", "").lower() == q:
             return record
-        if record.get("ticker", "").lower() == q:
+        if check_ticker and record.get("ticker", "").lower() == q:
             return record
     return None
 
@@ -138,8 +157,14 @@ def resolve_source_identity(
 
     Priority, mirroring the original per-scraper implementations:
 
-      1. slug or ticker given  -> look up the sources.yaml record by it,
-         and fill in any of url/slug/ticker the caller didn't supply.
+      1. slug or ticker given  -> look up the sources.yaml record strictly by
+         that field (a --slug value is only ever matched against records'
+         slug field, a --ticker value only against ticker -- so --slug cost
+         will NOT match a record whose ticker happens to be COST), then
+         overwrite slug/ticker/url with the matched record's canonical
+         values. If both slug and ticker were given, the slug lookup takes
+         priority and a mismatched --ticker triggers a warning (the record
+         wins). Fills in url only if the caller didn't pass --url.
       2. only url given        -> look up the record by the URL's host,
          and fill in slug/ticker from it.
       3. nothing given         -> fall back to (default_slug, default_ticker,
@@ -181,15 +206,34 @@ def resolve_source_identity(
     record: Optional[dict] = None
 
     if slug or ticker:
-        query = slug or ticker
-        record = find_source(sources, query) if sources else None
+        # Look up strictly by whichever field the caller actually supplied --
+        # a --slug value must match a record's slug field, never its ticker
+        # field (and vice versa). If both were given, slug takes priority for
+        # the lookup itself (matching the original "slug or ticker" priority)
+        # but the other one is still checked below.
+        if slug:
+            query, field = slug, "slug"
+        else:
+            query, field = ticker, "ticker"
+        record = find_source(sources, query, field=field) if sources else None
         if record is None:
             log.warning(
-                "No sources.yaml record found for '%s'. Using provided values as-is.", query
+                "No sources.yaml record found with %s '%s'. Using provided values as-is.",
+                field, query,
             )
         else:
-            slug = slug or record.get("slug", "")
-            ticker = ticker or record.get("ticker", "")
+            # Trust the matched record's canonical values rather than the
+            # raw CLI strings -- the lookup above only guarantees *field*
+            # matched (case-insensitively); the other identifier, and the
+            # exact casing of *field* itself, should come from sources.yaml.
+            if slug and ticker and ticker.strip().lower() != record.get("ticker", "").lower():
+                log.warning(
+                    "--slug '%s' resolved to sources.yaml record '%s', but its ticker "
+                    "(%s) does not match --ticker '%s'. Using the record's values.",
+                    slug, record.get("slug", ""), record.get("ticker", ""), ticker,
+                )
+            slug = record.get("slug", "")
+            ticker = record.get("ticker", "")
             if not url:
                 ir_url = record.get("ir_url", "")
                 if ir_url:
