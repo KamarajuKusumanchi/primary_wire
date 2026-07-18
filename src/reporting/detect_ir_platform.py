@@ -43,8 +43,17 @@ notified_gated  (scrape_notified_gated.py)
     the normal notified/investorroom/q4 signal checks below. See
     GATED_SLUGS. Real sub-classification signals are future work.
 
-Priority when multiple signals fire: notified > investorroom > q4
-(Notified and InvestorRoom share some URL shapes; Drupal meta tag is definitive.)
+Priority when multiple signals fire: notified (meta tag) > investorroom > q4
+> notified (link pattern)
+The Drupal generator meta tag is definitive and is checked first. Notified's
+link-pattern signal, by contrast, is a deliberately broad heuristic (any
+multi-segment path under news-releases/press-releases/financial-releases --
+see scrape_notified.py's DETAIL_URL_RE) that can coincidentally match a Q4
+(or InvestorRoom) site's own links -- e.g. Netflix's Q4 news-details links
+nest under a "financial-releases" path segment, which also satisfies the
+Notified heuristic. To avoid misclassifying such sites as "notified", that
+heuristic is checked LAST, after InvestorRoom and Q4 have had a chance to
+claim the link via their own more specific patterns.
 notified_gated overrides a "notified" result for slugs in GATED_SLUGS.
 
 unknown
@@ -347,26 +356,52 @@ def _check_investorroom(soup: BeautifulSoup, html: str) -> bool:
     return False
 
 
-def _check_notified(soup: BeautifulSoup, html: str) -> bool:
-    """Notified/Drupal fingerprints (from scrape_notified.py docstring):
-
-    1. <meta name="Generator" content="Drupal 10 ..."> in <head>.
-    2. Any link matches /news-releases/news-release-details/<slug> shape.
+def _check_notified_meta(soup: BeautifulSoup) -> bool:
+    """Definitive Notified/Drupal signal: <meta name="Generator" content="Drupal 10 ...">
+    in <head>. No other platform produces this tag, so a match here is
+    conclusive on its own -- see detect_platform_from_html().
     """
-    # Signal 1: Drupal generator meta tag
     for meta in soup.find_all("meta", attrs={"name": re.compile(r"^generator$", re.I)}):
         content = meta.get("content", "")
         if "drupal" in content.lower():
             logger.debug("Notified signal: Drupal generator meta → %s", content)
             return True
+    return False
 
-    # Signal 2: news-release-details path pattern
+
+def _check_notified_links(soup: BeautifulSoup) -> bool:
+    """Heuristic Notified signal: any link matches
+    /news-releases/news-release-details/<slug> shape.
+
+    NOTIFIED_DETAIL_RE is deliberately broad (copied verbatim from
+    scrape_notified.py's DETAIL_URL_RE, whose own docstring calls it
+    "deliberately broad": any multi-segment path under news-releases/
+    press-releases/financial-releases). That breadth means it can also
+    match a Q4 theme's own news-details link when that link happens to
+    nest under a same-named parent segment -- e.g. Netflix's Q4 links look
+    like ".../financial-releases/press-release-details/<year>/<slug>/...",
+    and "/financial-releases/press-release-details/<year>" alone satisfies
+    this regex even though the site is Q4, not Notified. This is a
+    heuristic, not a definitive signal, so callers must only use it as a
+    last resort after Q4 and InvestorRoom's own (more specific) link checks
+    have had a chance to claim the link first -- see
+    detect_platform_from_html().
+    """
     for tag in soup.find_all("a", href=True):
         if NOTIFIED_DETAIL_RE.search(tag["href"]):
             logger.debug("Notified signal: detail link → %s", tag["href"])
             return True
-
     return False
+
+
+def _check_notified(soup: BeautifulSoup, html: str) -> bool:
+    """Either Notified signal firing (meta tag or link pattern). Kept for
+    any external caller that wants a single yes/no Notified check; internal
+    classification uses _check_notified_meta() and _check_notified_links()
+    separately so the two can be weighted differently -- see
+    detect_platform_from_html().
+    """
+    return _check_notified_meta(soup) or _check_notified_links(soup)
 
 
 def detect_platform_from_html(
@@ -374,9 +409,20 @@ def detect_platform_from_html(
 ) -> str:
     """Classify the IR platform from page HTML using documented fingerprints.
 
-    Priority: notified > investorroom > q4
-    Notified is checked first because its Drupal meta tag is definitive, and
-    some Notified sites share link-path patterns with InvestorRoom.
+    Priority: notified (definitive) > investorroom > q4 > notified (heuristic)
+
+    The Drupal generator meta tag is checked first and, if present, decides
+    the result immediately -- no other platform can produce it.
+
+    Notified's *link-pattern* signal is checked LAST, after InvestorRoom and
+    Q4, rather than second as the platform-priority order might suggest.
+    That signal is a deliberately broad heuristic (see
+    _check_notified_links()) that can coincidentally match a Q4 (or
+    InvestorRoom) site's own links, e.g. Netflix's Q4 news-details links
+    nest under a "financial-releases" path segment that also satisfies the
+    Notified heuristic. Checking Q4/InvestorRoom's more specific link shapes
+    first, and only falling back to Notified's broad heuristic if neither
+    claims the link, avoids misclassifying those sites as "notified".
 
     *news_details_segment* and *news_path* customize the Q4 signal checks
     for sources whose Q4 theme deviates from the Costco/CDW default (see
@@ -384,12 +430,14 @@ def detect_platform_from_html(
     """
     soup = BeautifulSoup(html, "lxml")
 
-    if _check_notified(soup, html):
+    if _check_notified_meta(soup):
         return "notified"
     if _check_investorroom(soup, html):
         return "investorroom"
     if _check_q4(soup, html, news_details_segment=news_details_segment, news_path=news_path):
         return "q4"
+    if _check_notified_links(soup):
+        return "notified"
     return "unknown"
 
 

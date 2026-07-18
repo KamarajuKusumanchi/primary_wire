@@ -80,7 +80,7 @@ moderna,MRNA,unknown,https://investors.modernatx.com/
 molson-coors,TAP,q4,https://ir.molsoncoors.com/
 msci,MSCI,notified,https://ir.msci.com/
 netapp,NTAP,q4,https://investors.netapp.com/
-netflix,NFLX,notified,https://ir.netflix.net
+netflix,NFLX,q4,https://ir.netflix.net
 nike,NKE,unknown,https://investors.nike.com/
 norwegian-cruise-line,NCLH,notified,https://www.nclhltd.com/investors
 nvidia,NVDA,unknown,https://investor.nvidia.com/news/press-releases/default.aspx
@@ -118,4 +118,4 @@ virtu,VIRT,notified,https://ir.virtu.com/
 visa,V,q4,https://investor.visa.com/
 western-digital,WDC,notified,https://investor.wdc.com/
 weyerhaeuser,WY,investorroom,https://investor.weyerhaeuser.com/
-workday,WDAY,notified,https://investor.workday.com/
+workday,WDAY,q4,https://investor.workday.com/
