@@ -109,6 +109,13 @@ from urllib.parse import urlparse
 import pandas as pd
 from bs4 import BeautifulSoup
 
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+from utils.q4_link_pattern import (  # noqa: E402
+    DEFAULT_NEWS_PATH,
+    q4_news_link_re,
+    strip_year_placeholder,
+)
+
 # curl_cffi impersonates Chrome's TLS fingerprint (JA3/JA4), which is required
 # for IR sites that enforce TLS fingerprinting (Notified/Drupal sites like
 # AbbVie silently drop or timeout connections from the standard Python stack).
@@ -135,36 +142,27 @@ REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 DEFAULT_SOURCES_YAML = REPO_ROOT / "sources" / "sources.yaml"
 
 # ---------------------------------------------------------------------------
-# Fingerprint regexes — taken verbatim from each scraper's source
+# Fingerprint regexes
+# ---------------------------------------------------------------------------
+# InvestorRoom's and Notified's regexes below are taken verbatim from each
+# scraper's source. Q4's is the one exception: it's imported from
+# utils/q4_link_pattern.py, shared with scrape_q4_ir.py -- see the comment
+# just below.
 # ---------------------------------------------------------------------------
 
-# Q4 (scrape_q4_ir.py, _news_link_matcher()):
-#   link_re = re.compile(rf"/{escaped}/\d{{4}}/[^/]+/?(?:default\.aspx)?", re.IGNORECASE)
-#   where escaped = re.escape(details_segment), details_segment defaulting to
-#   "news-details" (DEFAULT_NEWS_DETAILS_SEGMENT) but overridable per-source
-#   via sources.yaml's "news_details_segment" field (e.g. Netflix uses
-#   "press-release-details").
+# Q4 (scrape_q4_ir.py, _news_link_matcher()): the news-details link regex
+# and DEFAULT_NEWS_DETAILS_SEGMENT ("news-details", overridable per-source
+# via sources.yaml's "news_details_segment" field, e.g. Netflix uses
+# "press-release-details") now live in utils/q4_link_pattern.py, shared with
+# scrape_q4_ir.py, rather than being copied verbatim here.
 #
-# NOTE: this does NOT require a literal "/news/" path segment before the
-# details segment -- only the Costco/CDW-style default theme happens to nest
-# it under "news/". Other Q4 themes nest it elsewhere (e.g. Travelers uses
-# "/newsroom/press-releases/news-details/<year>/<slug>/default.aspx"), so
-# hardcoding "/news/" here would silently miss them. _check_q4() builds this
-# regex per-source, using the matched sources.yaml record's
-# "news_details_segment" when given.
-DEFAULT_NEWS_DETAILS_SEGMENT = "news-details"
-
-
-def _q4_news_link_re(news_details_segment: str) -> re.Pattern:
-    """Build the Q4 news-details link regex for one source's theme.
-
-    Mirrors scrape_q4_ir.py's _news_link_matcher() exactly (see comment
-    above) rather than importing it, consistent with this module's existing
-    approach of copying each fingerprint rule verbatim from its source
-    script instead of depending on it.
-    """
-    escaped = re.escape(news_details_segment or DEFAULT_NEWS_DETAILS_SEGMENT)
-    return re.compile(rf"/{escaped}/\d{{4}}/[^/]+/?(?:default\.aspx)?", re.IGNORECASE)
+# NOTE: the shared regex does NOT require a literal "/news/" path segment
+# before the details segment -- only the Costco/CDW-style default theme
+# happens to nest it under "news/". Other Q4 themes nest it elsewhere (e.g.
+# Travelers uses "/newsroom/press-releases/news-details/<year>/<slug>/
+# default.aspx"), so hardcoding "/news/" here would silently miss them.
+# _check_q4() builds this regex per-source, using the matched sources.yaml
+# record's "news_details_segment" when given.
 
 # InvestorRoom (scrape_investorroom.py, lines 143–144):
 #   DETAIL_URL_LEGACY_RE = re.compile(r"[?&]item=\d+", re.IGNORECASE)
@@ -206,9 +204,13 @@ GATED_SLUGS = {"tjx", "robinhood", "caseys"}
 # news-details links and get misclassified as "unknown".
 #
 # _join_news_path mirrors join_url_path() in utils/sources_utils.py (used by
-# every scraper's resolve_source()) rather than importing it, consistent
-# with this module's existing approach of copying each fingerprint/URL rule
-# verbatim from its source script instead of depending on it.
+# every scraper's resolve_source()) rather than importing it. This is no
+# longer a blanket policy across the module -- the Q4 link regex above IS
+# imported from utils/q4_link_pattern.py, since that pattern is genuinely
+# identical to scrape_q4_ir.py's and worth keeping in one place. join_url_path()
+# handles a broader general-purpose URL-joining job than the narrow "{year}"-
+# stripping this function needs, so it stays a small local copy rather than a
+# dependency on that larger function.
 
 
 def _join_news_path(ir_url: str, news_path: str) -> str:
@@ -219,14 +221,14 @@ def _join_news_path(ir_url: str, news_path: str) -> str:
     *news_path* is empty.
 
     A "{year}" placeholder (used by year-specific listing URLs, e.g.
-    Netflix's) is dropped rather than filled in -- detection only needs
-    *some* listing page to check for platform fingerprints, not a
-    particular year, mirroring scrape_q4_ir.py's _resolve_year_url() when no
-    --year is given.
+    Netflix's) is dropped rather than filled in, via the shared
+    strip_year_placeholder() -- detection only needs *some* listing page to
+    check for platform fingerprints, not a particular year, mirroring
+    scrape_q4_ir.py's _resolve_year_url() when no --year is given.
     """
     if not news_path:
         return ir_url
-    path = news_path.replace("{year}/", "").replace("{year}", "")
+    path = strip_year_placeholder(news_path)
     base = ir_url.rstrip("/")
     return base + "/" + path.lstrip("/")
 
@@ -297,14 +299,14 @@ def _check_q4(
 
     1. Any <a href> matches this source's news-details URL shape (segment
        defaults to "news-details", overridable via sources.yaml's
-       "news_details_segment" field -- see _q4_news_link_re()).
+       "news_details_segment" field -- see q4_news_link_re()).
     2. Static assets or links referencing this source's listing path
        (sources.yaml's "news_path" field, defaulting to "news/default.aspx"
        -- see DEFAULT_NEWS_PATH in scrape_q4_ir.py) appear in the raw HTML.
        A "{year}" placeholder is stripped first since the literal string
        won't include a resolved year.
     """
-    link_re = _q4_news_link_re(news_details_segment)
+    link_re = q4_news_link_re(news_details_segment)
 
     # Signal 1: news-details link pattern
     for tag in soup.find_all("a", href=True):
@@ -314,8 +316,8 @@ def _check_q4(
 
     # Signal 2: listing-page path referenced in the raw HTML (covers <link>,
     # <script src>, nav <a href>, etc.) -- this source's news_path if given,
-    # else the Q4 default theme's "news/default.aspx".
-    listing_path = (news_path or "news/default.aspx").replace("{year}/", "").replace("{year}", "")
+    # else the Q4 default theme's DEFAULT_NEWS_PATH ("news/default.aspx").
+    listing_path = strip_year_placeholder(news_path or DEFAULT_NEWS_PATH)
     if listing_path.strip("/").lower() in html.lower():
         logger.debug("Q4 signal: listing path %r in page source", listing_path)
         return True

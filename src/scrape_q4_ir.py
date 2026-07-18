@@ -119,6 +119,13 @@ from utils.scrape_utils import (
     parse_year_args,
     print_preview as _base_print_preview,
 )
+from utils.q4_link_pattern import (
+    DEFAULT_NEWS_DETAILS_SEGMENT,
+    DEFAULT_NEWS_PATH,
+    q4_news_link_re,
+    q4_news_link_selector,
+    strip_year_placeholder,
+)
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 DATA_DIR = REPO_ROOT / "data"
@@ -127,24 +134,28 @@ DEFAULT_URL = "https://investor.costco.com/news/default.aspx"
 DEFAULT_SLUG = "costco"
 DEFAULT_TICKER = "COST"
 
-# Listing-page path appended to a slug/ticker-derived ir_url. Most Q4 themes
-# (Costco, CDW) use a fixed listing URL and select the year via an in-page
-# dropdown instead (see _try_select_year()). Some themes (e.g. Netflix) embed
-# the year directly in the listing URL's path; for those, sources.yaml's
-# "news_path" field (or --news-path) should contain a "{year}" placeholder
-# segment, e.g. "investor-news-and-events/financial-releases/{year}/default.aspx".
-# See _resolve_year_url() for how the placeholder is filled in (or dropped
-# when no year is requested).
-DEFAULT_NEWS_PATH = "news/default.aspx"
-
-# The "-details" path segment used by press-release detail links, e.g. the
-# "news-details" in /news/news-details/<year>/<slug>/default.aspx. Most Q4
-# themes (Costco, CDW) share this literal segment; some (e.g. Netflix, whose
-# detail links use /investor-news-and-events/financial-releases/
+# DEFAULT_NEWS_PATH: listing-page path appended to a slug/ticker-derived
+# ir_url. Most Q4 themes (Costco, CDW) use a fixed listing URL and select
+# the year via an in-page dropdown instead (see _try_select_year()). Some
+# themes (e.g. Netflix) embed the year directly in the listing URL's path;
+# for those, sources.yaml's "news_path" field (or --news-path) should
+# contain a "{year}" placeholder segment, e.g.
+# "investor-news-and-events/financial-releases/{year}/default.aspx". See
+# _resolve_year_url() for how the placeholder is filled in (or dropped when
+# no year is requested).
+#
+# DEFAULT_NEWS_DETAILS_SEGMENT: the "-details" path segment used by
+# press-release detail links, e.g. the "news-details" in
+# /news/news-details/<year>/<slug>/default.aspx. Most Q4 themes (Costco,
+# CDW) share this literal segment; some (e.g. Netflix, whose detail links
+# use /investor-news-and-events/financial-releases/
 # press-release-details/<year>/<slug>/default.aspx) use a different word.
 # Overridable via sources.yaml's "news_details_segment" field or
 # --news-details-segment.
-DEFAULT_NEWS_DETAILS_SEGMENT = "news-details"
+#
+# Both constants, and the link-matching logic below, live in
+# utils/q4_link_pattern.py, shared with src/reporting/detect_ir_platform.py
+# (which fingerprints a source's IR platform using this same link shape).
 
 CATEGORY_CHOICES = ["All News", "Sales Releases", "Earnings Releases", "Other Company Releases"]
 
@@ -154,11 +165,10 @@ def _news_link_matcher(details_segment: str) -> tuple[re.Pattern, str]:
     detail link for one source's Q4 theme, e.g. for the default
     "news-details" segment: matches /news/news-details/<year>/<slug>
     [/default.aspx] on any Q4 IR hostname.
+
+    Thin wrapper around utils.q4_link_pattern's shared builders.
     """
-    escaped = re.escape(details_segment)
-    link_re = re.compile(rf"/{escaped}/\d{{4}}/[^/]+/?(?:default\.aspx)?", re.IGNORECASE)
-    link_selector = f"a[href*='/{details_segment}/']"
-    return link_re, link_selector
+    return q4_news_link_re(details_segment), q4_news_link_selector(details_segment)
 
 
 def _resolve_year_url(url_template: str, year: Optional[int]) -> str:
@@ -176,7 +186,7 @@ def _resolve_year_url(url_template: str, year: Optional[int]) -> str:
         return url_template
     if year is not None:
         return url_template.format(year=year)
-    return url_template.replace("{year}/", "")
+    return strip_year_placeholder(url_template)
 
 
 # Default pair, used as a fallback default arg where a per-source one hasn't
