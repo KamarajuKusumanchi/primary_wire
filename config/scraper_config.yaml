@@ -57,3 +57,4 @@ q4_ir:
       args: [--show-browser]
     - slug: netflix
       args: [--show-browser]
+    - slug: travelers

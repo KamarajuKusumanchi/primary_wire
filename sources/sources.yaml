@@ -505,6 +505,7 @@ sources:
     name: The Travelers Companies, Inc.
     ticker: TRV
     ir_url: https://investor.travelers.com/
+    news_path: newsroom/press-releases/default.aspx
   - slug: united-airlines
     name: United Airlines Holdings, Inc.
     ticker: UAL
