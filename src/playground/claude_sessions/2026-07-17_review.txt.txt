@@ -1,0 +1,52 @@
+2026-07-17 10:21 PM
+
+Prompt:
+Please review https://github.com/KamarajuKusumanchi/primary_wire/archive/refs/heads/master.zip and tell me what you think? What are the next steps? How to improve the scraper coverage, code quality and make it faster? Ignore files in src/playground , src/prototypes from your review.
+
+Response:
+This is a pretty polished codebase. Let me look at a few more key pieces (utils, config, sources.yaml, tests, reporting) before forming a full assessment.I pulled down the repo and went through the README, `sources.yaml`, `config/scraper_config.yaml`, the four scraper scripts, the shared `utils/` modules, the reporting scripts, the tests, and `pyproject.toml`. Here's my honest take.
+
+## Overall impression
+
+This is unusually well-engineered for a "work in progress" personal project. Most solo scraper repos I see are a pile of one-off scripts with hardcoded URLs and no error handling. This one has:
+
+- A real shared abstraction layer (`utils/scrape_utils.py`, `csv_utils.py`, `sources_utils.py`) that three-plus scrapers actually use instead of copy-pasting
+- Genuinely subtle bug fixes documented in comments and locked in with regression tests (the "Jan. 02, 2026" strptime period-stripping bug, the CDW sibling-link dedup issue) — that's the kind of detail most people ship broken and never notice
+- A platform-detection reporting script (`detect_ir_platform.py`) that turns "add a new company" from guesswork into a repeatable, evidence-based workflow
+- A smoke-test system (`--smoke-test`) that picks one representative source per distinct code path instead of running everything, which is a genuinely clever way to keep CI/pre-push checks fast as coverage grows
+
+So: the bones are good. The problems are mostly about *scale* — this works well at 14 automated sources and will start hurting at 100+.
+
+## Coverage: the real bottleneck
+
+- 110/500 S&P 500 companies have any entry at all, and only **14 of those** are automated (4 InvestorRoom, 7 Notified, 3 Notified-gated, 4 Q4). Everything else is manual CSV editing. At this rate, closing the gap is a content problem, not a code problem.
+- The good news: `detect_ir_platform.py` tells you that IR sites cluster into a handful of platforms (Q4, Notified/Drupal, InvestorRoom being the three found so far). That means coverage scales *combinatorially* — each new platform scraper you write potentially unlocks dozens of companies at once, versus one company at a time.
+- My concrete suggestion: run `detect_ir_platform.py --all` against the full S&P 500 list (not just the 110 already in `sources.yaml`), bucket the "unknown" results, and manually inspect the 5-10 largest unknown clusters. That tells you which platform scraper to build next for maximum coverage-per-hour-invested, rather than guessing.
+
+## Code quality
+
+Strengths: good docstrings, thoughtful edge-case handling, consistent CLI patterns via `add_common_args`/`finalize_and_output`, dataclass-based items.
+
+Real gaps:
+
+1. **No CI.** You have pytest and an `invoke smoke-test` command specifically designed to be fast and cheap, but nothing runs it automatically on push/PR. This is the single highest-leverage fix available — a GitHub Actions workflow running `pytest` + `invoke smoke-test --dry-run` on every PR costs you an hour to set up and would catch regressions before they hit `main`.
+2. **Test coverage is lopsided.** ~740 lines of tests against ~7,500 lines of source, and the tests concentrate on `scrape_q4_ir.py` and shared utils. `scrape_investorroom.py`, `scrape_notified.py`, and `scrape_notified_gated.py` — your three biggest files (810/890/753 lines) — have no dedicated tests. These are HTML-parsing-heavy; a handful of saved-fixture (golden HTML → expected NewsItems) tests per platform would be cheap insurance against a site redesign silently breaking things.
+3. **Real duplication between `scrape_notified.py` and `scrape_notified_gated.py`.** I diffed them — the row-parsing logic (`parse_listing_page`, date/time extraction from a row) is reimplemented separately in both rather than shared. The *reason* they're separate scripts (headed-vs-headless token acquisition) is legitimate, but the actual HTML-parsing core could be factored into one shared function that both call, the same way Q4's browser-launch logic was already extracted into `_launch_browser`. Right now a parsing bug fix has to be applied twice and can silently drift.
+4. **No linting/formatting/type-checking config** — no ruff, black, or mypy setup despite type hints being used throughout. Cheap to add, catches real bugs (the codebase already leans on `from __future__ import annotations` and dataclasses, so it's obviously typed enough to benefit).
+
+## Speed
+
+Politeness is a deliberate design constraint here (README explicitly bans hammering IR servers), so I wouldn't try to make individual requests faster. But `scrape_all.py` runs every source **sequentially in a single process**, importing each scraper module and calling `main()` directly. Since different companies live on different domains, there's no politeness reason they can't run concurrently — only same-domain requests need to be spaced out. As coverage grows from 14 to 100+ sources, sequential execution turns a 10-minute daily run into an hour-plus one for no reason. Concretely: group sources by domain, run different domains in a thread pool (or separate `subprocess` calls), keep the existing per-domain `--polite-delay` intact within each group. This is the one place where "faster" and "still courteous" aren't in tension.
+
+The Q4 scraper's `--fetch-detail-pages` fallback (one browser navigation per undated item) is inherently the slowest path in the codebase; nothing to do about that beyond what's already there (session reuse, `needs_detail_page_dates` flag to skip it when unnecessary).
+
+## Concrete next steps, prioritized
+
+1. Add a GitHub Actions workflow: pytest + smoke-test on every PR. Highest value, lowest effort.
+2. Run `detect_ir_platform.py` against the full S&P 500 (not just current `sources.yaml`) to find which platform to target next for coverage.
+3. Parallelize `scrape_all.py` across domains.
+4. Write fixture-based tests for the three untested scrapers before touching their parsing logic further.
+5. Extract the duplicated Notified/Notified-gated parsing core into one shared function.
+6. Add ruff + mypy as a `dev` extra and a pre-commit hook.
+
+If you want, I can actually draft the GitHub Actions workflow file or start the domain-grouping refactor for `scrape_all.py` — either is a small, self-contained change.
