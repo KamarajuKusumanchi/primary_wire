@@ -6,9 +6,13 @@ scrape_notified.py (open sites) and scrape_notified_gated.py (sites behind
 bot mitigation strict enough to need a one-time Playwright step to obtain a
 year-filtered URL). Both scripts scrape the exact same underlying listing
 markup (Notified/Drupal Views tables or card layouts), so the low-level
-HTTP-fetch, pagination, and date/time-extraction logic that used to be
-duplicated (in some cases verbatim) between the two scripts lives here
-instead.
+HTTP-fetch, pagination, date/time-extraction, and row/listing-parsing logic
+that used to be duplicated (in some cases verbatim, and prone to silently
+drifting apart when only one copy got a bug fix) between the two scripts
+lives here instead. See parse_listing_page() below for the shared row-parsing
+core; genuinely site-specific bits (which hrefs count as a detail link, the
+NewsItem subclass to build, TJX's diagnostic dump on an empty result) are
+passed in by each caller rather than hardcoded here.
 
 This is deliberately NOT folded into utils/scrape_utils.py: scrape_utils.py
 is shared across the *whole* scraper family (scrape_notified.py,
@@ -22,10 +26,12 @@ bloating the generic one.
 
 from __future__ import annotations
 
+import logging
 import re
 import sys
 from datetime import date
-from typing import Optional
+from typing import Any, Callable, Optional
+from urllib.parse import urljoin, urlparse, urlunparse
 
 try:
     from curl_cffi import requests
@@ -36,7 +42,14 @@ except ImportError:
         "will reject connections from it).\nInstall with: pip install curl_cffi"
     )
 
+try:
+    from bs4 import BeautifulSoup
+except ImportError:
+    sys.exit("Missing dependency. Install with: pip install beautifulsoup4 lxml")
+
 from utils.scrape_utils import parse_date, parse_time
+
+logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
 # Constants
@@ -245,3 +258,213 @@ def extract_date_and_time_from_row(
         node = parent
 
     return None, "", ""
+
+
+# ---------------------------------------------------------------------------
+# Listing-page parsing (shared row-parsing core)
+# ---------------------------------------------------------------------------
+#
+# This used to be a separate parse_listing_page() reimplemented (with drift
+# risk) in both scrape_notified.py and scrape_notified_gated.py. The two
+# copies were identical in shape -- walk every <a href>, keep the ones that
+# look like a press-release detail link, dedupe by normalized URL, pull a
+# title and a date/time out of the row, build a NewsItem -- with only a
+# handful of genuinely site-specific differences (which hrefs count as a
+# detail link, whether to fall back to digging a real headline out of the
+# row/card when the anchor text is just a generic "Read more" CTA, which
+# NewsItem subclass to build, and what to do when nothing was found at all).
+# Those differences are now explicit parameters/callbacks below instead of
+# separately-maintained code, the same way extract_date_and_time_from_row()
+# above takes try_long_date_in_cell/try_short_date_in_row rather than being
+# copy-pasted per caller.
+
+# Class-name substrings that, by Drupal's common "field--name-title" /
+# "views-field-title" naming convention, typically mark the element holding
+# a listing row's headline. Used by _find_title_in_container() below.
+TITLE_HINT_CLASS_RE = re.compile(r"title|headline", re.IGNORECASE)
+
+# Some Notified/Drupal sites (e.g. Paramount) lay out each release as a
+# heading + summary + a separate "Read more" call-to-action link, rather
+# than making the headline itself the link. When the *only* text inside the
+# detail-page anchor is one of these generic CTAs (or nothing at all), the
+# anchor's own text is useless as a title and we must look elsewhere in the
+# row/card for the actual headline. See _row_container() / _find_title_in_container().
+GENERIC_LINK_TEXT_RE = re.compile(
+    r"^(?:read|learn|view|see|find\s+out)\s+more$|^(?:more|details?)$",
+    re.IGNORECASE,
+)
+
+
+def _row_container(anchor, is_detail_url: Callable[[str], bool], max_up: int = 8):
+    """Return the tightest ancestor of ``anchor`` that still contains only
+    this one press-release detail link.
+
+    Card/row layouts (no <table>) nest a release's heading, summary, and
+    "Read more" link inside some shared container, but the exact tag/class
+    varies by site and isn't worth hardcoding. What's true on every such
+    site is that a row's container holds exactly one detail-page link (its
+    own); the next ancestor up starts pulling in a sibling row's link too.
+    So climb from the anchor while the ancestor still has exactly one
+    matching link, and stop just before that would no longer hold.
+
+    ``is_detail_url`` is the caller's own detail-URL predicate (each script
+    has a slightly different DETAIL_URL_RE), so "one matching link" means
+    what that specific site/script considers a press-release link.
+    """
+    container = anchor
+    for _ in range(max_up):
+        parent = container.parent
+        if parent is None or parent.name in ("body", "html", "[document]"):
+            break
+        detail_links = [
+            a for a in parent.find_all("a", href=True) if is_detail_url(a["href"])
+        ]
+        if len(detail_links) > 1:
+            break
+        container = parent
+    return container
+
+
+def _find_title_in_container(container, anchor_text: str) -> str:
+    """Best-effort headline extraction from a row/card container, for sites
+    (e.g. Paramount) where the only link in the row is a generic "Read
+    more" CTA and the actual headline is a separate, non-linked text block.
+
+    Tries, in order:
+      1. A heading tag (h1-h6) inside the container.
+      2. An element whose class name hints at a title/headline field,
+         following Drupal's common "field--name-title" / "views-field-title"
+         naming convention.
+      3. The first substantial top-level text block in the container that
+         isn't a date and isn't the (generic) anchor text itself.
+
+    Returns "" if nothing plausible is found, so callers can fall back to
+    their existing behavior.
+    """
+    heading = container.find(["h1", "h2", "h3", "h4", "h5", "h6"])
+    if heading:
+        text = heading.get_text(separator=" ", strip=True)
+        if text and not GENERIC_LINK_TEXT_RE.match(text):
+            return text
+
+    for el in container.find_all(class_=True):
+        classes = " ".join(el.get("class", []))
+        if TITLE_HINT_CLASS_RE.search(classes):
+            text = el.get_text(separator=" ", strip=True)
+            if text and text != anchor_text and not GENERIC_LINK_TEXT_RE.match(text):
+                return text
+
+    for child in container.find_all(recursive=False):
+        text = child.get_text(separator=" ", strip=True)
+        if not text or text == anchor_text:
+            continue
+        if GENERIC_LINK_TEXT_RE.match(text):
+            continue
+        if parse_short_date(text)[0] or parse_date(text)[0]:
+            continue
+        return text
+
+    return ""
+
+
+def parse_listing_page(
+    html: str,
+    base_url: str,
+    slug: str,
+    ticker: str,
+    *,
+    is_detail_url: Callable[[str], bool],
+    news_item_cls: type,
+    extract_date_and_time_from_row: Callable[[Any], "tuple[Optional[date], str, str]"] = extract_date_and_time_from_row,
+    use_title_fallback: bool = False,
+    on_empty_result: Optional[Callable[[Any], None]] = None,
+) -> list:
+    """Parse one Notified/Drupal listing page into a list of news items.
+
+    Shared core of scrape_notified.py's and scrape_notified_gated.py's
+    parse_listing_page() (formerly two independently-maintained
+    implementations of the same row-parsing logic). A parsing fix made here
+    now applies to both callers instead of needing to be applied twice and
+    risking drift.
+
+    What's genuinely site/script-specific is passed in rather than
+    hardcoded:
+      - is_detail_url: which hrefs count as a press-release detail link.
+        scrape_notified.py's DETAIL_URL_RE is deliberately broad (any
+        multi-segment news/press/financial-releases path);
+        scrape_notified_gated.py's is anchored to TJX's exact confirmed
+        markup shape. See each script's own regex/docstring.
+      - news_item_cls: the NewsItem dataclass to build. Each script defines
+        its own trivial subclass of scrape_utils.NewsItem.
+      - extract_date_and_time_from_row: defaults to this module's shared
+        implementation (its own default flags: short-date-only in the
+        cell, long-date-only in the row -- scrape_notified.py's original,
+        tested behavior). scrape_notified_gated.py passes its own thin
+        wrapper (try_long_date_in_cell=True, try_short_date_in_row=True) to
+        keep its original, TJX-tuned behavior -- see that function's
+        docstring for why the two differ.
+      - use_title_fallback: scrape_notified.py's original behavior of
+        digging into the row/card container for a real headline (via
+        _row_container()/_find_title_in_container() above) when the
+        detail-page anchor's own text is empty or just a generic "Read
+        more" CTA (e.g. Paramount). scrape_notified_gated.py has never
+        needed this (TJX's headline itself is the link), so it's left off
+        (False) by default to preserve its original, tested behavior.
+      - on_empty_result: optional callback (soup) -> None, invoked when no
+        items were found at all. scrape_notified_gated.py passes
+        log_empty_result_diagnostics() to dump candidate hrefs for
+        diagnosing a markup change; scrape_notified.py has no equivalent
+        yet and passes nothing.
+    """
+    parsed = urlparse(base_url)
+    site_root = urlunparse((parsed.scheme, parsed.netloc, "", "", "", ""))
+
+    soup = BeautifulSoup(html, "lxml")
+    items: list = []
+    seen_urls: set[str] = set()
+
+    for anchor in soup.find_all("a", href=True):
+        href: str = anchor["href"].strip()
+        if not is_detail_url(href):
+            continue
+
+        full_url = urljoin(site_root, href)
+        norm_url = full_url.rstrip("/")
+        if norm_url in seen_urls:
+            continue
+
+        title = anchor.get_text(separator=" ", strip=True)
+        if use_title_fallback and (not title or GENERIC_LINK_TEXT_RE.match(title)):
+            # The anchor itself is just a "Read more"-style CTA (e.g.
+            # Paramount's IR site); the real headline is a separate,
+            # non-linked text block elsewhere in the row/card.
+            row_title = _find_title_in_container(
+                _row_container(anchor, is_detail_url), title
+            )
+            if row_title:
+                title = row_title
+        if not title:
+            span = anchor.find("span")
+            title = span.get_text(strip=True) if span else ""
+        if not title:
+            logger.debug("Skipping link with no title text: %s", full_url)
+            continue
+
+        seen_urls.add(norm_url)
+
+        publish_date, raw_date_text, publish_time = extract_date_and_time_from_row(anchor)
+
+        items.append(news_item_cls(
+            slug=slug,
+            ticker=ticker,
+            title=title,
+            url=full_url,
+            publish_date=publish_date,
+            raw_date_text=raw_date_text,
+            publish_time=publish_time,
+        ))
+
+    if not items and on_empty_result is not None:
+        on_empty_result(soup)
+
+    return items

@@ -133,7 +133,7 @@ from dataclasses import dataclass
 from datetime import date, datetime
 from pathlib import Path
 from typing import Optional
-from urllib.parse import parse_qsl, urlencode, urljoin, urlparse, urlunparse
+from urllib.parse import parse_qsl, urlencode, urlparse, urlunparse
 
 try:
     from bs4 import BeautifulSoup
@@ -157,6 +157,7 @@ from utils.scrape_notified_utils import (
     extract_date_and_time_from_row as _shared_extract_date_and_time_from_row,
     fetch_html as fetch_listing_html,
     find_last_page,
+    parse_listing_page as _shared_parse_listing_page,
     parse_short_date,
 )
 
@@ -454,55 +455,29 @@ def log_empty_result_diagnostics(soup: "BeautifulSoup") -> None:
 def parse_listing_page(html: str, base_url: str, slug: str, ticker: str) -> list[NewsItem]:
     """Parse one fetched listing page; return the NewsItems found.
 
-    Link discovery uses BeautifulSoup (not pd.read_html()) because the
-    press-release links themselves -- the hrefs -- are what's needed, and
-    pd.read_html() discards hrefs, keeping only the visible cell text.
+    Thin wrapper around the shared row-parsing core in
+    utils/scrape_notified_utils.py (see that function's docstring for the
+    full strategy), shared with scrape_notified.py so a parsing bug fix
+    only needs to be made once. Passes this script's own is_detail_url()
+    (TJX's confirmed markup shape), NewsItem subclass, TJX-tuned
+    extract_date_and_time_from_row() wrapper (both try_* flags True), and
+    log_empty_result_diagnostics() for a markup-change diagnostic dump on
+    an empty result -- use_title_fallback is left at its default (False)
+    since TJX's headline itself is the link and this script has never
+    needed the Paramount-style CTA fallback.
 
     Confirmed end-to-end against a live --debug-dump-html fetch of TJX (see
     module docstring): correct item count for the requested year, correct
     dates (including across the Mar/Nov DST boundary), and hrefs correctly
-    resolved to absolute URLs via urljoin(site_root, href).
+    resolved to absolute URLs.
     """
-    parsed = urlparse(base_url)
-    site_root = urlunparse((parsed.scheme, parsed.netloc, "", "", "", ""))
-
-    soup = BeautifulSoup(html, "lxml")
-    items: list[NewsItem] = []
-    seen_urls: set[str] = set()
-
-    for anchor in soup.find_all("a", href=True):
-        href: str = anchor["href"].strip()
-        if not is_detail_url(href):
-            continue
-
-        full_url = urljoin(site_root, href)
-        norm_url = full_url.rstrip("/")
-        if norm_url in seen_urls:
-            continue
-
-        title = anchor.get_text(separator=" ", strip=True)
-        if not title:
-            logger.debug("Skipping link with no title text: %s", full_url)
-            continue
-
-        seen_urls.add(norm_url)
-
-        publish_date, raw_date_text, publish_time = extract_date_and_time_from_row(anchor)
-
-        items.append(NewsItem(
-            slug=slug,
-            ticker=ticker,
-            title=title,
-            url=full_url,
-            publish_date=publish_date,
-            raw_date_text=raw_date_text,
-            publish_time=publish_time,
-        ))
-
-    if not items:
-        log_empty_result_diagnostics(soup)
-
-    return items
+    return _shared_parse_listing_page(
+        html, base_url, slug, ticker,
+        is_detail_url=is_detail_url,
+        news_item_cls=NewsItem,
+        extract_date_and_time_from_row=extract_date_and_time_from_row,
+        on_empty_result=log_empty_result_diagnostics,
+    )
 
 
 # ---------------------------------------------------------------------------

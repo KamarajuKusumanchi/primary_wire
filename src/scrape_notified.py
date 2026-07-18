@@ -110,7 +110,7 @@ from dataclasses import dataclass
 from datetime import date, datetime
 from pathlib import Path
 from typing import Optional
-from urllib.parse import urlencode, urljoin, urlparse, urlunparse
+from urllib.parse import urlencode
 
 try:
     from bs4 import BeautifulSoup
@@ -127,7 +127,6 @@ from utils.scrape_utils import (
     extract_date_from_detail_html,
     fetch_missing_dates_via_http,
     finalize_and_output,
-    parse_date,
     parse_time,
     parse_year_args,
 )
@@ -136,7 +135,7 @@ from utils.scrape_notified_utils import (
     extract_date_and_time_from_row,
     fetch_html,
     find_last_page,
-    parse_short_date,
+    parse_listing_page as _shared_parse_listing_page,
 )
 
 
@@ -179,22 +178,6 @@ DETAIL_URL_RE = re.compile(
     re.IGNORECASE,
 )
 
-# Some Notified/Drupal sites (e.g. Paramount) lay out each release as a
-# heading + summary + a separate "Read more" call-to-action link, rather
-# than making the headline itself the link. When the *only* text inside the
-# detail-page anchor is one of these generic CTAs (or nothing at all), the
-# anchor's own text is useless as a title and we must look elsewhere in the
-# row/card for the actual headline. See _row_container() / _find_title_in_container().
-GENERIC_LINK_TEXT_RE = re.compile(
-    r"^(?:read|learn|view|see|find\s+out)\s+more$|^(?:more|details?)$",
-    re.IGNORECASE,
-)
-
-# Class-name substrings that, by Drupal's common "field--name-title" /
-# "views-field-title" naming convention, typically mark the element holding
-# a listing row's headline.
-TITLE_HINT_CLASS_RE = re.compile(r"title|headline", re.IGNORECASE)
-
 logger = logging.getLogger("scrape_notified")
 
 
@@ -216,11 +199,15 @@ class NewsItem(_BaseNewsItem):
 # ---------------------------------------------------------------------------
 #
 # parse_short_date(), extract_date_and_time_from_row(), get_session()/
-# fetch_html(), and find_last_page() are shared with scrape_notified_gated.py
-# and now live in utils/scrape_notified_utils.py (imported above). This
-# script calls extract_date_and_time_from_row() with its original behavior
-# (both try_long_date_in_cell and try_short_date_in_row left at their
-# default of False) -- see that function's docstring for why.
+# fetch_html(), find_last_page(), and parse_listing_page() (including its
+# _row_container()/_find_title_in_container() title-fallback helpers) are
+# shared with scrape_notified_gated.py and now live in
+# utils/scrape_notified_utils.py (imported above). This script calls
+# extract_date_and_time_from_row() with its original behavior (both
+# try_long_date_in_cell and try_short_date_in_row left at their default of
+# False) -- see that function's docstring for why. It calls the shared
+# parse_listing_page() with use_title_fallback=True -- see the thin wrapper
+# below.
 
 def is_detail_url(href: str) -> bool:
     """Return True if ``href`` looks like a Notified/Drupal press-release detail URL."""
@@ -251,126 +238,26 @@ def listing_page_url(
 # Listing-page parsing
 # ---------------------------------------------------------------------------
 
-def _row_container(anchor, max_up: int = 8):
-    """Return the tightest ancestor of ``anchor`` that still contains only
-    this one press-release detail link.
-
-    Card/row layouts (no <table>) nest a release's heading, summary, and
-    "Read more" link inside some shared container, but the exact tag/class
-    varies by site and isn't worth hardcoding. What's true on every such
-    site is that a row's container holds exactly one detail-page link (its
-    own); the next ancestor up starts pulling in a sibling row's link too.
-    So climb from the anchor while the ancestor still has exactly one
-    matching link, and stop just before that would no longer hold.
-    """
-    container = anchor
-    for _ in range(max_up):
-        parent = container.parent
-        if parent is None or parent.name in ("body", "html", "[document]"):
-            break
-        detail_links = [
-            a for a in parent.find_all("a", href=True) if is_detail_url(a["href"])
-        ]
-        if len(detail_links) > 1:
-            break
-        container = parent
-    return container
-
-
-def _find_title_in_container(container, anchor_text: str) -> str:
-    """Best-effort headline extraction from a row/card container, for sites
-    (e.g. Paramount) where the only link in the row is a generic "Read
-    more" CTA and the actual headline is a separate, non-linked text block.
-
-    Tries, in order:
-      1. A heading tag (h1-h6) inside the container.
-      2. An element whose class name hints at a title/headline field,
-         following Drupal's common "field--name-title" / "views-field-title"
-         naming convention.
-      3. The first substantial top-level text block in the container that
-         isn't a date and isn't the (generic) anchor text itself.
-
-    Returns "" if nothing plausible is found, so callers can fall back to
-    their existing behavior.
-    """
-    heading = container.find(["h1", "h2", "h3", "h4", "h5", "h6"])
-    if heading:
-        text = heading.get_text(separator=" ", strip=True)
-        if text and not GENERIC_LINK_TEXT_RE.match(text):
-            return text
-
-    for el in container.find_all(class_=True):
-        classes = " ".join(el.get("class", []))
-        if TITLE_HINT_CLASS_RE.search(classes):
-            text = el.get_text(separator=" ", strip=True)
-            if text and text != anchor_text and not GENERIC_LINK_TEXT_RE.match(text):
-                return text
-
-    for child in container.find_all(recursive=False):
-        text = child.get_text(separator=" ", strip=True)
-        if not text or text == anchor_text:
-            continue
-        if GENERIC_LINK_TEXT_RE.match(text):
-            continue
-        if parse_short_date(text)[0] or parse_date(text)[0]:
-            continue
-        return text
-
-    return ""
-
-
 def parse_listing_page(
     html: str, base_url: str, slug: str, ticker: str
 ) -> list[NewsItem]:
-    """Parse one listing page; return list of NewsItems found."""
-    # Derive the site root from base_url for urljoin.
-    parsed = urlparse(base_url)
-    site_root = urlunparse((parsed.scheme, parsed.netloc, "", "", "", ""))
+    """Parse one listing page; return list of NewsItems found.
 
-    soup = BeautifulSoup(html, "lxml")
-    items: list[NewsItem] = []
-    seen_urls: set[str] = set()
-
-    for anchor in soup.find_all("a", href=True):
-        href: str = anchor["href"].strip()
-        if not is_detail_url(href):
-            continue
-
-        full_url = urljoin(site_root, href)
-        norm_url = full_url.rstrip("/")
-        if norm_url in seen_urls:
-            continue
-
-        title = anchor.get_text(separator=" ", strip=True)
-        if not title or GENERIC_LINK_TEXT_RE.match(title):
-            # The anchor itself is just a "Read more"-style CTA (e.g.
-            # Paramount's IR site); the real headline is a separate,
-            # non-linked text block elsewhere in the row/card.
-            row_title = _find_title_in_container(_row_container(anchor), title)
-            if row_title:
-                title = row_title
-        if not title:
-            span = anchor.find("span")
-            title = span.get_text(strip=True) if span else ""
-        if not title:
-            logger.debug("Skipping link with no title text: %s", full_url)
-            continue
-
-        seen_urls.add(norm_url)
-
-        publish_date, raw_date_text, publish_time = extract_date_and_time_from_row(anchor)
-
-        items.append(NewsItem(
-            slug=slug,
-            ticker=ticker,
-            title=title,
-            url=full_url,
-            publish_date=publish_date,
-            raw_date_text=raw_date_text,
-            publish_time=publish_time,
-        ))
-
-    return items
+    Thin wrapper around the shared row-parsing core in
+    utils/scrape_notified_utils.py (see that function's docstring for the
+    full strategy), shared with scrape_notified_gated.py so a parsing bug
+    fix only needs to be made once. use_title_fallback=True enables this
+    script's original behavior of digging a real headline out of the
+    row/card container (via the shared _row_container()/
+    _find_title_in_container() helpers) when the anchor's own text is
+    empty or just a generic "Read more" CTA (e.g. Paramount's IR site).
+    """
+    return _shared_parse_listing_page(
+        html, base_url, slug, ticker,
+        is_detail_url=is_detail_url,
+        news_item_cls=NewsItem,
+        use_title_fallback=True,
+    )
 
 
 # ---------------------------------------------------------------------------
