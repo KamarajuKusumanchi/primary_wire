@@ -153,6 +153,10 @@ sources:
     name: CDW Corporation
     ticker: CDW
     ir_url: https://investor.cdw.com/
+  - slug: centene
+    name: Centene Corporation
+    ticker: CNC
+    ir_url: https://investors.centene.com/
   - slug: charter
     name: Charter Communications, Inc.
     ticker: CHTR
