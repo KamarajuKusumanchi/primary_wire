@@ -1,7 +1,7 @@
 
 S&P 500 companies:  503
-Covered in sources: 115
-Missing:            388
+Covered in sources: 116
+Missing:            387
 
 Missing tickers:
   A
@@ -76,7 +76,6 @@ Missing tickers:
   CME
   CMI
   CMS
-  CNC
   CNP
   COF
   COO

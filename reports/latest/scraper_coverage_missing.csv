@@ -17,6 +17,7 @@ booking,BKNG,q4,https://ir.bookingholdings.com/
 broadcom,AVGO,notified,https://investors.broadcom.com/
 builders-firstsource,BLDR,q4,https://investors.bldr.com/
 cadence,CDNS,q4,https://investor.cadence.com/
+centene,CNC,investorroom,https://investors.centene.com/
 charter,CHTR,notified,https://ir.charter.com/
 ciena,CIEN,q4,https://investor.ciena.com/
 cigna,CI,unknown,https://investors.thecignagroup.com/
@@ -88,7 +89,6 @@ synopsys,SNPS,q4,https://investor.synopsys.com/
 tesla,TSLA,unknown,https://ir.tesla.com/
 texas-instruments,TXN,notified,https://investor.ti.com/
 tractor-supply,TSCO,unknown,https://ir.tractorsupply.com/
-travelers,TRV,unknown,https://investor.travelers.com/
 united-airlines,UAL,notified,https://ir.united.com/
 universal-health-services,UHS,notified,https://ir.uhs.com/
 verisign,VRSN,notified,https://investor.verisign.com/
