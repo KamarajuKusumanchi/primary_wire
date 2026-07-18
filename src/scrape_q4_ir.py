@@ -17,15 +17,26 @@ reads exactly what a human visiting the page would see.
 
 Date extraction works in two stages:
 
-  1. Listing-page parse (fast, zero extra requests): for each news link, try
-     the anchor's own "aria-label" attribute first (some Q4 themes, e.g. CDW,
-     render an accessible label like "CDW Reports First Quarter 2026
-     Earnings, May 6, 2026" right on the link -- no DOM climbing needed).
-     Failing that, walk up to 5 ancestor elements around the link looking for
-     a date in the surrounding card text, deduplicating sibling news links by
-     href so a card's headline link and its separate "Continue Reading" link
-     to the same article aren't mistaken for two different sibling items.
-     Between the two, this covers every Q4 theme seen so far (Costco, CDW).
+  1. Listing-page parse (fast, zero extra requests): for each news link, walk
+     up to 5 ancestor elements around the link looking for a date in the
+     surrounding card text -- excluding the link's own headline text, so a
+     headline that mentions an unrelated date of its own (e.g. Seagate's
+     "...to Report ... on January 27, 2026") can't be mistaken for the
+     card's real dateline -- deduplicating sibling news links by href so a
+     card's headline link and its separate "Continue Reading" link to the
+     same article aren't mistaken for two different sibling items. Only if
+     that finds nothing does it fall back to the anchor's own "aria-label"
+     attribute (some Q4 themes, e.g. CDW, have no separate dateline element
+     at all, only an accessible label like "CDW Reports First Quarter 2026
+     Earnings, May 6, 2026" right on the link, with the real publish date
+     always the *trailing* "Month Day, Year" in that string -- so this
+     fallback takes the last date-shaped match, not the first, in case a
+     headline embeds a date of its own earlier in the label too). The DOM
+     search runs first and wins whenever it succeeds, because a dedicated
+     dateline element can only ever contain the real date, whereas the
+     aria-label is one string mixing the headline and the date together and
+     has to be guessed apart. Between the two, this covers every Q4 theme
+     seen so far (Costco, CDW, Seagate).
 
   2. Detail-page fallback (opt-in via --fetch-detail-pages, or automatically
      enabled by a source's "needs_detail_page_dates: true" field in
@@ -116,6 +127,7 @@ from utils.scrape_utils import (
     add_common_args,
     finalize_and_output,
     parse_date,
+    parse_trailing_date,
     parse_year_args,
     print_preview as _base_print_preview,
 )
@@ -478,24 +490,36 @@ def parse_news_items(
 
     Date extraction tries two sources, in order:
 
-      1. The news anchor's own `aria-label` attribute, if present. Some Q4
-         themes (e.g. CDW) render an accessible label like "CDW Reports
-         First Quarter 2026 Earnings, May 6, 2026" directly on the link --
-         the date is right there, scoped to exactly this item, with no DOM
-         climbing needed. parse_date() finds the trailing "Month Day, Year"
-         even when the headline text itself contains commas.
+      1. Walk up to 5 ancestor elements looking for a date (and category) in
+         the surrounding card. The anchor's own headline text is excluded
+         from this search -- a headline can mention an unrelated date of its
+         own (e.g. Seagate's "...to Report Fiscal Second Quarter 2026
+         Financial Results on January 27, 2026", which isn't the release's
+         actual publish date), and only the surrounding card text, not the
+         headline's own wording, is trustworthy here. Stops climbing as soon
+         as the ancestor contains more than one *distinct* news-item URL --
+         that means we've crossed into the shared list wrapper and would
+         pick up sibling items' dates. Sibling links are deduplicated by
+         href before this count: several Q4 themes (CDW included) render
+         both a headline link and a separate "Continue Reading" link
+         pointing at the same article within one card, and without
+         deduping, that pair alone looks like "more than one news item" and
+         stops the climb one level too early -- one level before the
+         ancestor that actually holds the date text.
 
-      2. Walk up to 5 ancestor elements looking for a date (and category) in
-         the surrounding card. Stops climbing as soon as the ancestor
-         contains more than one *distinct* news-item URL -- that means we've
-         crossed into the shared list wrapper and would pick up sibling
-         items' dates. Sibling links are deduplicated by href before this
-         count: several Q4 themes (CDW included) render both a headline link
-         and a separate "Continue Reading" link pointing at the same
-         article within one card, and without deduping, that pair alone
-         looks like "more than one news item" and stops the climb one level
-         too early -- one level before the ancestor that actually holds the
-         date text.
+      2. Only if that finds nothing: fall back to the news anchor's own
+         `aria-label` attribute, if present. Some Q4 themes (e.g. CDW) have
+         no separate dateline element in the card at all -- the date only
+         exists inside an accessible label like "CDW Reports First Quarter
+         2026 Earnings, May 6, 2026" rendered directly on the link.
+         parse_trailing_date() finds the *trailing* "Month Day, Year" in
+         that label (Q4's convention is to always append the real date
+         last), rather than parse_date()'s first match, in case the
+         headline embeds a date of its own earlier in the same label too.
+         This path only runs when stage 1 comes up empty, so a
+         structurally-unambiguous dateline element -- which can only ever
+         contain the real date -- always wins over guessing a date apart
+         from the aria-label string.
 
     This works on Q4 themes that embed the date in each card (e.g. Costco).
     For themes where neither stage finds anything, items come back with
@@ -524,10 +548,6 @@ def parse_news_items(
 
         publish_date, raw_date_text, category = None, "", ""
 
-        aria_label = anchor.get("aria-label", "")
-        if aria_label:
-            publish_date, raw_date_text = parse_date(aria_label)
-
         node = anchor
         for _ in range(5):
             node = node.find_parent(["li", "article", "div", "section"])
@@ -541,14 +561,20 @@ def parse_news_items(
                 break
             # Exclude the headline anchor's own text from the date search.
             # A headline can itself mention an unrelated date (e.g. "...
-            # Schedules Special Meeting for March 20, 2026, to Approve...")
-            # that has nothing to do with the release's actual publish date.
-            # parse_date() takes the first match it finds, so if that
-            # in-headline date happens to sit earlier in reading order than
-            # the card's real dateline (e.g. a "Feb 17, 2026" node rendered
-            # after the headline), it would be picked by mistake. Searching
-            # only the surrounding card text -- not the anchor's own label --
-            # keeps the headline's own wording out of the running entirely.
+            # Schedules Special Meeting for March 20, 2026, to Approve..." or
+            # Seagate's "...to Report Fiscal Second Quarter 2026 Financial
+            # Results on January 27, 2026") that has nothing to do with the
+            # release's actual publish date. parse_date() takes the first
+            # match it finds, so if that in-headline date happens to sit
+            # earlier in reading order than the card's real dateline, it
+            # would be picked by mistake. Searching only the surrounding
+            # card text -- not the anchor's own label -- keeps the
+            # headline's own wording out of the running entirely. This is
+            # why the DOM search runs *before* the aria-label fallback
+            # below: a dedicated dateline element (e.g. Seagate's
+            # <div class="evergreen-news-date">) can only ever contain the
+            # real date, whereas the aria-label is one string mixing the
+            # headline and the date together and has to be guessed apart.
             own_text_nodes = set(anchor.find_all(string=True))
             context_text = " ".join(
                 s.strip() for s in node.find_all(string=True)
@@ -560,6 +586,21 @@ def parse_news_items(
                 category = _find_category_near(context_text)
             if publish_date:
                 break
+
+        if publish_date is None:
+            # Fallback for themes (e.g. CDW) whose card has no separate
+            # dateline element at all -- the date only exists inside the
+            # accessible aria-label, e.g. "CDW Reports First Quarter 2026
+            # Earnings, May 6, 2026". Q4 always appends the real publish
+            # date last, so take the trailing date-shaped match, not
+            # parse_date()'s first match: a headline can embed an unrelated
+            # date of its own earlier in the same label (see
+            # parse_trailing_date()'s docstring). This path only runs when
+            # the DOM search above found nothing, so it never overrides a
+            # structurally-unambiguous dateline element.
+            aria_label = anchor.get("aria-label", "")
+            if aria_label:
+                publish_date, raw_date_text = parse_trailing_date(aria_label)
 
         seen_urls.add(url)
         items.append(

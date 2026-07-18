@@ -179,6 +179,60 @@ def test_multiple_different_sibling_items_still_stop_the_climb():
 
 
 # ---------------------------------------------------------------------------
+# Seagate-shaped fixture: regression test for a real bug seen running
+#     python src/scrape_q4_ir.py --slug seagate --year 2026 --show-browser --dry-run
+#
+# Confirmed against a real --debug-dump-html capture of
+# https://investors.seagate.com/news/default.aspx. Seagate's aria-label
+# follows the same "<title>, Month Day, Year" trailing-date convention as
+# CDW, but its headline text itself embeds a full, unrelated date ("Report
+# Fiscal Second Quarter 2026 Financial Results on January 27, 2026" -- the
+# date of the *future* earnings call, not this release's publish date). The
+# real publish date ("January 13, 2026") is the trailing one appended after
+# the final comma. The old aria-label parsing took parse_date()'s first
+# match in the whole label and got "January 27, 2026" -- two weeks off.
+# ---------------------------------------------------------------------------
+
+SEAGATE_CARD = """
+<div class="evergreen-news-item-wrap">
+    <div class="evergreen-g evergreen-g--gutter">
+        <div class="evergreen-1-1 evergreen-gr-lc-24-24 evergreen-gr-sm-1-1">
+            <div class="evergreen-item-date-time evergreen-news-date">
+                January 13, 2026
+            </div>
+            <div class="evergreen-news-headline">
+                <a class="evergreen-item-title evergreen-news-link evergreen-news-headline-link"
+                   href="/news/news-details/2026/Seagate-Technology-to-Report-Fiscal-Second-Quarter-2026-Financial-Results-on-January-27-2026/default.aspx"
+                   aria-label="Seagate Technology to Report Fiscal Second Quarter 2026 Financial Results on January 27, 2026, January 13, 2026">
+                    Seagate Technology to Report Fiscal Second Quarter 2026 Financial Results on January 27, 2026
+                </a>
+            </div>
+            <div class="evergreen-news-read-more-container evergreen-hidden">
+                <a class="evergreen-link evergreen-news-link"
+                   href="/news/news-details/2026/Seagate-Technology-to-Report-Fiscal-Second-Quarter-2026-Financial-Results-on-January-27-2026/default.aspx"
+                   aria-label="Read More - Seagate Technology to Report Fiscal Second Quarter 2026 Financial Results on January 27, 2026, January 13, 2026">
+                    Read More
+                </a>
+            </div>
+        </div>
+    </div>
+</div>
+"""
+
+
+def test_seagate_style_aria_label_uses_trailing_date_not_headlines_own_date():
+    """The real publish date is the trailing date after the last comma in
+    the aria-label, not the unrelated future-earnings-call date the
+    headline itself mentions."""
+    items = parse_news_items(SEAGATE_CARD, BASE_URL, slug="seagate", ticker="STX")
+    assert len(items) == 1
+    item = items[0]
+    assert item.publish_date == date(2026, 1, 13)
+    assert item.raw_date_text == "January 13, 2026"
+    assert "January 27, 2026" in item.title  # sanity check: still in headline
+
+
+# ---------------------------------------------------------------------------
 # Costco-shaped fixture: date embedded directly in the ancestor card text,
 # no aria-label at all. This is the pre-existing working path and must keep
 # working unchanged.

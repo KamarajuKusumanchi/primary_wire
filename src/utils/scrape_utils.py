@@ -10,6 +10,8 @@ DATE_PATTERNS        : list of (compiled re, list[str]) -- date regex + strptime
 TIME_RE               : compiled re matching a clock-time-with-timezone string
 NewsItem             : base dataclass for a scraped press-release item
 parse_date(text)     -> (date | None, str)   -- first parseable date in text + raw match
+parse_trailing_date(text) -> (date | None, str) -- LAST parseable date in text + raw match
+                                                    (use for Q4 aria-label parsing)
 parse_time(text)     -> str                  -- first raw clock-time-with-timezone in text
 extract_date_from_detail_html(html) -> (date | None, str) -- date heuristics for detail pages
 parse_year_args(args)-> set[int] | None       -- resolve --year/--start-year/--end-year
@@ -105,6 +107,44 @@ def parse_date(text: str) -> tuple[Optional[date], str]:
             # via %b just as well as "Jan 02, 2026" does.
             no_period = re.sub(r"^([A-Za-z]+)\.", r"\1", cleaned)
             for candidate in dict.fromkeys([cleaned, no_period]):  # dedupe, preserve order
+                for fmt in formats:
+                    try:
+                        return datetime.strptime(candidate, fmt).date(), raw
+                    except ValueError:
+                        continue
+    return None, ""
+
+
+def parse_trailing_date(text: str) -> tuple[Optional[date], str]:
+    """Return the LAST parseable date found in *text* and its raw matched string.
+
+    Same matching logic as parse_date(), but scans each pattern's matches in
+    reverse instead of taking the first one. Use this -- not parse_date() --
+    for Q4's aria-label convention, where the real publish date is always
+    appended as a trailing ", Month Day, Year" after the headline text, e.g.
+    "CDW Reports First Quarter 2026 Earnings, May 6, 2026".
+
+    That convention is usually safe to parse with plain parse_date() too,
+    since most headlines don't themselves contain a second full date-shaped
+    substring -- but some do. E.g. Seagate's
+    "Seagate Technology to Report Fiscal Second Quarter 2026 Financial
+    Results on January 27, 2026, January 13, 2026" mentions the *future*
+    earnings-call date ("January 27, 2026") right in the headline, ahead of
+    the real trailing publish date ("January 13, 2026"). parse_date()'s
+    first-match behavior would pick the headline's own date and get the
+    item's publish date wrong by two weeks. Taking the last match instead
+    correctly prefers the trailing date over anything embedded earlier in
+    the headline, matching Q4's actual rendering convention.
+
+    Returns (None, "") if no date is recognised.
+    """
+    for pattern, formats in DATE_PATTERNS:
+        matches = list(pattern.finditer(text))
+        for m in reversed(matches):
+            raw = m.group(0).strip()
+            cleaned = re.sub(r"\s+", " ", raw)
+            no_period = re.sub(r"^([A-Za-z]+)\.", r"\1", cleaned)
+            for candidate in dict.fromkeys([cleaned, no_period]):
                 for fmt in formats:
                     try:
                         return datetime.strptime(candidate, fmt).date(), raw

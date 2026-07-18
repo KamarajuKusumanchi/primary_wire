@@ -58,3 +58,5 @@ q4_ir:
     - slug: netflix
       args: [--show-browser]
     - slug: travelers
+    - slug: seagate
+      args: [--show-browser]
