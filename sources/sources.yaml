@@ -157,6 +157,7 @@ sources:
     name: Centene Corporation
     ticker: CNC
     ir_url: https://investors.centene.com/
+    news_releases_path: press-releases
   - slug: charter
     name: Charter Communications, Inc.
     ticker: CHTR
