@@ -45,6 +45,25 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 SCRAPER_CONFIG_PATH = REPO_ROOT / "config" / "scraper_config.yaml"
 SOURCES_YAML_PATH = REPO_ROOT / "sources" / "sources.yaml"
 SRC_DIR = Path(__file__).resolve().parent
+DATA_DIR = REPO_ROOT / "data"
+
+# Needed to import the reporting package below regardless of how this
+# module was invoked (`python src/scrape_all.py` already puts src/ on
+# sys.path, but tests and other importers may not) -- same pattern
+# run_scraper() below uses before importing a scraper module.
+if str(SRC_DIR) not in sys.path:
+    sys.path.insert(0, str(SRC_DIR))
+
+from reporting.check_press_release_counts import (  # noqa: E402
+    DEFAULT_COUNTS_CSV,
+    check_found_release_counts,
+    check_release_counts,
+)
+from utils.scrape_utils import (  # noqa: E402
+    count_items_by_year,
+    get_last_run_items,
+    reset_last_run_items,
+)
 
 logger = logging.getLogger("scrape_all")
 
@@ -97,6 +116,7 @@ def run_scraper(module_name: str, argv: list[str]) -> int:
     """Import the scraper module and call its main() directly — no subprocess."""
     if str(SRC_DIR) not in sys.path:
         sys.path.insert(0, str(SRC_DIR))
+    reset_last_run_items()
     try:
         mod = importlib.import_module(module_name)
     except ImportError as e:
@@ -235,6 +255,80 @@ def pick_smoke_test_selection(
     return selection
 
 
+def check_scraped_release_counts(
+    sources: list[Source],
+    year: int | None,
+    args: argparse.Namespace,
+    sources_lookup: dict[str, dict],
+    found_counts: dict[tuple[int, str], int],
+) -> None:
+    """Compare release counts against the baseline snapshot, restricted to
+    the (year, slug) pairs *sources* just covered, and log any mismatch.
+    Never raises or changes the process exit code -- a mismatch here is a
+    signal for a human to look into (new press releases vs. a possible
+    scraper regression, see check_press_release_counts.py's module
+    docstring), not by itself proof that this run failed.
+
+    Runs in both --dry-run and normal invocations, using whichever count
+    source actually reflects that mode:
+      - Normal (wet) runs: recompute counts from data/ on disk, via
+        check_release_counts() -- the scrapers just wrote there, so
+        that's the definitive per-(year, slug) tally.
+      - --dry-run: data/ is untouched, so there's nothing there to read
+        back. Instead this uses *found_counts*, which main()'s scrape
+        loop tallies from each scraper's in-memory results as it goes
+        (see get_last_run_items()/count_items_by_year() in
+        utils/scrape_utils.py) -- the only count available under
+        --dry-run.
+
+    year=None (i.e. --all-years was passed) means every year is in scope
+    for the scraped slugs, matching what was actually scraped.
+
+    Factored out of main() as its own function -- rather than inlined --
+    so a future regression test (see item 2 in the project's discussion of
+    this feature) can drive the same comparison directly against whatever
+    (year, slug) pairs and/or found_counts it collects, without needing to
+    invoke scrape_all.py as a subprocess just to get this check.
+    """
+    if args.skip_count_check:
+        return
+
+    years = None if year is None else {year}
+    slugs = {entry["slug"] for _, _, entry in sources}
+
+    try:
+        if args.dry_run:
+            ticker_lookup = {
+                slug: sources_lookup.get(slug, {}).get("ticker", "") for slug in slugs
+            }
+            mismatches = check_found_release_counts(
+                counts_csv=args.counts_csv, found_counts=found_counts,
+                ticker_lookup=ticker_lookup, years=years, slugs=slugs,
+            )
+        else:
+            mismatches = check_release_counts(
+                data_dir=DATA_DIR, counts_csv=args.counts_csv, years=years, slugs=slugs,
+            )
+    except FileNotFoundError as e:
+        logger.warning("Skipping release-count check: %s", e)
+        return
+
+    mode = "dry-run, in-memory" if args.dry_run else "data/ on disk"
+    if not mismatches:
+        logger.info("Release-count check (%s): %d slug(s) match the baseline.", mode, len(slugs))
+        return
+
+    for m in mismatches:
+        logger.warning("release-count check: %s", m.describe())
+    logger.warning(
+        "release-count check (%s): %d of %d slug(s) differ from %s -- see warnings above. "
+        "This can mean new press releases were found, or that scrape_all.py or one of "
+        "the underlying scrapers is broken -- investigate before regenerating the "
+        "baseline with `invoke press-release-counts`.",
+        mode, len(mismatches), len(slugs), args.counts_csv,
+    )
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__,
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -260,6 +354,15 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--dry-run", action="store_true", help="Pass --dry-run to every scraper")
     parser.add_argument("--between-delay", type=float, default=5.0,
                         help="Seconds to wait between sources (default: 5)")
+    parser.add_argument("--skip-count-check", action="store_true",
+                        help="Don't compare release counts against "
+                             "reports/latest/press_release_counts.csv after running "
+                             "(against data/ on disk normally, or against what was "
+                             "found in memory under --dry-run, since --dry-run never "
+                             "writes to data/).")
+    parser.add_argument("--counts-csv", type=Path, default=DEFAULT_COUNTS_CSV,
+                        help="Baseline release-counts CSV to check against "
+                             f"(default: {DEFAULT_COUNTS_CSV})")
     parser.add_argument("-v", "--verbose", action="store_true")
     args = parser.parse_args(argv)
 
@@ -282,6 +385,7 @@ def main(argv: list[str] | None = None) -> int:
     config = load_scraper_config()
     sources_lookup = load_sources_lookup()
     failures: list[str] = []
+    found_counts: dict[tuple[int, str], int] = {}
     ran = 0
 
     if args.smoke_test:
@@ -310,6 +414,9 @@ def main(argv: list[str] | None = None) -> int:
             logger.error("%s: scraper exited with code %d", slug, rc)
             failures.append(slug)
 
+        for found_year, count in count_items_by_year(get_last_run_items()).items():
+            found_counts[(found_year, slug)] = found_counts.get((found_year, slug), 0) + count
+
     if ran == 0:
         if args.smoke_test:
             if args.platform:
@@ -325,6 +432,8 @@ def main(argv: list[str] | None = None) -> int:
                 args.platform, args.slug,
             )
         return 1
+
+    check_scraped_release_counts(sources, year, args, sources_lookup, found_counts)
 
     if failures:
         logger.error("Failed: %s", ", ".join(failures))

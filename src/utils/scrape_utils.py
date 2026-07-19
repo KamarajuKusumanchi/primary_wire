@@ -24,6 +24,9 @@ add_common_args(parser)                       -- attach shared CLI args to an Ar
 add_network_and_debug_args(parser, ...)       -- attach --polite-delay/--timeout/--debug-dump-html/-v
 configure_logging(verbose)                    -- shared logging.basicConfig() for HTTP scrapers
 finalize_and_output(...)                      -- shared main() tail: filter, preview, write CSV/JSON
+get_last_run_items()  -> list[NewsItem]        -- items from the most recent finalize_and_output() call
+reset_last_run_items()                        -- clear that state before a new scraper invocation
+count_items_by_year(items) -> dict[int, int]  -- group items by publish_date.year
 """
 
 from __future__ import annotations
@@ -559,7 +562,64 @@ def finalize_and_output(
         summary = merge_items_into_daily_csvs(filtered, data_dir, dry_run)
         print_merge_summary(summary, dry_run, filtered, data_dir=data_dir)
 
+    global _last_run_items
+    _last_run_items = list(filtered)
+
     return filtered
+
+
+# ---------------------------------------------------------------------------
+# Last-run item tracking (for scrape_all.py's --dry-run release-count check)
+# ---------------------------------------------------------------------------
+
+# Populated by finalize_and_output() on every call, with that call's final
+# filtered item list. scrape_all.py runs each configured source's scraper
+# synchronously and in-process (see scrape_all.run_scraper()), and every
+# scraper module imports this same utils.scrape_utils module instance, so
+# reading this immediately after one scraper's main() returns reflects
+# exactly what that one invocation found -- the only count available under
+# --dry-run, since --dry-run never writes anything to data/ for a
+# disk-based check to read back afterward.
+_last_run_items: list[NewsItem] = []
+
+
+def get_last_run_items() -> list[NewsItem]:
+    """Return the filtered item list from the most recent finalize_and_output() call.
+
+    See the module note above _last_run_items for why this exists and the
+    in-process, one-scraper-at-a-time assumption it relies on.
+    """
+    return list(_last_run_items)
+
+
+def reset_last_run_items() -> None:
+    """Clear the last-run item list.
+
+    Callers that invoke a scraper's main() and then check get_last_run_items()
+    afterward (i.e. scrape_all.py) should call this first, so that a scraper
+    which errors out *before* ever reaching finalize_and_output() is
+    correctly seen as "found nothing this call" rather than silently
+    reusing whatever the previous source's invocation left behind.
+    """
+    global _last_run_items
+    _last_run_items = []
+
+
+def count_items_by_year(items: Iterable[NewsItem]) -> dict[int, int]:
+    """Group items by publish_date.year and return {year: count}.
+
+    Items with no publish_date are skipped -- they can't be attributed to
+    a year -- mirroring src/reporting/press_release_counts.py's "no year,
+    no row" rule for disk-based counts, so dry-run and disk-based counts
+    stay directly comparable.
+    """
+    counts: dict[int, int] = {}
+    for item in items:
+        if item.publish_date is None:
+            continue
+        year = item.publish_date.year
+        counts[year] = counts.get(year, 0) + 1
+    return counts
 
 
 # ---------------------------------------------------------------------------

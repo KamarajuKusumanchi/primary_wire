@@ -21,13 +21,21 @@ Run with:
 
 from __future__ import annotations
 
+import argparse
 import random
 import sys
 from pathlib import Path
 
+import pandas as pd
+
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
-from scrape_all import group_sources_by_signature, pick_smoke_test_selection  # noqa: E402
+import scrape_all  # noqa: E402
+from scrape_all import (  # noqa: E402
+    check_scraped_release_counts,
+    group_sources_by_signature,
+    pick_smoke_test_selection,
+)
 
 # Mirrors the shape of config/scraper_config.yaml, trimmed to the cases that
 # matter for signature grouping: a shared-args pair, a lone entry in the
@@ -149,3 +157,217 @@ def test_smoke_test_selection_rotates_across_seeds():
     for seed in range(30):
         picks_seen |= (_slugs(_pick(seed)) & {"costco", "coinbase"})
     assert picks_seen == {"costco", "coinbase"}
+
+# ---------------------------------------------------------------------------
+# check_scraped_release_counts()
+# ---------------------------------------------------------------------------
+
+CSV_COLUMNS = ["slug", "ticker", "title", "url", "publish_date", "publish_time"]
+
+
+def _write_daily_csv(data_dir: Path, date_str: str, rows: list[dict]) -> None:
+    year = date_str.split("-")[0]
+    day_dir = data_dir / year
+    day_dir.mkdir(parents=True, exist_ok=True)
+    pd.DataFrame(rows, columns=CSV_COLUMNS).to_csv(day_dir / f"{date_str}.csv", index=False)
+
+
+def _release_row(slug: str, ticker: str, publish_date: str) -> dict:
+    return {
+        "slug": slug, "ticker": ticker, "title": f"{slug} release",
+        "url": f"https://example.com/{slug}", "publish_date": publish_date, "publish_time": "",
+    }
+
+
+def _fake_sources(*slugs: str) -> list[scrape_all.Source]:
+    return [("group", "module", {"slug": slug}) for slug in slugs]
+
+
+def _fake_sources_lookup(**slug_to_ticker: str) -> dict[str, dict]:
+    return {slug: {"slug": slug, "ticker": ticker} for slug, ticker in slug_to_ticker.items()}
+
+
+# --- wet-run (disk-based) path -----------------------------------------------
+
+def test_check_scraped_release_counts_wet_run_logs_no_mismatch_when_counts_match(
+    tmp_path, monkeypatch, caplog
+):
+    data_dir = tmp_path / "data"
+    counts_csv = tmp_path / "press_release_counts.csv"
+    _write_daily_csv(data_dir, "2026-01-05", [_release_row("abbvie", "ABBV", "2026-01-05")])
+    pd.DataFrame(
+        [{"year": 2026, "slug": "abbvie", "ticker": "ABBV", "release_count": 1}]
+    ).to_csv(counts_csv, index=False)
+    monkeypatch.setattr(scrape_all, "DATA_DIR", data_dir)
+
+    args = argparse.Namespace(dry_run=False, skip_count_check=False, counts_csv=counts_csv)
+    with caplog.at_level("INFO", logger="scrape_all"):
+        check_scraped_release_counts(
+            _fake_sources("abbvie"), 2026, args, _fake_sources_lookup(abbvie="ABBV"), {}
+        )
+
+    assert "1 slug(s) match the baseline" in caplog.text
+    assert "WARNING" not in caplog.text
+
+
+def test_check_scraped_release_counts_wet_run_warns_on_mismatch(tmp_path, monkeypatch, caplog):
+    data_dir = tmp_path / "data"
+    counts_csv = tmp_path / "press_release_counts.csv"
+    _write_daily_csv(data_dir, "2026-01-05", [_release_row("abbvie", "ABBV", "2026-01-05")])
+    pd.DataFrame(
+        [{"year": 2026, "slug": "abbvie", "ticker": "ABBV", "release_count": 5}]
+    ).to_csv(counts_csv, index=False)
+    monkeypatch.setattr(scrape_all, "DATA_DIR", data_dir)
+
+    args = argparse.Namespace(dry_run=False, skip_count_check=False, counts_csv=counts_csv)
+    with caplog.at_level("WARNING", logger="scrape_all"):
+        check_scraped_release_counts(
+            _fake_sources("abbvie"), 2026, args, _fake_sources_lookup(abbvie="ABBV"), {}
+        )
+
+    assert "baseline=5, actual=1" in caplog.text
+
+
+def test_check_scraped_release_counts_wet_run_handles_missing_baseline_gracefully(
+    tmp_path, monkeypatch, caplog
+):
+    data_dir = tmp_path / "data"
+    _write_daily_csv(data_dir, "2026-01-05", [_release_row("abbvie", "ABBV", "2026-01-05")])
+    monkeypatch.setattr(scrape_all, "DATA_DIR", data_dir)
+
+    args = argparse.Namespace(
+        dry_run=False, skip_count_check=False, counts_csv=tmp_path / "does_not_exist.csv",
+    )
+    with caplog.at_level("WARNING", logger="scrape_all"):
+        check_scraped_release_counts(
+            _fake_sources("abbvie"), 2026, args, _fake_sources_lookup(abbvie="ABBV"), {}
+        )
+
+    assert "Skipping release-count check" in caplog.text
+
+
+# --- dry-run (in-memory found_counts) path -----------------------------------
+
+def test_check_scraped_release_counts_dry_run_logs_no_mismatch_when_counts_match(
+    tmp_path, monkeypatch, caplog
+):
+    counts_csv = tmp_path / "press_release_counts.csv"
+    pd.DataFrame(
+        [{"year": 2026, "slug": "abbvie", "ticker": "ABBV", "release_count": 3}]
+    ).to_csv(counts_csv, index=False)
+
+    args = argparse.Namespace(dry_run=True, skip_count_check=False, counts_csv=counts_csv)
+    found_counts = {(2026, "abbvie"): 3}
+    with caplog.at_level("INFO", logger="scrape_all"):
+        check_scraped_release_counts(
+            _fake_sources("abbvie"), 2026, args, _fake_sources_lookup(abbvie="ABBV"), found_counts
+        )
+
+    assert "dry-run" in caplog.text
+    assert "1 slug(s) match the baseline" in caplog.text
+    assert "WARNING" not in caplog.text
+
+
+def test_check_scraped_release_counts_dry_run_warns_on_mismatch(tmp_path, monkeypatch, caplog):
+    counts_csv = tmp_path / "press_release_counts.csv"
+    pd.DataFrame(
+        [{"year": 2026, "slug": "abbvie", "ticker": "ABBV", "release_count": 5}]
+    ).to_csv(counts_csv, index=False)
+
+    args = argparse.Namespace(dry_run=True, skip_count_check=False, counts_csv=counts_csv)
+    # Only 2 found in memory this dry run, vs. a baseline of 5.
+    found_counts = {(2026, "abbvie"): 2}
+    with caplog.at_level("WARNING", logger="scrape_all"):
+        check_scraped_release_counts(
+            _fake_sources("abbvie"), 2026, args, _fake_sources_lookup(abbvie="ABBV"), found_counts
+        )
+
+    assert "baseline=5, actual=2" in caplog.text
+
+
+def test_check_scraped_release_counts_dry_run_flags_a_slug_with_nothing_found(
+    tmp_path, monkeypatch, caplog
+):
+    # e.g. the scraper's selector broke and it silently returned zero items.
+    counts_csv = tmp_path / "press_release_counts.csv"
+    pd.DataFrame(
+        [{"year": 2026, "slug": "abbvie", "ticker": "ABBV", "release_count": 5}]
+    ).to_csv(counts_csv, index=False)
+
+    args = argparse.Namespace(dry_run=True, skip_count_check=False, counts_csv=counts_csv)
+    with caplog.at_level("WARNING", logger="scrape_all"):
+        check_scraped_release_counts(
+            _fake_sources("abbvie"), 2026, args, _fake_sources_lookup(abbvie="ABBV"), {}
+        )
+
+    assert "none were found at all this run" in caplog.text
+
+
+def test_check_scraped_release_counts_dry_run_handles_missing_baseline_gracefully(
+    tmp_path, caplog
+):
+    args = argparse.Namespace(
+        dry_run=True, skip_count_check=False, counts_csv=tmp_path / "does_not_exist.csv",
+    )
+    with caplog.at_level("WARNING", logger="scrape_all"):
+        check_scraped_release_counts(
+            _fake_sources("abbvie"), 2026, args, _fake_sources_lookup(abbvie="ABBV"),
+            {(2026, "abbvie"): 3},
+        )
+
+    assert "Skipping release-count check" in caplog.text
+
+
+# --- shared behavior -----------------------------------------------------
+
+def test_check_scraped_release_counts_skipped_when_flag_set(tmp_path, caplog):
+    args = argparse.Namespace(
+        dry_run=False, skip_count_check=True, counts_csv=tmp_path / "press_release_counts.csv",
+    )
+    with caplog.at_level("DEBUG", logger="scrape_all"):
+        check_scraped_release_counts(
+            _fake_sources("abbvie"), 2026, args, _fake_sources_lookup(abbvie="ABBV"), {}
+        )
+
+    assert caplog.text == ""
+
+
+# --- last-run item tracking wired into main()'s scrape loop ------------------
+
+def test_run_scraper_resets_last_run_items_before_each_call(monkeypatch):
+    # A module whose main() never calls finalize_and_output() (e.g. it
+    # errors out early) must not leave the previous source's items sitting
+    # around for count_items_by_year(get_last_run_items()) to pick up.
+    from utils import scrape_utils
+
+    calls = []
+
+    class _FakeModule:
+        @staticmethod
+        def main(argv):
+            calls.append(argv)
+            if len(calls) == 1:
+                scrape_utils._last_run_items = [
+                    _fake_item("abbvie", "2026-01-05"),
+                    _fake_item("abbvie", "2026-01-06"),
+                ]
+                return 0
+            # second call: this scraper errors out before reaching
+            # finalize_and_output() at all, so nothing should be recorded.
+            return 1
+
+    monkeypatch.setattr(scrape_all.importlib, "import_module", lambda name: _FakeModule)
+
+    scrape_all.run_scraper("scrape_investorroom", ["--slug", "abbvie"])
+    assert len(scrape_utils.get_last_run_items()) == 2
+
+    scrape_all.run_scraper("scrape_investorroom", ["--slug", "nike"])
+    assert scrape_utils.get_last_run_items() == []
+
+
+def _fake_item(slug: str, publish_date: str):
+    from datetime import date as _date
+    from utils.scrape_utils import NewsItem
+
+    y, m, d = (int(p) for p in publish_date.split("-"))
+    return NewsItem(slug=slug, ticker="", title="t", url="u", publish_date=_date(y, m, d))

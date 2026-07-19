@@ -14,6 +14,11 @@ writing any press-release data themselves.
   * ''check_scraper_coverage.py'' -- how many sources in ''sources.yaml''
     have an automated scraper configured, plus config-drift checks (typo'd
     slugs, a slug configured under two scraper groups at once)
+  * ''check_press_release_counts.py'' -- compare release counts actually
+    found in ''data/'' against the ''reports/latest/press_release_counts.csv''
+    baseline, per (year, slug); called by ''scrape_all.py'' after each
+    (non-dry-run) scrape, restricted to what it just scraped, and also
+    runnable standalone for an unrestricted check
 
 Run any of them with ''--help'' for full usage. Most of their output feeds
 ''reports/latest/'' via ''invoke reports'' -- see [[tasks.txt]].
