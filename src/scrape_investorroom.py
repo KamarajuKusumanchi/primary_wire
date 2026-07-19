@@ -61,6 +61,20 @@ All three styles are handled. Date extraction:
      no date was found on the listing page (typically Style A), fetch the
      detail page and extract the date from the article header.
 
+Some InvestorRoom sites (e.g. Centene) also render a publish time next to
+the date on the listing page, as its own standalone text node, e.g.:
+
+  January 13, 2026
+  4:30 PM EST
+
+When present, that raw time-with-timezone substring (e.g. "4:30 PM EST") is
+captured verbatim into the publish_time CSV column -- see parse_time() in
+utils/scrape_utils.py and extract_date_near_link() below. It is NOT
+converted to any other timezone or format. Sites that don't publish a time
+(or where the time isn't found on the listing page) leave this column
+blank; there is currently no detail-page fallback for the time the way
+there is for the date.
+
 Usage
 -----
   # Default: scrape Chipotle, dry-run (no files written)
@@ -142,6 +156,7 @@ from utils.scrape_utils import (
     fetch_missing_dates_via_http,
     finalize_and_output,
     parse_date,
+    parse_time,
     parse_year_args,
 )
 
@@ -358,9 +373,9 @@ def is_bare_date_text(text: str, raw_match: str) -> bool:
     return remainder.strip(" \t\r\n-\u2013\u2014|\u00b7\u2022.,:") == ""
 
 
-def extract_date_near_link(anchor) -> tuple[Optional[date], str]:
+def extract_date_near_link(anchor) -> tuple[Optional[date], str, str]:
     """Walk up to 5 ancestor elements of ``anchor`` looking for a standalone
-    date label near the link.
+    date label (and, if present, a standalone time label) near the link.
 
     Press-release cards routinely mention OTHER dates besides the actual
     publish date -- a headline naming a future event (GPC: "...Results on
@@ -378,23 +393,46 @@ def extract_date_near_link(anchor) -> tuple[Optional[date], str]:
     platforms actually render the publish-date label, as opposed to a full
     sentence that merely contains a date. Text inside the anchor itself is
     skipped outright, since a headline's own wording is never the label.
+
+    Some sites (e.g. Centene) render a publish time as its own separate bare
+    text node right alongside the date (see module docstring), rather than
+    appended to the date text itself. So at each ancestor level, every text
+    node is also checked for a standalone "clock time + timezone" string
+    (again via is_bare_date_text(), which despite its name is really just a
+    "this whole node is the match and nothing else" check, so it works for
+    time text just as well as date text). Returns the date found at the
+    ancestor level where a date was first found, along with whatever bare
+    time text (possibly "") was seen at that SAME level -- consistent with
+    how these platforms actually pair a date node with an adjacent time
+    node under one shared card wrapper.
     """
     node = anchor
     for _ in range(5):
         parent = node.parent
         if parent is None:
             break
+        found_date: Optional[date] = None
+        found_raw = ""
+        found_time = ""
         for text_node in parent.find_all(string=True):
             if any(p is anchor for p in text_node.parents):
                 continue
             candidate = text_node.strip()
             if not candidate:
                 continue
-            d, raw = parse_date(candidate)
-            if d and is_bare_date_text(candidate, raw):
-                return d, raw
+            if found_date is None:
+                d, raw = parse_date(candidate)
+                if d and is_bare_date_text(candidate, raw):
+                    found_date, found_raw = d, raw
+                    continue  # a date node is never also a time node
+            if not found_time:
+                t = parse_time(candidate)
+                if t and is_bare_date_text(candidate, t):
+                    found_time = t
+        if found_date is not None:
+            return found_date, found_raw, found_time
         node = parent
-    return None, ""
+    return None, "", ""
 
 
 def find_next_page_url(soup: BeautifulSoup, base_url: str) -> Optional[str]:
@@ -505,10 +543,11 @@ def parse_listing_page(
             logger.debug("Skipping link with no title text: %s", full_url)
             continue
 
-        # Date in the surrounding card HTML -- computed for every candidate,
-        # since a "bare-slug" link (see classify_link()) needs it both to
-        # confirm it's a real article and to know its date.
-        card_date, card_raw_text = extract_date_near_link(anchor)
+        # Date (and, if present, time) in the surrounding card HTML --
+        # computed for every candidate, since a "bare-slug" link (see
+        # classify_link()) needs the date both to confirm it's a real
+        # article and to know its publish date.
+        card_date, card_raw_text, card_time = extract_date_near_link(anchor)
 
         if link_kind == "bare-slug" and not is_confirmed_bare_slug_item(title, card_date):
             logger.debug("Skipping unconfirmed bare-slug link: %s", full_url)
@@ -518,6 +557,12 @@ def parse_listing_page(
 
         url_date = date_from_url(href)
         publish_date, raw_date_text = resolve_publish_date(card_date, card_raw_text, url_date, full_url)
+        # The time is only trustworthy alongside the card's own date (there's
+        # no time embedded in the URL to fall back on) -- e.g. if the card
+        # date disagreed with the URL date and the URL date won, or if there
+        # was no card date at all, discard whatever card_time was found so
+        # it isn't misattributed to a date it wasn't actually paired with.
+        publish_time = card_time if publish_date == card_date and card_date is not None else ""
 
         items.append(NewsItem(
             slug=slug,
@@ -526,6 +571,7 @@ def parse_listing_page(
             url=full_url,
             publish_date=publish_date,
             raw_date_text=raw_date_text,
+            publish_time=publish_time,
         ))
 
     next_url = find_next_page_url(soup, base_url)

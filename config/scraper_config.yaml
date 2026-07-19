@@ -28,6 +28,7 @@ investorroom:
     - slug: chipotle
     - slug: genuine-parts
     - slug: ibm
+    - slug: centene
 
 notified:
   scraper: scrape_notified
