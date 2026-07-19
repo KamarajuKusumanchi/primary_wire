@@ -24,19 +24,26 @@ Date extraction works in two stages:
      "...to Report ... on January 27, 2026") can't be mistaken for the
      card's real dateline -- deduplicating sibling news links by href so a
      card's headline link and its separate "Continue Reading" link to the
-     same article aren't mistaken for two different sibling items. Only if
-     that finds nothing does it fall back to the anchor's own "aria-label"
-     attribute (some Q4 themes, e.g. CDW, have no separate dateline element
-     at all, only an accessible label like "CDW Reports First Quarter 2026
-     Earnings, May 6, 2026" right on the link, with the real publish date
-     always the *trailing* "Month Day, Year" in that string -- so this
-     fallback takes the last date-shaped match, not the first, in case a
-     headline embeds a date of its own earlier in the label too). The DOM
-     search runs first and wins whenever it succeeds, because a dedicated
-     dateline element can only ever contain the real date, whereas the
-     aria-label is one string mixing the headline and the date together and
-     has to be guessed apart. Between the two, this covers every Q4 theme
-     seen so far (Costco, CDW, Seagate).
+     same article aren't mistaken for two different sibling items. This
+     covers every Q4 theme seen so far (Costco, CDW, Seagate): each one's
+     card renders a real dateline element somewhere in the ancestor chain,
+     so the DOM search alone finds the date without ever reading the link's
+     own text. (CDW was originally thought to need the aria-label fallback
+     below, before the sibling-link dedup fix above was added -- a
+     --debug-dump-html capture of the real listing page confirmed the
+     dedup fix alone was enough to recover CDW's dates from the DOM too.)
+
+     Only if the DOM search finds nothing does it fall back to the anchor's
+     own "aria-label" attribute -- a safety net for some future Q4 theme
+     whose card has no separate dateline element at all, only an accessible
+     label like "CDW Reports First Quarter 2026 Earnings, May 6, 2026"
+     mixing headline and date together right on the link, with the real
+     publish date as the *trailing* "Month Day, Year" in that string -- so
+     this fallback takes the last date-shaped match, not the first, in case
+     a headline embeds a date of its own earlier in the label too. The DOM
+     search always runs first and wins whenever it succeeds, since a
+     dedicated dateline element can only ever contain the real date, while
+     the aria-label has to be guessed apart from the headline text.
 
   2. Detail-page fallback (opt-in via --fetch-detail-pages, or automatically
      enabled by a source's "needs_detail_page_dates: true" field in
@@ -51,7 +58,7 @@ Examples:
     # Costco -- dates found on listing page, no detail fetches needed
     python src/scrape_q4_ir.py --dry-run
 
-    # CDW -- dates come from the news link's aria-label on the listing page;
+    # CDW -- dates found on listing page (same DOM search as Costco);
     # no --fetch-detail-pages needed
     python src/scrape_q4_ir.py --slug cdw --dry-run
     python src/scrape_q4_ir.py --ticker CDW --dry-run
@@ -508,15 +515,19 @@ def parse_news_items(
          ancestor that actually holds the date text.
 
       2. Only if that finds nothing: fall back to the news anchor's own
-         `aria-label` attribute, if present. Some Q4 themes (e.g. CDW) have
-         no separate dateline element in the card at all -- the date only
-         exists inside an accessible label like "CDW Reports First Quarter
-         2026 Earnings, May 6, 2026" rendered directly on the link.
-         parse_trailing_date() finds the *trailing* "Month Day, Year" in
-         that label (Q4's convention is to always append the real date
-         last), rather than parse_date()'s first match, in case the
-         headline embeds a date of its own earlier in the same label too.
-         This path only runs when stage 1 comes up empty, so a
+         `aria-label` attribute, if present. This exists as a safety net for
+         a Q4 theme whose card has no separate dateline element in the DOM
+         at all -- only an accessible label like "CDW Reports First Quarter
+         2026 Earnings, May 6, 2026" mixing headline and date together right
+         on the link. No such theme has actually been seen yet: CDW's card
+         looks exactly like this at first glance, but it does have a real
+         dateline element one level up the ancestor chain (see stage 1's
+         sibling-link dedup above), so CDW's dates come from stage 1, not
+         this fallback. parse_trailing_date() finds the *trailing*
+         "Month Day, Year" in the label (Q4's convention is to always append
+         the real date last), rather than parse_date()'s first match, in
+         case the headline embeds a date of its own earlier in the same
+         label too. This path only runs when stage 1 comes up empty, so a
          structurally-unambiguous dateline element -- which can only ever
          contain the real date -- always wins over guessing a date apart
          from the aria-label string.
@@ -588,13 +599,16 @@ def parse_news_items(
                 break
 
         if publish_date is None:
-            # Fallback for themes (e.g. CDW) whose card has no separate
-            # dateline element at all -- the date only exists inside the
+            # Safety net for a theme whose card has no separate dateline
+            # element at all -- the date would only exist inside the
             # accessible aria-label, e.g. "CDW Reports First Quarter 2026
-            # Earnings, May 6, 2026". Q4 always appends the real publish
-            # date last, so take the trailing date-shaped match, not
-            # parse_date()'s first match: a headline can embed an unrelated
-            # date of its own earlier in the same label (see
+            # Earnings, May 6, 2026". No such theme has been seen in
+            # practice yet -- CDW's card has a real dateline element one
+            # ancestor level up (found by stage 1 above), so this branch
+            # doesn't fire for it. If it ever does fire, Q4 always appends
+            # the real publish date last, so take the trailing date-shaped
+            # match, not parse_date()'s first match: a headline can embed
+            # an unrelated date of its own earlier in the same label (see
             # parse_trailing_date()'s docstring). This path only runs when
             # the DOM search above found nothing, so it never overrides a
             # structurally-unambiguous dateline element.
@@ -980,8 +994,9 @@ def build_arg_parser() -> argparse.ArgumentParser:
     fallback.add_argument(
         "--fetch-detail-pages", dest="fetch_detail_pages", action="store_true", default=None,
         help="For any item whose date was not found on the listing page, fetch its "
-             "individual press-release page to extract the date. Required for Q4 themes "
-             "that do not embed dates in the listing cards (e.g. CDW). Adds one browser "
+             "individual press-release page to extract the date. Required for a Q4 theme "
+             "that does not embed dates in the listing cards at all (none confirmed yet -- "
+             "every theme seen so far, including CDW, has one). Adds one browser "
              "request per undated item, spaced by --polite-delay. Defaults to the "
              "'needs_detail_page_dates' field on the matched sources.yaml record if not "
              "passed explicitly; pass this flag to force it on for a source that doesn't "
