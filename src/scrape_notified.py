@@ -717,6 +717,14 @@ def build_arg_parser() -> argparse.ArgumentParser:
         ),
     )
 
+    # Override --data-dir default (matches scrape_q4_ir.py, which historically
+    # exposed this explicitly; the other scrapers previously hardcoded DATA_DIR).
+    out = parser.add_argument_group("output")
+    out.add_argument(
+        "--data-dir", type=Path, default=DATA_DIR,
+        help=f"Root of the data/ tree for --format csv (default: {DATA_DIR})",
+    )
+
     # Shared: --polite-delay/--timeout/--debug-dump-html/--verbose
     add_network_and_debug_args(parser, default_polite_delay=15.0)
 
@@ -778,7 +786,7 @@ def main(argv: Optional[list[str]] = None) -> int:
         all_items,
         years=years, since=args.since, until=args.until, limit=None,
         format=args.format, output=args.output, dry_run=args.dry_run,
-        data_dir=DATA_DIR,
+        data_dir=args.data_dir,
         default_json_path=REPO_ROOT / "notified_news.json",
     )
 

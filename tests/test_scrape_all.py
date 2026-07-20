@@ -196,7 +196,9 @@ def test_check_scraped_release_counts_wet_run_logs_no_mismatch_when_counts_match
     ).to_csv(counts_csv, index=False)
     monkeypatch.setattr(scrape_all, "DATA_DIR", data_dir)
 
-    args = argparse.Namespace(dry_run=False, skip_count_check=False, counts_csv=counts_csv)
+    args = argparse.Namespace(
+        dry_run=False, skip_count_check=False, counts_csv=counts_csv, data_dir=data_dir,
+    )
     with caplog.at_level("INFO", logger="scrape_all"):
         check_scraped_release_counts(_fake_sources("abbvie"), 2026, args, {})
 
@@ -213,7 +215,9 @@ def test_check_scraped_release_counts_wet_run_warns_on_mismatch(tmp_path, monkey
     ).to_csv(counts_csv, index=False)
     monkeypatch.setattr(scrape_all, "DATA_DIR", data_dir)
 
-    args = argparse.Namespace(dry_run=False, skip_count_check=False, counts_csv=counts_csv)
+    args = argparse.Namespace(
+        dry_run=False, skip_count_check=False, counts_csv=counts_csv, data_dir=data_dir,
+    )
     with caplog.at_level("WARNING", logger="scrape_all"):
         check_scraped_release_counts(_fake_sources("abbvie"), 2026, args, {})
 
@@ -228,7 +232,8 @@ def test_check_scraped_release_counts_wet_run_handles_missing_baseline_gracefull
     monkeypatch.setattr(scrape_all, "DATA_DIR", data_dir)
 
     args = argparse.Namespace(
-        dry_run=False, skip_count_check=False, counts_csv=tmp_path / "does_not_exist.csv",
+        dry_run=False, skip_count_check=False,
+        counts_csv=tmp_path / "does_not_exist.csv", data_dir=data_dir,
     )
     with caplog.at_level("WARNING", logger="scrape_all"):
         check_scraped_release_counts(_fake_sources("abbvie"), 2026, args, {})

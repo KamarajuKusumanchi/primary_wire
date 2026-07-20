@@ -102,13 +102,18 @@ DURABLE_SIGNATURE_FIELDS: dict[str, tuple[str, ...]] = {
 }
 
 
-def build_argv(slug: str, year: int | None, extra_args: list[str], dry_run: bool) -> list[str]:
+def build_argv(
+    slug: str, year: int | None, extra_args: list[str], dry_run: bool,
+    *, data_dir: Path | None = None,
+) -> list[str]:
     argv = ["--slug", slug]
     if year is not None:
         argv += ["--year", str(year)]
     argv += extra_args
     if dry_run:
         argv += ["--dry-run"]
+    if data_dir is not None:
+        argv += ["--data-dir", str(data_dir)]
     return argv
 
 
@@ -306,7 +311,7 @@ def check_scraped_release_counts(
             )
         else:
             mismatches = check_release_counts(
-                data_dir=DATA_DIR, counts_csv=args.counts_csv, years=years, slugs=slugs,
+                data_dir=args.data_dir, counts_csv=args.counts_csv, years=years, slugs=slugs,
             )
     except FileNotFoundError as e:
         logger.warning("Skipping release-count check: %s", e)
@@ -362,6 +367,14 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--counts-csv", type=Path, default=DEFAULT_COUNTS_CSV,
                         help="Baseline release-counts CSV to check against "
                              f"(default: {DEFAULT_COUNTS_CSV})")
+    parser.add_argument(
+        "--data-dir", type=Path, default=DATA_DIR,
+        help=(
+            f"Root of the data/ tree for --format csv (default: {DATA_DIR}). "
+            "Passed through to each underlying scraper's own --data-dir, and "
+            "used for the post-run release-count check against disk."
+        ),
+    )
     parser.add_argument("-v", "--verbose", action="store_true")
     args = parser.parse_args(argv)
 
@@ -401,7 +414,7 @@ def main(argv: list[str] | None = None) -> int:
     for _group_name, module_name, entry in sources:
         slug = entry["slug"]
         extra_args = list(entry.get("args", []))
-        scraper_argv = build_argv(slug, year, extra_args, args.dry_run)
+        scraper_argv = build_argv(slug, year, extra_args, args.dry_run, data_dir=args.data_dir)
 
         logger.info("=== %s  [%s]  argv: %s ===", slug, module_name, scraper_argv)
         if ran > 0:
