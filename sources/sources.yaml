@@ -316,6 +316,8 @@ sources:
     name: Global Payments Inc.
     ticker: GPN
     ir_url: https://investors.globalpayments.com/
+    news_releases_path: news-events/press-releases
+    first_page_index: 1
   - slug: godaddy
     name: GoDaddy Inc.
     ticker: GDDY
