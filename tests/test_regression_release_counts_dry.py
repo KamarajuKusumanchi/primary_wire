@@ -49,7 +49,7 @@ from utils.scrape_utils import count_items_by_year_slug_ticker, get_last_run_ite
 pytestmark = pytest.mark.regression
 
 
-def test_release_counts_match_baseline():
+def test_release_counts_match_baseline_in_memory():
     """Scrape every configured source for the current year (--dry-run) and
     compare the resulting per-(year, slug, ticker) release counts against
     reports/latest/press_release_counts.csv. Fails with the full list of
