@@ -1,7 +1,7 @@
 ====== primary_wire ======
 
 **Work in progress.** This project is at an early stage. Coverage is sparse —
-sources.yaml currently has entries for ~110 companies out of the ~500 in the
+sources.yaml currently has entries for ~120 companies out of the ~500 in the
 S&P 500. Press release links are added manually on an ad hoc basis, with a
 small and growing set of sources covered by automated scrapers (see
 ''Scrapers'' below). If you are interested in helping expand coverage,
