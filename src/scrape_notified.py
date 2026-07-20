@@ -39,7 +39,7 @@ Press release detail pages:
 
 Dates appear in the listing table's first column in M/D/YY format
 (e.g. "6/26/26" = June 26, 2026).  Two-digit years are assumed to be
-in the 2000s (i.e. "26" → 2026).  Dates are also present verbatim in
+in the 2000s (i.e. "26" -> 2026).  Dates are also present verbatim in
 each row's summary text (e.g. "NORTH CHICAGO, Ill., June 26, 2026")
 which is used as a fallback.
 
@@ -724,6 +724,19 @@ def build_arg_parser() -> argparse.ArgumentParser:
 
 
 def main(argv: Optional[list[str]] = None) -> int:
+    # On Windows, python.exe's console typically defaults to a legacy codepage
+    # (e.g. cp1252) rather than UTF-8. Any non-ASCII character reaching stdout/
+    # stderr -- e.g. an arrow or em-dash in --help text or a log message --
+    # then raises UnicodeEncodeError and crashes before anything is printed.
+    # Reconfigure both streams to replace unencodable characters instead of
+    # raising, so output degrades gracefully rather than crashing outright.
+    for _stream in (sys.stdout, sys.stderr):
+        if hasattr(_stream, "reconfigure"):
+            try:
+                _stream.reconfigure(errors="replace")
+            except Exception:
+                pass
+
     parser = build_arg_parser()
     args = parser.parse_args(argv)
 
