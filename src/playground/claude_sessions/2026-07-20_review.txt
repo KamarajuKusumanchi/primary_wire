@@ -1,0 +1,97 @@
+2026-07-20 1:16 AM
+
+Prompt:
+Please review https://github.com/KamarajuKusumanchi/primary_wire/archive/refs/heads/master.zip and tell me what you think? What are the next steps? How to improve the scraper coverage, code quality and make it faster? Is there anything worth refactoring? Is there any dead code that needs to be removed? Any comments that are not inline with the code? Ignore files in src/playground , src/prototypes from your review.
+
+Response:
+I pulled down the repo and went through the scraper stack (`scrape_q4_ir.py`, `scrape_investorroom.py`, `scrape_notified.py`, `scrape_notified_gated.py`), the shared utils, `scrape_all.py`, the reporting scripts, tests, and config — skipping `playground`/`prototypes` as asked. Straight take:
+
+## Overall
+
+This is unusually well-engineered for a solo/early-stage project. The docstrings explain *why*, not just *what* — several functions include a paragraph on the specific real-world edge case that forced a design decision (e.g. Seagate's headline embedding a second date, Robinhood's `"Jan. 02, 2026"` dateline breaking `%b`). The `resolve_source_identity()` / `resolve_source()` split, `finalize_and_output()`, and `merge_items_into_daily_csvs()` are genuine, non-trivial de-duplication across four scrapers that could easily have been four copy-pasted scripts. Tests run in 1.6s (55 passed). That's a real strength, not just politeness — it means people will actually run them before pushing.
+
+That said, there are gaps, and a few of them undercut the "well engineered" impression on closer inspection.
+
+## Coverage — the actual next step
+
+Don't write new scraper code first. Run the numbers you already generate:
+
+```
+Sources in sources.yaml:     120
+With automated scraper:      22 (18.3%)
+Without automated scraper:   98
+```
+
+Breaking down `reports/latest/scraper_coverage_missing.csv` by platform:
+
+| Platform (already detected) | Configured | Missing |
+|---|---|---|
+| notified | 7 | **40** |
+| q4 | 7 | **26** |
+| investorroom | 5 | **3** |
+| notified_gated | 3 | 0 |
+| unknown | — | 29 |
+
+**69 sources are already running on a platform you have a working scraper for, and just aren't in `config/scraper_config.yaml` yet.** That's zero new scraper code — just adding entries and smoke-testing that each site's markup doesn't deviate from the ones you've tuned against (Q4 themes especially vary — see the Costco vs. CDW detail-page-date split already in your code). This alone would roughly triple your automated coverage before you write a single line of new scraping logic. The 29 "unknown" ones are where actual new-platform work belongs.
+
+## Dead code (concrete, not a guess — ran pyflakes)
+
+```
+src/scrape_notified.py:110       'datetime.datetime' imported but unused
+src/scrape_notified.py:133       'extract_date_and_time_from_row' imported but unused
+src/scrape_notified_gated.py:151 'parse_date' imported but unused
+src/scrape_notified_gated.py:152 'parse_time' imported but unused
+src/scrape_notified_gated.py:161 'parse_short_date' imported but unused
+```
+
+These aren't stylistic nitpicks — `scrape_notified_gated.py` imports `parse_date`/`parse_time`/`parse_short_date` from two different utils modules and never calls any of them; it has its own local `extract_date_and_time_from_row()` that delegates to a shared, differently-aliased version instead. Left over from a refactor.
+
+## Comment that no longer matches the code
+
+`scrape_notified_gated.py:198-201`:
+
+```python
+# M/D/YY date parsing (e.g. "12/09/25"; ...) ... is shared with
+# scrape_notified.py -- see parse_short_date() in utils/scrape_notified_utils.py.
+```
+
+`parse_short_date` is imported into this file but never called (see above) — the comment describes a code path that was removed but the comment wasn't. Also `scrape_notified.py:201-206` references `extract_date_and_time_from_row()` "with its original behavior" as if it's actively used in this file — it isn't, it's a dead import.
+
+Also worth a fix: `src/scrape_all.py:394`:
+```python
+scope = f" in platform %r" % args.platform if args.platform else ""
+```
+An f-string with no `{}` placeholders, doing `%`-formatting on top of it. Works, but it's mixing two string-formatting styles in one line and pyflakes flags it — clean it up to either f-string or `%`, not both.
+
+## Doc/code drift
+
+README.txt says scraping covers *"10 of these sources, across three IR platforms (Q4, InvestorRoom, Notified)."* Actual current state: **22 sources across 4 platform groups** (Notified and Notified-gated are separate scrapers with meaningfully different logic — gated sites need a CSRF/form-token dance the plain Notified scraper doesn't). The README hasn't kept pace with the config file. Same document's "110 companies out of ~500" is a smaller drift — the live report says 116. Not urgent, but if you regenerate `reports/latest/` on a cadence, it'd be worth having the README pull that number from the report rather than hardcoding it, so it can't silently go stale again.
+
+## No linter, no CI
+
+`pyproject.toml` has no `[tool.ruff]` (or flake8/mypy) section, and there's no `.github/workflows/`. That's exactly how the dead imports above accumulated unnoticed — nothing runs on a PR to catch them. For a project explicitly soliciting outside contributions, this is the highest-leverage process fix available: add `ruff` to the `dev` extra, wire up a GitHub Actions job running `ruff check` + `pytest` (excluding the `regression` marker, which already hits live sites) on every PR. Cheap to add, and it's the difference between "clean code by discipline" and "clean code by construction."
+
+## Test coverage gap
+
+Tests exist for `scrape_q4_ir.py`, `scrape_utils.py`, `sources_utils.py`, `scrape_all.py`, and the release-count checker. There are **no unit tests** for `scrape_investorroom.py`, `scrape_notified.py`, `scrape_notified_gated.py`, or `csv_utils.py` — which is backwards from a risk standpoint: those are the three files with the most fragile, source-specific HTML-parsing heuristics (date-near-link extraction, pagination edge cases, form-token scraping for the gated variant), and they're currently only exercised by the live-network `regression` tests that are excluded from normal `pytest` runs. A parsing regression in `scrape_notified.py` could ship silently. Given how much care went into documenting the *reasoning* behind date-parsing edge cases in `scrape_utils.py`, it's a shame those three files don't have the same regression-test safety net locking that reasoning in place with fixture HTML.
+
+## Worth refactoring (minor)
+
+`resolve_source()` in `scrape_investorroom.py`, `scrape_notified.py`, and `scrape_notified_gated.py` all repeat the identical 4-line "CLI arg > sources.yaml field > default" precedence block for `news_releases_path`. It's small, but since it's copy-pasted three times verbatim, a tiny `resolve_field_precedence(cli_value, record, field_name, default)` helper in `sources_utils.py` would remove the last bit of duplication in an otherwise well-deduplicated resolution layer. Low priority — it's correct as-is, just repetitive.
+
+## Speed
+
+Two real, unforced costs:
+
+1. **`scrape_all.py` runs every source strictly sequentially, in-process**, with no concurrency at all — confirmed in code and in `scrape_utils.py`'s own comments. Your politeness guideline (10–30s between requests *per domain*) doesn't require this — different sources hit different domains, so running several sources concurrently (thread pool or asyncio, one worker per distinct domain) wouldn't violate it and would materially cut wall-clock time for a full run across 22+ configured sources.
+
+2. **`scrape_q4_ir.py`'s `scrape_all_years()` relaunches a fresh Chrome instance for every year in a multi-year range** (`with sync_playwright() as p: ... browser.close()` sits inside the per-year loop in `render_news_page()`). For a single-year run this is invisible; for a `--start-year 2020 --end-year 2026` backfill it means 7 cold Chrome launches instead of 1 browser reused across 7 page navigations. That's the single biggest win available for backfill speed specifically.
+
+## Bottom line — priority order
+
+1. Add the 69 already-supported-platform sources to `scraper_config.yaml` (biggest coverage win, no new code).
+2. Remove the 5 dead imports + fix the f-string; add `ruff` to CI so this doesn't recur.
+3. Reuse one browser instance across the year-loop in `scrape_q4_ir.py`.
+4. Add unit tests (with saved fixture HTML) for `scrape_investorroom.py` / `scrape_notified.py` / `scrape_notified_gated.py` — they're your highest-risk, least-tested code.
+5. Fix the README's "10 sources / three platforms" line.
+6. Parallelize `scrape_all.py` across distinct domains if full-catalog run time becomes a real pain point — I'd rank this last since it's the most invasive change for the least urgent problem right now.
