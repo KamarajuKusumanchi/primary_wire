@@ -23,24 +23,18 @@ network-dependent, and is excluded from a plain `pytest` run via the
     pytest -m regression
     pytest tests/test_regression_release_counts_wet.py -m regression   # this file only
 
-IMPORTANT -- why this test monkeypatches every scraper module's DATA_DIR
-attribute instead of using scrape_all.py's own DATA_DIR or a --data-dir
-flag: each scraper module writes through its *own* module-level DATA_DIR
-constant, independently of scrape_all.py's. Only scrape_q4_ir.py happens to
-also expose that as a --data-dir CLI flag (scrape_investorroom.py,
-scrape_notified.py, and scrape_notified_gated.py don't take one at all), so
-passing --data-dir via argv isn't a reliable way to redirect writes across
-every scraper. Monkeypatching each imported module's DATA_DIR attribute
-before calling its main() works uniformly across all of them, is undone
-automatically by pytest's monkeypatch fixture, and keeps this test from
-ever writing real scraped files into the repo's own data/ directory (data/
-is curated output, not a test fixture).
+Redirecting writes to a throwaway data/ directory: every scraper module
+now takes its own --data-dir CLI flag (each still defaults to writing
+through its own module-level DATA_DIR constant, but --data-dir overrides
+it), so this test just passes data_dir=... through to build_argv() and
+lets it append "--data-dir <tmp_path>/data" to each scraper's argv. That
+keeps this test from ever writing real scraped files into the repo's own
+data/ directory (data/ is curated output, not a test fixture).
 """
 
 from __future__ import annotations
 
 import datetime
-import importlib
 import sys
 from pathlib import Path
 
@@ -54,7 +48,7 @@ from scrape_all import build_argv, iter_selected_sources, load_scraper_config, r
 pytestmark = pytest.mark.regression
 
 
-def test_release_counts_match_baseline_on_disk(tmp_path, monkeypatch):
+def test_release_counts_match_baseline_on_disk(tmp_path):
     """Scrape every configured source for the current year in normal (wet)
     mode -- writing to a throwaway data/ directory -- then recompute
     per-(year, slug, ticker) release counts from those on-disk CSVs and
@@ -70,20 +64,14 @@ def test_release_counts_match_baseline_on_disk(tmp_path, monkeypatch):
     data_dir = tmp_path / "data"
     data_dir.mkdir()
 
-    # Redirect every scraper module's own DATA_DIR constant to the
-    # throwaway dir -- see the module docstring above for why this can't
-    # just be a --data-dir CLI arg.
-    module_names = {module_name for _, module_name, _ in sources}
-    for module_name in module_names:
-        mod = importlib.import_module(module_name)
-        monkeypatch.setattr(mod, "DATA_DIR", data_dir, raising=True)
-
     scraper_failures: list[str] = []
 
     for _group_name, module_name, entry in sources:
         slug = entry["slug"]
         extra_args = list(entry.get("args", []))
-        argv = build_argv(slug, year, extra_args, dry_run=False)
+        # Every scraper module's --data-dir flag redirects its writes to
+        # the throwaway dir -- see the module docstring above.
+        argv = build_argv(slug, year, extra_args, dry_run=False, data_dir=data_dir)
 
         rc = run_scraper(module_name, argv)
         if rc != 0:
