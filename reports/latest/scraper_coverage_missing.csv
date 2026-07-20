@@ -11,6 +11,7 @@ applied-materials,AMAT,notified,https://ir.appliedmaterials.com/
 ares,ARES,unknown,https://ir.ares.com/
 arista-networks,ANET,unknown,https://investors.arista.com/
 autozone,AZO,notified,https://about.autozone.com/investor-overview
+baxter,BAX,q4,https://investor.baxter.com/
 blackstone,BX,unknown,https://ir.blackstone.com/
 bls,,unknown,https://www.bls.gov/newsrelease/
 booking,BKNG,q4,https://ir.bookingholdings.com/
@@ -31,6 +32,7 @@ corning,GLW,q4,https://investor.corning.com/
 criver,CRL,notified,https://ir.criver.com/
 crowdstrike,CRWD,notified,https://ir.crowdstrike.com/
 crown-castle,CCI,notified,https://investor.crowncastle.com/
+darden-restaurants,DRI,q4,https://investor.darden.com/
 datadog,DDOG,notified,https://investors.datadoghq.com/
 dell,DELL,notified,https://investors.delltechnologies.com/
 dexcom,DXCM,q4,https://investors.dexcom.com/
@@ -45,10 +47,13 @@ flex,FLEX,q4,https://investors.flex.com/
 fortinet,FTNT,notified,https://investor.fortinet.com/
 fox,FOXA,unknown,https://investor.foxcorporation.com/
 ge-healthcare,GEHC,notified,https://investor.gehealthcare.com/
+ge-vernova,GEV,notified,https://www.gevernova.com/investors
 gen-digital,GEN,q4,https://investor.gendigital.com/
 gilead,GILD,q4,https://investors.gilead.com/
+global-payments,GPN,notified,https://investors.globalpayments.com/
 godaddy,GDDY,notified,https://aboutus.godaddy.net/investor-relations/
 google,GOOGL,q4,https://abc.xyz/investor/
+home-depot,HD,notified,https://ir.homedepot.com/
 honeywell,HONA,notified,https://investor.honeywell.com/investor-relations
 hp,HPE,q4,https://investor.hp.com/
 ingersoll-rand,IR,q4,https://investors.irco.com/
@@ -56,6 +61,8 @@ intel,INTC,notified,https://www.intc.com/
 intercontinental-exchange,ICE,unknown,https://ir.theice.com/
 intuitive-surgical,ISRG,notified,https://isrg.intuitive.com/
 iqvia,IQV,unknown,https://ir.iqvia.com/
+jb-hunt,JBHT,unknown,https://investor.jbhunt.com/
+kkr,KKR,unknown,https://ir.kkr.com/
 kla,KLAC,notified,https://ir.kla.com/
 lam-research,LRCX,investorroom,https://investor.lamresearch.com/
 lumentum,LITE,q4,https://investor.lumentum.com/
@@ -79,6 +86,7 @@ sba-communications,SBAC,unknown,https://ir.sbasite.com/
 servicenow,NOW,unknown,https://investor.servicenow.com/
 skyworks,SWKS,notified,https://www.skyworksinc.com/investors
 smurfit-westrock,SW,q4,http://investors.smurfitwestrock.com/
+solventum,SOLV,notified,https://investors.solventum.com/
 spacex,SPCX,unknown,https://ir.spacex.com/
 super-micro,SMCI,q4,https://ir.supermicro.com/
 synchrony-financial,SYF,unknown,https://investors.synchrony.com/
@@ -86,6 +94,7 @@ synopsys,SNPS,q4,https://investor.synopsys.com/
 tesla,TSLA,unknown,https://ir.tesla.com/
 texas-instruments,TXN,notified,https://investor.ti.com/
 tractor-supply,TSCO,unknown,https://ir.tractorsupply.com/
+uber,UBER,unknown,https://investor.uber.com/
 united-airlines,UAL,notified,https://ir.united.com/
 universal-health-services,UHS,notified,https://ir.uhs.com/
 verisign,VRSN,notified,https://investor.verisign.com/
@@ -94,6 +103,8 @@ vertex-pharmaceuticals,VRTX,notified,https://investors.vrtx.com/
 vertiv,VRT,q4,https://investors.vertiv.com/
 virtu,VIRT,notified,https://ir.virtu.com/
 visa,V,q4,https://investor.visa.com/
+warner-bros-discovery,WBD,q4,https://ir.wbd.com/
 western-digital,WDC,notified,https://investor.wdc.com/
 weyerhaeuser,WY,investorroom,https://investor.weyerhaeuser.com/
 workday,WDAY,q4,https://investor.workday.com/
+yum-brands,YUM,unknown,https://investors.yum.com/
