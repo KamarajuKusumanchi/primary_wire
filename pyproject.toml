@@ -63,6 +63,23 @@ dev = [
     "invoke",
 ]
 
+[tool.pytest.ini_options]
+# 'regression' tests (see tests/test_regression_release_counts.py) hit
+# every live source configured in config/scraper_config.yaml and can take
+# a long time to finish, so they're excluded from a plain `pytest` /
+# `python -m pytest` run and only run on demand:
+#
+#   pytest -m regression                              # run just the regression test(s)
+#   pytest -m regression -k release_counts             # narrow further, same as any pytest run
+#
+# The trailing '-m regression' on the command line overrides the
+# '-m "not regression"' baked in here (pytest keeps the last -m it sees),
+# so this doesn't need any special-casing beyond the marker itself.
+markers = [
+    "regression: slow, network-dependent test that scrapes every configured live source and checks release counts against the baseline (excluded by default; run with `pytest -m regression`)",
+]
+addopts = "-m 'not regression'"
+
 # ======= Workflow Commands =======
 #
 # Initial setup or recreate environment from scratch:
