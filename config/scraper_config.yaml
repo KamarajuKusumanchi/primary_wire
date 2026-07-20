@@ -61,3 +61,5 @@ q4_ir:
     - slug: travelers
     - slug: seagate
       args: [--show-browser]
+    - slug: netapp
+      args: [--show-browser]
