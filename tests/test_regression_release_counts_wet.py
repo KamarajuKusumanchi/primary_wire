@@ -9,7 +9,7 @@ on-disk CSVs -- exactly the way scrape_all.py's own check_release_counts()
 does after a real `python src/scrape_all.py` run -- and asserts they match
 the baseline snapshot in reports/latest/press_release_counts.csv.
 
-This is the on-disk-path counterpart to test_regression_release_counts.py
+This is the on-disk-path counterpart to test_regression_release_counts_dry.py
 (which exercises the --dry-run/in-memory path). The two deliberately
 overlap in what they scrape and check; the point of *this* file is to also
 exercise the merge-into-daily-CSVs write path (utils/csv_utils.py) and the

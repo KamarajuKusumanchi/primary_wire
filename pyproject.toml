@@ -64,7 +64,8 @@ dev = [
 ]
 
 [tool.pytest.ini_options]
-# 'regression' tests (see tests/test_regression_release_counts.py) hit
+# 'regression' tests (see tests/test_regression_release_counts_dry.py and
+# tests/test_regression_release_counts_wet.py) hit
 # every live source configured in config/scraper_config.yaml and can take
 # a long time to finish, so they're excluded from a plain `pytest` /
 # `python -m pytest` run and only run on demand:

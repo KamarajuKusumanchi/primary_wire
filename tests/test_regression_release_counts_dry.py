@@ -1,10 +1,14 @@
 """
-tests/test_regression_release_counts.py
+tests/test_regression_release_counts_dry.py
 
 On-demand regression test: scrapes every source configured in
 config/scraper_config.yaml (current year, --dry-run) and asserts that the
 release_count found for every (year, slug, ticker) combination matches the
 baseline snapshot in reports/latest/press_release_counts.csv.
+
+This is the in-memory/--dry-run counterpart to
+test_regression_release_counts_wet.py, which exercises the on-disk write
+path instead.
 
 This hits real, live IR pages -- the same network calls
 `python src/scrape_all.py --dry-run` makes -- so it is slow and
@@ -13,7 +17,7 @@ pyproject.toml) and is excluded from a plain `pytest` / `python -m pytest`
 run. Run it explicitly with:
 
     pytest -m regression
-    pytest tests/test_regression_release_counts.py -m regression   # this file only
+    pytest tests/test_regression_release_counts_dry.py -m regression   # this file only
 
 Unlike `scrape_all.py`'s own end-of-run check (check_scraped_release_counts,
 which only logs a warning and never fails the run -- a mismatch there can
