@@ -114,6 +114,10 @@ sources:
     ticker: AXON
     ir_url: https://investor.axon.com/
     news_releases_path: press-releases
+  - slug: baxter
+    name: Baxter International Inc.
+    ticker: BAX
+    ir_url: https://investor.baxter.com/
   - slug: bio-techne
     name: Bio-Techne Corporation
     ticker: TECH
@@ -226,6 +230,10 @@ sources:
     name: Crown Castle Inc.
     ticker: CCI
     ir_url: https://investor.crowncastle.com/
+  - slug: darden-restaurants
+    name: Darden Restaurants, Inc.
+    ticker: DRI
+    ir_url: https://investor.darden.com/
   - slug: datadog
     name: Datadog, Inc.
     ticker: DDOG
@@ -287,6 +295,10 @@ sources:
     name: GE HealthCare Technologies Inc.
     ticker: GEHC
     ir_url: https://investor.gehealthcare.com/
+  - slug: ge-vernova
+    name: GE Vernova Inc.
+    ticker: GEV
+    ir_url: https://www.gevernova.com/investors
   - slug: gen-digital
     name: Gen Digital Inc.
     ticker: GEN
@@ -300,6 +312,10 @@ sources:
     name: Gilead Sciences, Inc.
     ticker: GILD
     ir_url: https://investors.gilead.com/
+  - slug: global-payments
+    name: Global Payments Inc.
+    ticker: GPN
+    ir_url: https://investors.globalpayments.com/
   - slug: godaddy
     name: GoDaddy Inc.
     ticker: GDDY
@@ -308,6 +324,10 @@ sources:
     name: Alphabet Inc.
     ticker: GOOGL
     ir_url: https://abc.xyz/investor/
+  - slug: home-depot
+    name: Home Depot, Inc. (The)
+    ticker: HD
+    ir_url: https://ir.homedepot.com/
   - slug: honeywell
     name: Honeywell Aerospace Inc.
     ticker: HONA
@@ -347,6 +367,14 @@ sources:
     name: IQVIA Holdings Inc.
     ticker: IQV
     ir_url: https://ir.iqvia.com/
+  - slug: jb-hunt
+    name: J.B. Hunt Transport Services, Inc.
+    ticker: JBHT
+    ir_url: https://investor.jbhunt.com/
+  - slug: kkr
+    name: KKR & Co. Inc.
+    ticker: KKR
+    ir_url: https://ir.kkr.com/
   - slug: kla
     name: KLA Corporation
     ticker: KLAC
@@ -463,6 +491,10 @@ sources:
     name: Smurfit Westrock Plc
     ticker: SW
     ir_url: http://investors.smurfitwestrock.com/
+  - slug: solventum
+    name: Solventum Corporation
+    ticker: SOLV
+    ir_url: https://investors.solventum.com/
   - slug: spacex
     name: Space Exploration Technologies Corp.
     ticker: SPCX
@@ -507,6 +539,10 @@ sources:
     ticker: TRV
     ir_url: https://investor.travelers.com/
     news_path: newsroom/press-releases/default.aspx
+  - slug: uber
+    name: Uber Technologies, Inc.
+    ticker: UBER
+    ir_url: https://investor.uber.com/
   - slug: united-airlines
     name: United Airlines Holdings, Inc.
     ticker: UAL
@@ -539,6 +575,10 @@ sources:
     name: Visa Inc.
     ticker: V
     ir_url: https://investor.visa.com/
+  - slug: warner-bros-discovery
+    name: Warner Bros. Discovery, Inc.
+    ticker: WBD
+    ir_url: https://ir.wbd.com/
   - slug: western-digital
     name: Western Digital Corporation
     ticker: WDC
@@ -551,3 +591,7 @@ sources:
     name: Workday, Inc.
     ticker: WDAY
     ir_url: https://investor.workday.com/
+  - slug: yum-brands
+    name: Yum! Brands, Inc.
+    ticker: YUM
+    ir_url: https://investors.yum.com/
