@@ -223,21 +223,26 @@ def check_release_counts(
     return compare_counts(baseline, actual)
 
 
-def actual_counts_from_found_items(
-    found_counts: dict[tuple[int, str], int], ticker_lookup: dict[str, str]
-) -> pd.DataFrame:
-    """Build a (year, slug, ticker, release_count) frame from in-memory
-    found-item counts, e.g. scrape_all.py's --dry-run tally of what each
-    scraper actually returned -- there's nothing written to data/ in that
-    mode for build_report() to read back instead.
+def actual_counts_from_found_items(found_counts: dict[tuple[int, str, str], int]) -> pd.DataFrame:
+    """Build a (year, slug, ticker, release_count) frame directly from
+    in-memory found-item counts, e.g. scrape_all.py's --dry-run tally of
+    what each scraper actually returned -- there's nothing written to
+    data/ in that mode for build_report() to read back instead.
 
-    found_counts maps (year, slug) -> count. ticker_lookup maps slug ->
-    ticker, purely for display in CountMismatch.describe(); a slug missing
-    from it just shows an empty ticker rather than raising.
+    found_counts maps (year, slug, ticker) -> count -- the same key shape
+    build_report() produces from disk data (see
+    press_release_counts.count_releases_per_year_slug_ticker()), so this
+    is a straight reshape into a DataFrame, not a join or a lookup. In
+    particular there's no separate ticker source here: callers must tally
+    found_counts using each item's own ticker (see
+    utils.scrape_utils.count_items_by_year_slug_ticker()) rather than a
+    ticker looked up by slug afterward, since a looked-up ticker could
+    silently disagree with the baseline's and produce false mismatches
+    that have nothing to do with the actual counts.
     """
     rows = [
-        {"year": year, "slug": slug, "ticker": ticker_lookup.get(slug, ""), "release_count": count}
-        for (year, slug), count in found_counts.items()
+        {"year": year, "slug": slug, "ticker": ticker, "release_count": count}
+        for (year, slug, ticker), count in found_counts.items()
     ]
     return pd.DataFrame(rows, columns=OUTPUT_COLUMNS)
 
@@ -245,8 +250,7 @@ def actual_counts_from_found_items(
 def check_found_release_counts(
     *,
     counts_csv: Path = DEFAULT_COUNTS_CSV,
-    found_counts: dict[tuple[int, str], int],
-    ticker_lookup: dict[str, str],
+    found_counts: dict[tuple[int, str, str], int],
     years: Optional[set[int]] = None,
     slugs: Optional[set[str]] = None,
 ) -> list[CountMismatch]:
@@ -255,11 +259,15 @@ def check_found_release_counts(
     data/ -- the --dry-run counterpart, since --dry-run never writes to
     data/ so there'd be nothing on disk yet to read back.
 
+    found_counts is keyed by (year, slug, ticker), same as
+    check_release_counts()'s disk-based comparison, so both entry points
+    compare on identical terms.
+
     Raises FileNotFoundError if counts_csv doesn't exist, same as
     check_release_counts().
     """
     baseline = filter_keys(load_baseline(counts_csv), years, slugs)
-    actual = filter_keys(actual_counts_from_found_items(found_counts, ticker_lookup), years, slugs)
+    actual = filter_keys(actual_counts_from_found_items(found_counts), years, slugs)
     return compare_counts(baseline, actual)
 
 

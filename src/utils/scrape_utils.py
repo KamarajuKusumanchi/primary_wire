@@ -26,7 +26,8 @@ configure_logging(verbose)                    -- shared logging.basicConfig() fo
 finalize_and_output(...)                      -- shared main() tail: filter, preview, write CSV/JSON
 get_last_run_items()  -> list[NewsItem]        -- items from the most recent finalize_and_output() call
 reset_last_run_items()                        -- clear that state before a new scraper invocation
-count_items_by_year(items) -> dict[int, int]  -- group items by publish_date.year
+count_items_by_year_slug_ticker(items) -> dict[tuple[int, str, str], int]
+                                               -- group items by (publish_date.year, slug, ticker)
 """
 
 from __future__ import annotations
@@ -605,20 +606,30 @@ def reset_last_run_items() -> None:
     _last_run_items = []
 
 
-def count_items_by_year(items: Iterable[NewsItem]) -> dict[int, int]:
-    """Group items by publish_date.year and return {year: count}.
+def count_items_by_year_slug_ticker(items: Iterable[NewsItem]) -> dict[tuple[int, str, str], int]:
+    """Group items by (publish_date.year, slug, ticker) and return
+    {(year, slug, ticker): count}.
+
+    This mirrors src/reporting/press_release_counts.py's
+    count_releases_per_year_slug_ticker(), which does the equivalent
+    groupby on disk-based data -- keying on the full triple here too
+    (rather than just year) is what lets a --dry-run tally be compared
+    directly against that disk-based report's baseline via
+    check_press_release_counts.check_found_release_counts(), using each
+    item's own slug/ticker rather than a separately looked-up ticker that
+    could disagree with what was actually scraped.
 
     Items with no publish_date are skipped -- they can't be attributed to
-    a year -- mirroring src/reporting/press_release_counts.py's "no year,
-    no row" rule for disk-based counts, so dry-run and disk-based counts
-    stay directly comparable.
+    a year -- mirroring press_release_counts.py's "no year, no row" rule
+    for disk-based counts, so dry-run and disk-based counts stay directly
+    comparable.
     """
-    counts: dict[int, int] = {}
+    counts: dict[tuple[int, str, str], int] = {}
     for item in items:
         if item.publish_date is None:
             continue
-        year = item.publish_date.year
-        counts[year] = counts.get(year, 0) + 1
+        key = (item.publish_date.year, item.slug, item.ticker)
+        counts[key] = counts.get(key, 0) + 1
     return counts
 
 

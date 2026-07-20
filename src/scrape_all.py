@@ -60,7 +60,7 @@ from reporting.check_press_release_counts import (  # noqa: E402
     check_release_counts,
 )
 from utils.scrape_utils import (  # noqa: E402
-    count_items_by_year,
+    count_items_by_year_slug_ticker,
     get_last_run_items,
     reset_last_run_items,
 )
@@ -259,8 +259,7 @@ def check_scraped_release_counts(
     sources: list[Source],
     year: int | None,
     args: argparse.Namespace,
-    sources_lookup: dict[str, dict],
-    found_counts: dict[tuple[int, str], int],
+    found_counts: dict[tuple[int, str, str], int],
 ) -> None:
     """Compare release counts against the baseline snapshot, restricted to
     the (year, slug) pairs *sources* just covered, and log any mismatch.
@@ -273,13 +272,16 @@ def check_scraped_release_counts(
     source actually reflects that mode:
       - Normal (wet) runs: recompute counts from data/ on disk, via
         check_release_counts() -- the scrapers just wrote there, so
-        that's the definitive per-(year, slug) tally.
+        that's the definitive per-(year, slug, ticker) tally.
       - --dry-run: data/ is untouched, so there's nothing there to read
         back. Instead this uses *found_counts*, which main()'s scrape
         loop tallies from each scraper's in-memory results as it goes
-        (see get_last_run_items()/count_items_by_year() in
+        (see get_last_run_items()/count_items_by_year_slug_ticker() in
         utils/scrape_utils.py) -- the only count available under
-        --dry-run.
+        --dry-run. found_counts is keyed by (year, slug, ticker) using
+        each item's own ticker, so it lines up with check_release_counts()'s
+        disk-based key exactly -- no separate slug->ticker lookup is
+        needed (or used) here.
 
     year=None (i.e. --all-years was passed) means every year is in scope
     for the scraped slugs, matching what was actually scraped.
@@ -298,12 +300,9 @@ def check_scraped_release_counts(
 
     try:
         if args.dry_run:
-            ticker_lookup = {
-                slug: sources_lookup.get(slug, {}).get("ticker", "") for slug in slugs
-            }
             mismatches = check_found_release_counts(
                 counts_csv=args.counts_csv, found_counts=found_counts,
-                ticker_lookup=ticker_lookup, years=years, slugs=slugs,
+                years=years, slugs=slugs,
             )
         else:
             mismatches = check_release_counts(
@@ -385,7 +384,7 @@ def main(argv: list[str] | None = None) -> int:
     config = load_scraper_config()
     sources_lookup = load_sources_lookup()
     failures: list[str] = []
-    found_counts: dict[tuple[int, str], int] = {}
+    found_counts: dict[tuple[int, str, str], int] = {}
     ran = 0
 
     if args.smoke_test:
@@ -414,8 +413,8 @@ def main(argv: list[str] | None = None) -> int:
             logger.error("%s: scraper exited with code %d", slug, rc)
             failures.append(slug)
 
-        for found_year, count in count_items_by_year(get_last_run_items()).items():
-            found_counts[(found_year, slug)] = found_counts.get((found_year, slug), 0) + count
+        for key, count in count_items_by_year_slug_ticker(get_last_run_items()).items():
+            found_counts[key] = found_counts.get(key, 0) + count
 
     if ran == 0:
         if args.smoke_test:
@@ -433,7 +432,7 @@ def main(argv: list[str] | None = None) -> int:
             )
         return 1
 
-    check_scraped_release_counts(sources, year, args, sources_lookup, found_counts)
+    check_scraped_release_counts(sources, year, args, found_counts)
 
     if failures:
         logger.error("Failed: %s", ", ".join(failures))

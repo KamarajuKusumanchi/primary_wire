@@ -183,10 +183,6 @@ def _fake_sources(*slugs: str) -> list[scrape_all.Source]:
     return [("group", "module", {"slug": slug}) for slug in slugs]
 
 
-def _fake_sources_lookup(**slug_to_ticker: str) -> dict[str, dict]:
-    return {slug: {"slug": slug, "ticker": ticker} for slug, ticker in slug_to_ticker.items()}
-
-
 # --- wet-run (disk-based) path -----------------------------------------------
 
 def test_check_scraped_release_counts_wet_run_logs_no_mismatch_when_counts_match(
@@ -202,9 +198,7 @@ def test_check_scraped_release_counts_wet_run_logs_no_mismatch_when_counts_match
 
     args = argparse.Namespace(dry_run=False, skip_count_check=False, counts_csv=counts_csv)
     with caplog.at_level("INFO", logger="scrape_all"):
-        check_scraped_release_counts(
-            _fake_sources("abbvie"), 2026, args, _fake_sources_lookup(abbvie="ABBV"), {}
-        )
+        check_scraped_release_counts(_fake_sources("abbvie"), 2026, args, {})
 
     assert "1 slug(s) match the baseline" in caplog.text
     assert "WARNING" not in caplog.text
@@ -221,9 +215,7 @@ def test_check_scraped_release_counts_wet_run_warns_on_mismatch(tmp_path, monkey
 
     args = argparse.Namespace(dry_run=False, skip_count_check=False, counts_csv=counts_csv)
     with caplog.at_level("WARNING", logger="scrape_all"):
-        check_scraped_release_counts(
-            _fake_sources("abbvie"), 2026, args, _fake_sources_lookup(abbvie="ABBV"), {}
-        )
+        check_scraped_release_counts(_fake_sources("abbvie"), 2026, args, {})
 
     assert "baseline=5, actual=1" in caplog.text
 
@@ -239,17 +231,21 @@ def test_check_scraped_release_counts_wet_run_handles_missing_baseline_gracefull
         dry_run=False, skip_count_check=False, counts_csv=tmp_path / "does_not_exist.csv",
     )
     with caplog.at_level("WARNING", logger="scrape_all"):
-        check_scraped_release_counts(
-            _fake_sources("abbvie"), 2026, args, _fake_sources_lookup(abbvie="ABBV"), {}
-        )
+        check_scraped_release_counts(_fake_sources("abbvie"), 2026, args, {})
 
     assert "Skipping release-count check" in caplog.text
 
 
 # --- dry-run (in-memory found_counts) path -----------------------------------
+#
+# found_counts is keyed by (year, slug, ticker) -- the same triple
+# check_release_counts() compares on for wet runs -- since scrape_all.py's
+# scrape loop tallies it from each item's own slug/ticker (see
+# utils.scrape_utils.count_items_by_year_slug_ticker()) rather than a
+# separate slug->ticker lookup.
 
 def test_check_scraped_release_counts_dry_run_logs_no_mismatch_when_counts_match(
-    tmp_path, monkeypatch, caplog
+    tmp_path, caplog
 ):
     counts_csv = tmp_path / "press_release_counts.csv"
     pd.DataFrame(
@@ -257,18 +253,16 @@ def test_check_scraped_release_counts_dry_run_logs_no_mismatch_when_counts_match
     ).to_csv(counts_csv, index=False)
 
     args = argparse.Namespace(dry_run=True, skip_count_check=False, counts_csv=counts_csv)
-    found_counts = {(2026, "abbvie"): 3}
+    found_counts = {(2026, "abbvie", "ABBV"): 3}
     with caplog.at_level("INFO", logger="scrape_all"):
-        check_scraped_release_counts(
-            _fake_sources("abbvie"), 2026, args, _fake_sources_lookup(abbvie="ABBV"), found_counts
-        )
+        check_scraped_release_counts(_fake_sources("abbvie"), 2026, args, found_counts)
 
     assert "dry-run" in caplog.text
     assert "1 slug(s) match the baseline" in caplog.text
     assert "WARNING" not in caplog.text
 
 
-def test_check_scraped_release_counts_dry_run_warns_on_mismatch(tmp_path, monkeypatch, caplog):
+def test_check_scraped_release_counts_dry_run_warns_on_mismatch(tmp_path, caplog):
     counts_csv = tmp_path / "press_release_counts.csv"
     pd.DataFrame(
         [{"year": 2026, "slug": "abbvie", "ticker": "ABBV", "release_count": 5}]
@@ -276,17 +270,15 @@ def test_check_scraped_release_counts_dry_run_warns_on_mismatch(tmp_path, monkey
 
     args = argparse.Namespace(dry_run=True, skip_count_check=False, counts_csv=counts_csv)
     # Only 2 found in memory this dry run, vs. a baseline of 5.
-    found_counts = {(2026, "abbvie"): 2}
+    found_counts = {(2026, "abbvie", "ABBV"): 2}
     with caplog.at_level("WARNING", logger="scrape_all"):
-        check_scraped_release_counts(
-            _fake_sources("abbvie"), 2026, args, _fake_sources_lookup(abbvie="ABBV"), found_counts
-        )
+        check_scraped_release_counts(_fake_sources("abbvie"), 2026, args, found_counts)
 
     assert "baseline=5, actual=2" in caplog.text
 
 
 def test_check_scraped_release_counts_dry_run_flags_a_slug_with_nothing_found(
-    tmp_path, monkeypatch, caplog
+    tmp_path, caplog
 ):
     # e.g. the scraper's selector broke and it silently returned zero items.
     counts_csv = tmp_path / "press_release_counts.csv"
@@ -296,9 +288,7 @@ def test_check_scraped_release_counts_dry_run_flags_a_slug_with_nothing_found(
 
     args = argparse.Namespace(dry_run=True, skip_count_check=False, counts_csv=counts_csv)
     with caplog.at_level("WARNING", logger="scrape_all"):
-        check_scraped_release_counts(
-            _fake_sources("abbvie"), 2026, args, _fake_sources_lookup(abbvie="ABBV"), {}
-        )
+        check_scraped_release_counts(_fake_sources("abbvie"), 2026, args, {})
 
     assert "none were found at all this run" in caplog.text
 
@@ -311,11 +301,34 @@ def test_check_scraped_release_counts_dry_run_handles_missing_baseline_gracefull
     )
     with caplog.at_level("WARNING", logger="scrape_all"):
         check_scraped_release_counts(
-            _fake_sources("abbvie"), 2026, args, _fake_sources_lookup(abbvie="ABBV"),
-            {(2026, "abbvie"): 3},
+            _fake_sources("abbvie"), 2026, args, {(2026, "abbvie", "ABBV"): 3},
         )
 
     assert "Skipping release-count check" in caplog.text
+
+
+def test_check_scraped_release_counts_dry_run_uses_items_own_ticker_not_a_lookup(
+    tmp_path, caplog
+):
+    # Regression test: the dry-run tally must key on each item's own
+    # ticker (as scraped), not some other slug->ticker source that could
+    # be stale relative to the baseline. abbvie's baseline ticker (ABBV)
+    # and what was actually found (ABBV2, e.g. a relisting mid-run) don't
+    # match, so this must surface as a real (year, slug, ticker) mismatch
+    # -- not be silently coerced into "counts match" by a lookup that
+    # overrides the found ticker with the old one.
+    counts_csv = tmp_path / "press_release_counts.csv"
+    pd.DataFrame(
+        [{"year": 2026, "slug": "abbvie", "ticker": "ABBV", "release_count": 3}]
+    ).to_csv(counts_csv, index=False)
+
+    args = argparse.Namespace(dry_run=True, skip_count_check=False, counts_csv=counts_csv)
+    found_counts = {(2026, "abbvie", "ABBV2"): 3}
+    with caplog.at_level("WARNING", logger="scrape_all"):
+        check_scraped_release_counts(_fake_sources("abbvie"), 2026, args, found_counts)
+
+    assert "isn't in the baseline yet" in caplog.text
+    assert "none were found at all this run" in caplog.text
 
 
 # --- shared behavior -----------------------------------------------------
@@ -325,9 +338,7 @@ def test_check_scraped_release_counts_skipped_when_flag_set(tmp_path, caplog):
         dry_run=False, skip_count_check=True, counts_csv=tmp_path / "press_release_counts.csv",
     )
     with caplog.at_level("DEBUG", logger="scrape_all"):
-        check_scraped_release_counts(
-            _fake_sources("abbvie"), 2026, args, _fake_sources_lookup(abbvie="ABBV"), {}
-        )
+        check_scraped_release_counts(_fake_sources("abbvie"), 2026, args, {})
 
     assert caplog.text == ""
 
@@ -337,7 +348,7 @@ def test_check_scraped_release_counts_skipped_when_flag_set(tmp_path, caplog):
 def test_run_scraper_resets_last_run_items_before_each_call(monkeypatch):
     # A module whose main() never calls finalize_and_output() (e.g. it
     # errors out early) must not leave the previous source's items sitting
-    # around for count_items_by_year(get_last_run_items()) to pick up.
+    # around for count_items_by_year_slug_ticker(get_last_run_items()) to pick up.
     from utils import scrape_utils
 
     calls = []
