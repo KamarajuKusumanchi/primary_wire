@@ -8,3 +8,14 @@ https://ir.netflix.net/investor-news-and-events/financial-releases/press-release
 https://investor.costco.com/news/default.aspx
 https://investor.costco.com/news/news-details/2026/Costco-Wholesale-Corporation-Reports-June-Sales-Results-and-Announces-Quarterly-Cash-Dividend/default.aspx
 -------------------------------------------------------------------------------
+
+-------------------------------------------------------------------------------
+today | 2026-07-19
+
+Regression tests such as
+$ python -m pytest -m regression tests/test_regression_release_counts_wet.py
+
+are storing files in
+~/AppData/Local/Temp/pytest-of-raju/pytest-21/test_release_counts_match_base0/data/2026/
+. Do these files have to be cleaned up from time to time?
+-------------------------------------------------------------------------------
