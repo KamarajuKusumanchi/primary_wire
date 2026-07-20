@@ -135,6 +135,36 @@ def load_source_record(slug: str, sources_path: Path = SOURCES_PATH) -> dict:
     return record
 
 
+def resolve_field_precedence(
+    cli_value: object,
+    record: Optional[dict],
+    field_name: str,
+    default: object,
+) -> object:
+    """Resolve a config field via CLI > sources.yaml record > default.
+
+    Used for the small "explicit CLI flag beats sources.yaml, which beats a
+    hardcoded default" precedence block that scrape_investorroom.py,
+    scrape_notified.py, and scrape_notified_gated.py each apply to
+    news_releases_path.
+
+    *cli_value* wins if truthy. Otherwise *record*[*field_name*] wins if
+    *record* is not None and the value is truthy. Otherwise *default*.
+
+    This truthiness-based precedence is only correct for fields where "not
+    set" and "falsy" are the same thing (e.g. an empty-string path). It is
+    NOT correct for a field like first_page_index, where 0 is a valid,
+    meaningful value that must not be treated as unset -- such fields need
+    their own "is not None" precedence check instead of this helper.
+    """
+    if cli_value:
+        return cli_value
+    record_value = record.get(field_name) if record else None
+    if record_value:
+        return record_value
+    return default
+
+
 def resolve_source_identity(
     url: Optional[str],
     slug: Optional[str],

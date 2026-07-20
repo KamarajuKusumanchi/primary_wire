@@ -653,7 +653,7 @@ def resolve_source(
       2. the "first_page_index" field on the matched sources.yaml record
       3. DEFAULT_FIRST_PAGE_INDEX (0)
     """
-    from utils.sources_utils import resolve_source_identity
+    from utils.sources_utils import resolve_field_precedence, resolve_source_identity
 
     url, slug, ticker, record = resolve_source_identity(
         url, slug, ticker,
@@ -661,11 +661,9 @@ def resolve_source(
         strip_url_to_root=True, logger=logger,
     )
 
-    # news_releases_path precedence: explicit CLI arg > sources.yaml field > default.
-    if not news_releases_path:
-        news_releases_path = (record.get("news_releases_path") if record else None) or (
-            DEFAULT_NEWS_RELEASES_PATH
-        )
+    news_releases_path = resolve_field_precedence(
+        news_releases_path, record, "news_releases_path", DEFAULT_NEWS_RELEASES_PATH
+    )
 
     # first_page_index precedence: explicit CLI arg > sources.yaml field > default.
     # 0 is a meaningful value, so use "is not None" checks throughout, not truthiness.

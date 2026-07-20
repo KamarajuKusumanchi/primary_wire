@@ -623,7 +623,7 @@ def resolve_source(
     site root is retained (matching scrape_notified.py's convention),
     before news_releases_path is joined onto it.
     """
-    from utils.sources_utils import resolve_source_identity
+    from utils.sources_utils import resolve_field_precedence, resolve_source_identity
 
     url, slug, ticker, record = resolve_source_identity(
         url, slug, ticker,
@@ -631,11 +631,9 @@ def resolve_source(
         strip_url_to_root=True, logger=logger,
     )
 
-    # news_releases_path precedence: explicit CLI arg > sources.yaml field > default.
-    if not news_releases_path:
-        news_releases_path = (record.get("news_releases_path") if record else None) or (
-            DEFAULT_NEWS_RELEASES_PATH
-        )
+    news_releases_path = resolve_field_precedence(
+        news_releases_path, record, "news_releases_path", DEFAULT_NEWS_RELEASES_PATH
+    )
 
     listing_url = join_url_path(url, news_releases_path)
     return listing_url, slug, ticker, news_releases_path

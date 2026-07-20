@@ -23,7 +23,11 @@ import pytest
 # a regular subpackage of src/, so src/ is what needs to be on sys.path.
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
-from utils.sources_utils import join_url_path, resolve_source_identity  # noqa: E402
+from utils.sources_utils import (  # noqa: E402
+    join_url_path,
+    resolve_field_precedence,
+    resolve_source_identity,
+)
 
 
 @pytest.mark.parametrize(
@@ -137,3 +141,23 @@ def test_resolve_source_identity_strips_explicit_url(tmp_path: Path) -> None:
     )
     assert url == "https://www.genpt.com"
     assert slug == "genuine-parts"
+
+@pytest.mark.parametrize(
+    "cli_value, record, expected",
+    [
+        # CLI arg wins even when a record value is also present.
+        ("cli-path", {"news_releases_path": "record-path"}, "cli-path"),
+        # No CLI arg -> record's field wins.
+        (None, {"news_releases_path": "record-path"}, "record-path"),
+        ("", {"news_releases_path": "record-path"}, "record-path"),
+        # No CLI arg, record present but field absent/empty -> default.
+        (None, {}, "default-path"),
+        (None, {"news_releases_path": ""}, "default-path"),
+        # No CLI arg, no record at all -> default.
+        (None, None, "default-path"),
+    ],
+)
+def test_resolve_field_precedence(cli_value, record, expected) -> None:
+    assert resolve_field_precedence(
+        cli_value, record, "news_releases_path", "default-path"
+    ) == expected
