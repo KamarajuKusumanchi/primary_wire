@@ -238,6 +238,11 @@ sources:
     name: Datadog, Inc.
     ticker: DDOG
     ir_url: https://investors.datadoghq.com/
+  - slug: deckers
+    name: Deckers Outdoor Corporation
+    ticker: DECK
+    ir_url: https://ir.deckers.com/
+    news_releases_path: news-events/press-releases
   - slug: dell
     name: Dell Technologies Inc.
     ticker: DELL
