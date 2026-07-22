@@ -7,6 +7,7 @@ alexandria-real-estate-equities,ARE,q4,https://investor.are.com/
 allstate,ALL,notified,https://www.allstateinvestors.com/
 amcor,AMCR,unknown,https://www.amcor.com/investors
 amd,AMD,notified,https://ir.amd.com/
+analog-devices,ADI,notified,https://investor.analog.com/
 apa,APA,notified,https://investor.apacorp.com/
 apollo,APO,notified,https://ir.apollo.com/
 apple,AAPL,unknown,https://investor.apple.com/
@@ -32,6 +33,7 @@ ciena,CIEN,q4,https://investor.ciena.com/
 cigna,CI,unknown,https://investors.thecignagroup.com/
 cinfin,CINF,investorroom,https://investors.cinfin.com/
 cintas,CTAS,unknown,https://www.cintas.com/investors/
+cme,CME,unknown,https://www.cmegroup.com/investor-relations.html
 cognizant,CTSH,q4,https://investors.cognizant.com/
 coherent,COHR,unknown,https://www.coherent.com/company/investor-relations
 coinbase,COIN,q4,https://investor.coinbase.com/
@@ -51,6 +53,7 @@ deere,DE,unknown,https://investor.deere.com/
 dell,DELL,notified,https://investors.delltechnologies.com/
 dexcom,DXCM,q4,https://investors.dexcom.com/
 doordash,DASH,q4,https://ir.doordash.com/
+eqt,EQT,q4,https://ir.eqt.com/
 equifax,EFX,notified,https://investor.equifax.com/
 erie-indemnity,ERIE,unknown,https://www.erieinsurance.com/investors
 expedia,EXPE,q4,https://ir.expediagroup.com/
@@ -61,6 +64,7 @@ fis-global,FIS,notified,https://www.investor.fisglobal.com/
 flex,FLEX,q4,https://investors.flex.com/
 fortinet,FTNT,notified,https://investor.fortinet.com/
 fox,FOXA,unknown,https://investor.foxcorporation.com/
+franklin-resources,BEN,unknown,https://investors.franklinresources.com/
 ge-healthcare,GEHC,notified,https://investor.gehealthcare.com/
 ge-vernova,GEV,notified,https://www.gevernova.com/investors
 gen-digital,GEN,q4,https://investor.gendigital.com/
@@ -80,6 +84,7 @@ intercontinental-exchange,ICE,unknown,https://ir.theice.com/
 intuitive-surgical,ISRG,notified,https://isrg.intuitive.com/
 iqvia,IQV,unknown,https://ir.iqvia.com/
 jb-hunt,JBHT,unknown,https://investor.jbhunt.com/
+kimco-realty,KIM,unknown,https://investors.kimcorealty.com/
 kkr,KKR,unknown,https://ir.kkr.com/
 kla,KLAC,notified,https://ir.kla.com/
 lam-research,LRCX,investorroom,https://investor.lamresearch.com/
@@ -100,6 +105,7 @@ onsemi,ON,notified,https://investor.onsemi.com/
 palantir,PLTR,unknown,https://investors.palantir.com/
 paramount,PSKY,notified,https://ir.paramount.com/
 pepsi,PEP,unknown,https://www.pepsico.com/investors
+ptc,PTC,q4,https://investor.ptc.com/
 qualcomm,QCOM,unknown,https://investor.qualcomm.com/
 robinhood,HOOD,notified_gated,https://investors.robinhood.com/
 ross-stores,ROST,notified,https://investors.rossstores.com/
@@ -115,9 +121,12 @@ spacex,SPCX,unknown,https://ir.spacex.com/
 super-micro,SMCI,q4,https://ir.supermicro.com/
 synchrony-financial,SYF,unknown,https://investors.synchrony.com/
 synopsys,SNPS,q4,https://investor.synopsys.com/
+sysco,SYY,notified,https://investors.sysco.com/
+te-connectivity,TEL,notified,https://investors.te.com/
 teradyne,TER,notified,https://investors.teradyne.com/
 tesla,TSLA,unknown,https://ir.tesla.com/
 texas-instruments,TXN,notified,https://investor.ti.com/
+the-trade-desk,TTD,q4,https://investors.thetradedesk.com/
 tjx,TJX,notified_gated,https://investor.tjx.com/
 tractor-supply,TSCO,unknown,https://ir.tractorsupply.com/
 travelers,TRV,q4,https://investor.travelers.com/
@@ -130,6 +139,7 @@ vertex-pharmaceuticals,VRTX,notified,https://investors.vrtx.com/
 vertiv,VRT,q4,https://investors.vertiv.com/
 virtu,VIRT,notified,https://ir.virtu.com/
 visa,V,q4,https://investor.visa.com/
+wabtec,WAB,notified,https://ir.wabteccorp.com/
 warner-bros-discovery,WBD,q4,https://ir.wbd.com/
 western-digital,WDC,notified,https://investor.wdc.com/
 weyerhaeuser,WY,investorroom,https://investor.weyerhaeuser.com/
