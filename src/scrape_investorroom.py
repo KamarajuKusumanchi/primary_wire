@@ -373,7 +373,43 @@ def is_bare_date_text(text: str, raw_match: str) -> bool:
     return remainder.strip(" \t\r\n-\u2013\u2014|\u00b7\u2022.,:") == ""
 
 
-def extract_date_near_link(anchor) -> tuple[Optional[date], str, str]:
+def _normalize_href_for_dedup(href: str, base_url: str) -> str:
+    """Absolute-ize ``href`` and strip its query/fragment/trailing slash.
+
+    Used to tell whether two links on the page point at "the same article"
+    (e.g. a headline link and a ?asPDF download link for that same release)
+    versus two genuinely different items -- see the sibling-link check in
+    extract_date_near_link().
+    """
+    full_url = urljoin(base_url, href)
+    parsed = urlsplit(full_url)
+    return f"{parsed.scheme}://{parsed.netloc}{parsed.path}".rstrip("/")
+
+
+def _other_candidate_hrefs(parent, anchor, base_url: str) -> set[str]:
+    """Normalized hrefs of any *other* candidate link inside ``parent``.
+
+    "Candidate" means classify_link() considers it a possible detail page
+    (known style or bare-slug) -- plain nav/footer links that aren't even
+    candidates don't count. The anchor's own href (and any other link that
+    normalizes to the same target, e.g. a ?asPDF variant of the same
+    article) is excluded, since that's still "one item", not a sibling.
+    """
+    own_normalized = _normalize_href_for_dedup(anchor["href"].strip(), base_url)
+    others: set[str] = set()
+    for other in parent.find_all("a", href=True):
+        if other is anchor:
+            continue
+        href = other["href"].strip()
+        if classify_link(href, base_url) is None:
+            continue
+        normalized = _normalize_href_for_dedup(href, base_url)
+        if normalized != own_normalized:
+            others.add(normalized)
+    return others
+
+
+def extract_date_near_link(anchor, base_url: str) -> tuple[Optional[date], str, str]:
     """Walk up to 5 ancestor elements of ``anchor`` looking for a standalone
     date label (and, if present, a standalone time label) near the link.
 
@@ -394,6 +430,20 @@ def extract_date_near_link(anchor) -> tuple[Optional[date], str, str]:
     sentence that merely contains a date. Text inside the anchor itself is
     skipped outright, since a headline's own wording is never the label.
 
+    Stops climbing as soon as the ancestor contains another *distinct*
+    candidate link (see _other_candidate_hrefs()) -- that means we've
+    climbed out of this single item's card and into a shared wrapper (a nav
+    menu, a sidebar "quick links" list, the whole page's item list...) that
+    also holds other, unrelated items. Continuing to climb from there would
+    happily attach some other item's date (often just whichever item's date
+    happens to appear first in the wrapper) to this one -- observed on
+    Danaher's site, where a handful of unrelated sidebar links (Events &
+    Presentations, Annual Report & Proxy, etc.) all ended up dated with the
+    top press release's date once the walk reached the shared layout
+    container several levels up. A same-article duplicate link (e.g. a
+    headline link plus a separate ?asPDF download link for that same
+    release) does not count as "another" item and does not stop the climb.
+
     Some sites (e.g. Centene) render a publish time as its own separate bare
     text node right alongside the date (see module docstring), rather than
     appended to the date text itself. So at each ancestor level, every text
@@ -410,6 +460,8 @@ def extract_date_near_link(anchor) -> tuple[Optional[date], str, str]:
     for _ in range(5):
         parent = node.parent
         if parent is None:
+            break
+        if _other_candidate_hrefs(parent, anchor, base_url):
             break
         found_date: Optional[date] = None
         found_raw = ""
@@ -547,7 +599,7 @@ def parse_listing_page(
         # computed for every candidate, since a "bare-slug" link (see
         # classify_link()) needs the date both to confirm it's a real
         # article and to know its publish date.
-        card_date, card_raw_text, card_time = extract_date_near_link(anchor)
+        card_date, card_raw_text, card_time = extract_date_near_link(anchor, base_url)
 
         if link_kind == "bare-slug" and not is_confirmed_bare_slug_item(title, card_date):
             logger.debug("Skipping unconfirmed bare-slug link: %s", full_url)

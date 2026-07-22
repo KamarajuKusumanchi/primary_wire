@@ -29,6 +29,7 @@ investorroom:
     - slug: genuine-parts
     - slug: ibm
     - slug: centene
+    - slug: danaher
 
 notified:
   scraper: scrape_notified

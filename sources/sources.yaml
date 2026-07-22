@@ -230,6 +230,11 @@ sources:
     name: Crown Castle Inc.
     ticker: CCI
     ir_url: https://investor.crowncastle.com/
+  - slug: danaher
+    name: Danaher Corporation
+    ticker: DHR
+    ir_url: https://investors.danaher.com/
+    news_releases_path: press-releases
   - slug: darden-restaurants
     name: Darden Restaurants, Inc.
     ticker: DRI

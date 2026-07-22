@@ -43,6 +43,7 @@ costco,COST,q4,https://investor.costco.com/
 criver,CRL,notified,https://ir.criver.com/
 crowdstrike,CRWD,notified,https://ir.crowdstrike.com/
 crown-castle,CCI,notified,https://investor.crowncastle.com/
+danaher,DHR,investorroom,https://investors.danaher.com/
 darden-restaurants,DRI,q4,https://investor.darden.com/
 datadog,DDOG,notified,https://investors.datadoghq.com/
 deckers,DECK,notified,https://ir.deckers.com/
@@ -104,7 +105,7 @@ sandisk,SNDK,notified,https://investor.sandisk.com/
 sba-communications,SBAC,unknown,https://ir.sbasite.com/
 seagate,STX,q4,https://investors.seagate.com/
 servicenow,NOW,unknown,https://investor.servicenow.com/
-skyworks,SWKS,notified,https://www.skyworksinc.com/investors
+skyworks,SWKS,unknown,https://www.skyworksinc.com/investors
 smurfit-westrock,SW,q4,http://investors.smurfitwestrock.com/
 solventum,SOLV,notified,https://investors.solventum.com/
 spacex,SPCX,unknown,https://ir.spacex.com/
