@@ -1,7 +1,7 @@
 
 S&P 500 companies:  503
-Covered in sources: 129
-Missing:            374
+Covered in sources: 132
+Missing:            371
 
 Missing tickers:
   A
@@ -95,7 +95,6 @@ Missing tickers:
   D
   DAL
   DD
-  DE
   DG
   DGX
   DHI
@@ -159,7 +158,6 @@ Missing tickers:
   GRMN
   GS
   GWW
-  HAL
   HAS
   HBAN
   HCA
@@ -293,7 +291,6 @@ Missing tickers:
   PWR
   PYPL
   Q
-  RCL
   REG
   REGN
   RF

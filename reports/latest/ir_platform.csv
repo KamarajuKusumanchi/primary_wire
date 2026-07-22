@@ -47,6 +47,7 @@ danaher,DHR,investorroom,https://investors.danaher.com/
 darden-restaurants,DRI,q4,https://investor.darden.com/
 datadog,DDOG,notified,https://investors.datadoghq.com/
 deckers,DECK,notified,https://ir.deckers.com/
+deere,DE,unknown,https://investor.deere.com/
 dell,DELL,notified,https://investors.delltechnologies.com/
 dexcom,DXCM,q4,https://investors.dexcom.com/
 doordash,DASH,q4,https://ir.doordash.com/
@@ -68,6 +69,7 @@ gilead,GILD,q4,https://investors.gilead.com/
 global-payments,GPN,notified,https://investors.globalpayments.com/
 godaddy,GDDY,notified,https://aboutus.godaddy.net/investor-relations/
 google,GOOGL,q4,https://abc.xyz/investor/
+halliburton,HAL,notified,https://ir.halliburton.com/
 home-depot,HD,notified,https://ir.homedepot.com/
 honeywell,HONA,notified,https://investor.honeywell.com/investor-relations
 hp,HPE,q4,https://investor.hp.com/
@@ -101,6 +103,7 @@ pepsi,PEP,unknown,https://www.pepsico.com/investors
 qualcomm,QCOM,unknown,https://investor.qualcomm.com/
 robinhood,HOOD,notified_gated,https://investors.robinhood.com/
 ross-stores,ROST,notified,https://investors.rossstores.com/
+royal-caribbean,RCL,investorroom,https://www.rclinvestor.com/
 sandisk,SNDK,notified,https://investor.sandisk.com/
 sba-communications,SBAC,unknown,https://ir.sbasite.com/
 seagate,STX,q4,https://investors.seagate.com/
