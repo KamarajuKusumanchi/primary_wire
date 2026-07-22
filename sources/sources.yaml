@@ -79,6 +79,10 @@ sources:
     ir_url: https://ir.amd.com/
     news_releases_path: news-events/press-releases
     first_page_index: 1
+  - slug: analog-devices
+    name: Analog Devices, Inc.
+    ticker: ADI
+    ir_url: https://investor.analog.com/
   - slug: apa
     name: APA Corporation
     ticker: APA
@@ -186,6 +190,10 @@ sources:
     name: Cintas Corporation
     ticker: CTAS
     ir_url: https://www.cintas.com/investors/
+  - slug: cme
+    name: CME Group Inc.
+    ticker: CME
+    ir_url: https://www.cmegroup.com/investor-relations.html
   - slug: cognizant
     name: Cognizant Technology Solutions Corporation
     ticker: CTSH
@@ -264,6 +272,10 @@ sources:
     name: DoorDash, Inc.
     ticker: DASH
     ir_url: https://ir.doordash.com/
+  - slug: eqt
+    name: EQT Corporation
+    ticker: EQT
+    ir_url: https://ir.eqt.com/
   - slug: equifax
     name: Equifax Inc.
     ticker: EFX
@@ -305,6 +317,10 @@ sources:
     name: Fox Corporation
     ticker: FOXA
     ir_url: https://investor.foxcorporation.com/
+  - slug: franklin-resources
+    name: Franklin Resources, Inc.
+    ticker: BEN
+    ir_url: https://investors.franklinresources.com/
   - slug: ge-healthcare
     name: GE HealthCare Technologies Inc.
     ticker: GEHC
@@ -391,6 +407,10 @@ sources:
     name: J.B. Hunt Transport Services, Inc.
     ticker: JBHT
     ir_url: https://investor.jbhunt.com/
+  - slug: kimco-realty
+    name: Kimco Realty Corporation
+    ticker: KIM
+    ir_url: https://investors.kimcorealty.com/
   - slug: kkr
     name: KKR & Co. Inc.
     ticker: KKR
@@ -474,6 +494,10 @@ sources:
     name: PepsiCo, Inc.
     ticker: PEP
     ir_url: https://www.pepsico.com/investors
+  - slug: ptc
+    name: PTC Inc.
+    ticker: PTC
+    ir_url: https://investor.ptc.com/
   - slug: qualcomm
     name: QUALCOMM Incorporated
     ticker: QCOM
@@ -535,6 +559,14 @@ sources:
     name: Synopsys, Inc.
     ticker: SNPS
     ir_url: https://investor.synopsys.com/
+  - slug: sysco
+    name: Sysco Corporation
+    ticker: SYY
+    ir_url: https://investors.sysco.com/
+  - slug: te-connectivity
+    name: TE Connectivity plc
+    ticker: TEL
+    ir_url: https://investors.te.com/
   - slug: teradyne
     name: Teradyne, Inc.
     ticker: TER
@@ -549,6 +581,10 @@ sources:
     name: Texas Instruments Incorporated
     ticker: TXN
     ir_url: https://investor.ti.com/
+  - slug: the-trade-desk
+    name: The Trade Desk, Inc.
+    ticker: TTD
+    ir_url: https://investors.thetradedesk.com/
   - slug: tjx
     name: The TJX Companies, Inc.
     ticker: TJX
@@ -599,6 +635,10 @@ sources:
     name: Visa Inc.
     ticker: V
     ir_url: https://investor.visa.com/
+  - slug: wabtec
+    name: Westinghouse Air Brake Technologies Corporation
+    ticker: WAB
+    ir_url: https://ir.wabteccorp.com/
   - slug: warner-bros-discovery
     name: Warner Bros. Discovery, Inc.
     ticker: WBD
