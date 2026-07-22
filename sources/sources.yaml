@@ -248,6 +248,10 @@ sources:
     ticker: DECK
     ir_url: https://ir.deckers.com/
     news_releases_path: news-events/press-releases
+  - slug: deere
+    name: Deere & Company
+    ticker: DE
+    ir_url: https://investor.deere.com/
   - slug: dell
     name: Dell Technologies Inc.
     ticker: DELL
@@ -336,6 +340,10 @@ sources:
     name: Alphabet Inc.
     ticker: GOOGL
     ir_url: https://abc.xyz/investor/
+  - slug: halliburton
+    name: Halliburton Company
+    ticker: HAL
+    ir_url: https://ir.halliburton.com/
   - slug: home-depot
     name: Home Depot, Inc. (The)
     ticker: HD
@@ -479,6 +487,10 @@ sources:
     name: Ross Stores, Inc.
     ticker: ROST
     ir_url: https://investors.rossstores.com/
+  - slug: royal-caribbean
+    name: Royal Caribbean Cruises Ltd.
+    ticker: RCL
+    ir_url: https://www.rclinvestor.com/
   - slug: sandisk
     name: Sandisk Corporation
     ticker: SNDK
