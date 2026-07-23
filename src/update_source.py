@@ -68,9 +68,17 @@ def prompt(text: str, default: Optional[str] = None) -> str:
         print("  This field is required.")
 
 
-def confirm(text: str) -> bool:
+def confirm(text: str, default: Optional[bool] = None) -> bool:
+    if default is True:
+        suffix = "[Y/n]"
+    elif default is False:
+        suffix = "[y/N]"
+    else:
+        suffix = "[y/n]"
     while True:
-        val = input(f"{text} [y/n]: ").strip().lower()
+        val = input(f"{text} {suffix}: ").strip().lower()
+        if val == "" and default is not None:
+            return default
         if val in ("y", "yes"):
             return True
         if val in ("n", "no"):
@@ -143,6 +151,13 @@ def main():
         ir_url = prompt("IR URL")
 
     if existing:
+        original_snapshot = {
+            "slug": existing.get("slug"),
+            "name": existing.get("name"),
+            "ticker": existing.get("ticker"),
+            "ir_url": existing.get("ir_url"),
+            "notes": existing.get("notes"),
+        }
         existing["slug"] = slug
         existing["name"] = name
         existing["ir_url"] = ir_url
@@ -153,10 +168,19 @@ def main():
             del existing["notes"]
         entry = existing
         action = "Updated"
+        new_snapshot = {
+            "slug": entry.get("slug"),
+            "name": entry.get("name"),
+            "ticker": entry.get("ticker"),
+            "ir_url": entry.get("ir_url"),
+            "notes": entry.get("notes"),
+        }
+        has_changes = new_snapshot != original_snapshot
     else:
         entry = {"slug": slug, "name": name, "ticker": ticker, "ir_url": ir_url}
         sources.append(entry)
         action = "Added"
+        has_changes = True
 
     print("\n--- Summary ---")
     print(f"slug:   {entry.get('slug')}")
@@ -166,7 +190,10 @@ def main():
     print(f"notes:  {entry.get('notes', '(none)')}")
     print("---------------")
 
-    if not confirm(f"{action} this entry in sources.yaml?"):
+    if not has_changes:
+        print("No changes to existing entry.")
+
+    if not confirm(f"{action} this entry in sources.yaml?", default=has_changes):
         print("Aborted. No changes written.")
         return
 
