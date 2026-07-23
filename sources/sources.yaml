@@ -366,6 +366,10 @@ sources:
     name: GoDaddy Inc.
     ticker: GDDY
     ir_url: https://aboutus.godaddy.net/investor-relations/
+  - slug: goldman-sachs
+    name: The Goldman Sachs Group, Inc.
+    ticker: GS
+    ir_url: https://www.goldmansachs.com/investor-relations
   - slug: google
     name: Alphabet Inc.
     ticker: GOOGL
