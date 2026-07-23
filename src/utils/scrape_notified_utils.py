@@ -203,6 +203,30 @@ def extract_date_and_time_from_row(
     """
     anchor_text = anchor.get_text(separator=" ", strip=True)
 
+    # Strategy 0: a <time datetime="YYYY-MM-DD..."> element inside the
+    # anchor itself. Some Notified/Drupal sites (e.g. GE Vernova) render
+    # each press-release "card" as a *single* <a> wrapping the read-time
+    # label, the date, the headline, and the summary all together -- there
+    # is no separate ancestor holding just the date the way a <table> row
+    # or a heading-plus-CTA card does. In that shape, Strategies 1-3 below
+    # all rely on stripping the anchor's own text out of some surrounding
+    # text before searching it for a date (see _without_anchor_text()), but
+    # here the date lives *inside* that same anchor text, so it gets
+    # stripped away too and the search ends up matching some unrelated
+    # sibling card's date instead once it climbs high enough. Reading the
+    # datetime attribute directly sidesteps all of that ambiguity, since it
+    # is both inside the anchor and unambiguously machine-readable.
+    time_tag = anchor.find("time")
+    if time_tag is not None:
+        m = re.match(r"(\d{4})-(\d{2})-(\d{2})", time_tag.get("datetime", ""))
+        if m:
+            try:
+                d = date(int(m.group(1)), int(m.group(2)), int(m.group(3)))
+                raw = time_tag.get_text(strip=True) or m.group(0)
+                return d, raw, parse_time(anchor_text)
+            except ValueError:
+                pass
+
     def _without_anchor_text(text: str) -> str:
         """Strip the anchor's own (title) text out of a larger text blob.
 
@@ -434,7 +458,19 @@ def parse_listing_page(
             continue
 
         title = anchor.get_text(separator=" ", strip=True)
-        if use_title_fallback and (not title or GENERIC_LINK_TEXT_RE.match(title)):
+        # Some sites (e.g. GE Vernova) wrap an entire card -- read-time
+        # label, date, headline, and summary -- in a single anchor, so the
+        # anchor's own get_text() pulls in far more than the headline. If a
+        # heading tag is nested inside the anchor, it is virtually always
+        # the actual designed headline field, so prefer it over the full
+        # concatenated text regardless of whether that full text also
+        # happens to look non-generic.
+        heading = anchor.find(["h1", "h2", "h3", "h4", "h5", "h6"])
+        if heading is not None:
+            heading_text = heading.get_text(separator=" ", strip=True)
+            if heading_text:
+                title = heading_text
+        elif use_title_fallback and (not title or GENERIC_LINK_TEXT_RE.match(title)):
             # The anchor itself is just a "Read more"-style CTA (e.g.
             # Paramount's IR site); the real headline is a separate,
             # non-linked text block elsewhere in the row/card.

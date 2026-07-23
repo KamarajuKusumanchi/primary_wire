@@ -171,10 +171,16 @@ DEFAULT_FIRST_PAGE_INDEX = 0
 
 # Regex to identify detail-page hrefs on Notified/Drupal IR sites.
 # Matches paths like /news-releases/news-release-details/<slug>
-# or /press-releases/<slug> etc.  Deliberately broad: any multi-segment
-# path that does NOT look like a bare section landing page.
+# (two segments after the keyword, e.g. AbbVie) as well as single-segment
+# schemes like /press-releases/<slug> (e.g. GE Vernova, whose listing lives
+# at /news/media-hub but whose detail pages are /news/press-releases/<slug>
+# -- only one segment, not two). The second segment is deliberately
+# optional rather than dropping the requirement entirely: at least one
+# segment must follow the keyword so a bare section-landing link (e.g.
+# "/press-releases" with no trailing slug, used for nav) is not mistaken
+# for a detail page.
 DETAIL_URL_RE = re.compile(
-    r"/(?:news-releases|press-releases|financial-releases)/[^/#?]+/[^/#?]+",
+    r"/(?:news-releases|press-releases|financial-releases)/[^/#?]+(?:/[^/#?]+)?",
     re.IGNORECASE,
 )
 

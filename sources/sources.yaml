@@ -329,6 +329,7 @@ sources:
     name: GE Vernova Inc.
     ticker: GEV
     ir_url: https://www.gevernova.com/investors
+    news_releases_path: news/media-hub?tag=Investor%20Relations
   - slug: gen-digital
     name: Gen Digital Inc.
     ticker: GEN
