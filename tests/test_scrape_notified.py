@@ -51,7 +51,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
-from scrape_notified import parse_listing_page  # noqa: E402
+from scrape_notified import is_detail_url, parse_listing_page  # noqa: E402
 
 BASE_URL = "https://www.gevernova.com"
 
@@ -133,3 +133,92 @@ def test_each_card_gets_its_own_date_not_a_sibling_s():
 
     assert by_title[q2_title].publish_date == date(2026, 7, 22)
     assert by_title[hawaiian_title].publish_date == date(2026, 7, 20)
+
+
+# ---------------------------------------------------------------------------
+# Regression: the site's "News RSS" feed-subscribe link mistaken for a
+# press release (found on AMD, Global Payments, and FedEx Freight's IR
+# sites, all of which use this same Q4-style listing markup).
+#
+# Background: running
+#
+#   python src/scrape_notified.py --dry-run --slug fedex-freight --year 2026
+#
+# produced a bogus extra item:
+#
+#   2026-06-25 (4:10 pm EDT)  rss_feed News RSS
+#              https://ir.fedexfreight.com/news-events/press-releases/rss
+#
+# Root cause: the "News RSS" widget below the listing links to
+# .../press-releases/rss, which satisfies DETAIL_URL_RE just as well as a
+# real detail link like .../press-releases/detail/185/<slug> (same
+# "keyword + one segment" shape), so is_detail_url() wrongly said yes to
+# it. That link sits outside any <article>/row, so it has no date of its
+# own; extract_date_and_time_from_row()'s ancestor-climbing fallback then
+# picked up the first (i.e. newest) date it found while walking up toward
+# the shared listing container, silently borrowing the most recent real
+# release's date. The bogus title was simply the anchor's own text: the
+# material-icon glyph name ("rss_feed") plus its label ("News RSS").
+#
+# Fix: DETAIL_URL_RE now excludes a literal "rss" segment right after the
+# keyword (see its own docstring), without touching real slugs that merely
+# start with those letters.
+# ---------------------------------------------------------------------------
+
+# Trimmed down from the actual --debug-dump-html capture of
+# https://ir.fedexfreight.com/news-events/press-releases, keeping the
+# structural details that matter: two <article class="media"> releases
+# followed by the page-level "News RSS" widget, which is a sibling of the
+# listing -- not inside either article -- exactly as on the real page.
+FEDEX_FREIGHT_PAGE = """
+<article class="media">
+    <div class="date"><time datetime="2026-06-25T16:10:00">Jun 25, 2026 4:10 pm EDT</time></div>
+    <div class="media-heading">
+        <a href="https://ir.fedexfreight.com/news-events/press-releases/detail/185/fedex-freight-reports-fourth-quarter-and-full-fiscal-year-2026-financial-results">
+            FedEx Freight Reports Fourth Quarter and Full Fiscal Year 2026 Financial Results
+        </a>
+    </div>
+</article>
+<article class="media">
+    <div class="date"><time datetime="2026-06-02T16:28:00">Jun 2, 2026 4:28 pm EDT</time></div>
+    <div class="media-heading">
+        <a href="https://ir.fedexfreight.com/news-events/press-releases/detail/184/fedex-freight-to-report-fourth-quarter-2026-earnings-on-june-25-2026">
+            FedEx Freight to Report Fourth Quarter 2026 Earnings on June 25, 2026
+        </a>
+    </div>
+</article>
+<div class="clear"></div>
+<div class="rss-link">
+    <a href="https://ir.fedexfreight.com/news-events/press-releases/rss" class="link--icon" target="_blank" rel="noopener">
+        <span class="material-icons" aria-hidden="true">rss_feed</span> News RSS
+    </a>
+</div>
+"""
+
+FEDEX_BASE_URL = "https://ir.fedexfreight.com"
+
+
+def test_rss_feed_link_is_not_recognized_as_a_detail_url():
+    assert not is_detail_url("https://ir.fedexfreight.com/news-events/press-releases/rss")
+    # a real slug that happens to start with "rss" must still be recognized
+    assert is_detail_url("https://example.com/press-releases/rss-feed-integration-announced")
+
+
+def test_rss_feed_link_is_excluded_from_parsed_releases():
+    items = parse_listing_page(
+        FEDEX_FREIGHT_PAGE, FEDEX_BASE_URL, slug="fedex-freight", ticker="FDXF"
+    )
+
+    assert len(items) == 2
+    assert all(not item.url.rstrip("/").endswith("/rss") for item in items)
+    assert all(item.title != "rss_feed News RSS" for item in items)
+
+
+def test_newest_release_keeps_its_own_date_not_the_rss_link_s():
+    items = parse_listing_page(
+        FEDEX_FREIGHT_PAGE, FEDEX_BASE_URL, slug="fedex-freight", ticker="FDXF"
+    )
+    by_title = {item.title.strip(): item for item in items}
+
+    newest = by_title["FedEx Freight Reports Fourth Quarter and Full Fiscal Year 2026 Financial Results"]
+    assert newest.publish_date == date(2026, 6, 25)

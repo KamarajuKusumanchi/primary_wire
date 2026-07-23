@@ -179,8 +179,25 @@ DEFAULT_FIRST_PAGE_INDEX = 0
 # segment must follow the keyword so a bare section-landing link (e.g.
 # "/press-releases" with no trailing slug, used for nav) is not mistaken
 # for a detail page.
+#
+# The segment right after the keyword must also not be the site's RSS-feed
+# subscribe link, e.g. AMD/Global Payments/FedEx Freight's IR pages all
+# render a "News RSS" widget linking to .../press-releases/rss below the
+# listing. That URL satisfies the same "keyword + one segment" shape as a
+# real detail page (e.g. .../press-releases/detail/185/some-slug), so
+# without this exclusion it was wrongly treated as a press release. Because
+# that link sits outside any listing row/card, parse_listing_page() then had
+# no <tr>/date container of its own to read a date from, and
+# extract_date_and_time_from_row()'s ancestor-climbing fallback grabbed the
+# first (i.e. newest) date it found while walking up toward the shared
+# listing container -- producing a bogus item stamped with the most recent
+# real release's date and a title of "rss_feed News RSS" (the icon glyph
+# name plus label, i.e. the RSS anchor's own get_text()). The negative
+# lookahead below excludes exactly that shape (an "rss" segment followed by
+# "/", "?", "#", or end-of-string) without touching any legitimate slug that
+# merely starts with those letters (e.g. "rss-feed-integration-announced").
 DETAIL_URL_RE = re.compile(
-    r"/(?:news-releases|press-releases|financial-releases)/[^/#?]+(?:/[^/#?]+)?",
+    r"/(?:news-releases|press-releases|financial-releases)/(?!rss(?:[/?#]|$))[^/#?]+(?:/[^/#?]+)?",
     re.IGNORECASE,
 )
 
