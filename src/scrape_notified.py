@@ -110,7 +110,7 @@ from dataclasses import dataclass
 from datetime import date, datetime
 from pathlib import Path
 from typing import Optional
-from urllib.parse import urlencode
+from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 try:
     from bs4 import BeautifulSoup
@@ -229,9 +229,25 @@ def listing_page_url(
     news_releases_path defaults to "news-releases" but some sites (e.g.
     Teradyne) use "news-events/press-releases" instead; callers resolve
     the right value via resolve_source() / sources.yaml before calling this.
+
+    news_releases_path may itself carry a query string (e.g. some sites
+    are only reachable via a filtered/tagged listing view such as
+    "news/media-hub?tag=Investor%20Relations"). join_url_path() only
+    concatenates path segments and knows nothing about query strings, so
+    naively appending "?" + urlencode({"page": page}) after it would
+    produce a second, bogus "?" (e.g. ".../media-hub?tag=X?page=0"),
+    which is parsed as one query string where "?page=0" ends up as
+    literal text stuck onto the end of the "tag" value -- so pagination
+    silently does nothing and the site just returns page 0 (or errors)
+    every time. Parse out any existing query params from
+    news_releases_path first and merge "page" into them instead.
     """
-    base = join_url_path(base_url, news_releases_path)
-    return base + "?" + urlencode({"page": page})
+    joined = join_url_path(base_url, news_releases_path)
+    parts = urlsplit(joined)
+    params = [(k, v) for k, v in parse_qsl(parts.query, keep_blank_values=True) if k != "page"]
+    params.append(("page", page))
+    new_query = urlencode(params)
+    return urlunsplit((parts.scheme, parts.netloc, parts.path, new_query, parts.fragment))
 
 
 # ---------------------------------------------------------------------------
