@@ -65,6 +65,10 @@ sources:
     name: Alexandria Real Estate Equities, Inc.
     ticker: ARE
     ir_url: https://investor.are.com/
+  - slug: allegion
+    name: Allegion plc
+    ticker: ALLE
+    ir_url: https://investor.allegion.com/
   - slug: allstate
     name: The Allstate Corporation
     ticker: ALL
