@@ -253,17 +253,19 @@ def listing_page_url(
     Teradyne) use "news-events/press-releases" instead; callers resolve
     the right value via resolve_source() / sources.yaml before calling this.
 
-    news_releases_path may itself carry a query string (e.g. some sites
-    are only reachable via a filtered/tagged listing view such as
-    "news/media-hub?tag=Investor%20Relations"). join_url_path() only
-    concatenates path segments and knows nothing about query strings, so
-    naively appending "?" + urlencode({"page": page}) after it would
-    produce a second, bogus "?" (e.g. ".../media-hub?tag=X?page=0"),
-    which is parsed as one query string where "?page=0" ends up as
-    literal text stuck onto the end of the "tag" value -- so pagination
-    silently does nothing and the site just returns page 0 (or errors)
-    every time. Parse out any existing query params from
-    news_releases_path first and merge "page" into them instead.
+    news_releases_path may itself carry a query string, and that query
+    string may itself carry more than one param (e.g. GE Vernova's listing
+    is only reachable via a filtered/tagged/typed view:
+    "news/media-hub?tag=Investor+Relations&type[press_release]=press_release").
+    join_url_path() only concatenates path segments and knows nothing about
+    query strings, so naively appending "?" + urlencode({"page": page})
+    after it would produce a second, bogus "?" (e.g.
+    ".../media-hub?tag=X?page=0"), which is parsed as one query string
+    where "?page=0" ends up as literal text stuck onto the end of the last
+    param's value -- so pagination silently does nothing and the site just
+    returns page 0 (or errors) every time. Parse out any existing query
+    params from news_releases_path first (however many there are) and
+    merge "page" into them instead.
     """
     joined = join_url_path(base_url, news_releases_path)
     parts = urlsplit(joined)

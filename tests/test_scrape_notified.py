@@ -11,6 +11,18 @@ Background: running
 
 found 0 items even though the listing page clearly had press releases on it.
 
+sources.yaml's news_releases_path for ge-vernova has since been narrowed to
+"news/media-hub?tag=Investor+Relations&type[press_release]=press_release"
+(adds a type filter so the listing is press releases only, instead of
+everything tagged "Investor Relations"). Re-verified against a fresh
+--debug-dump-html capture of that URL: parse_listing_page() and
+listing_page_url()'s query-param merge (see its docstring) both handle the
+extra param with no code changes -- the merge logic was already written to
+preserve however many pre-existing params there are, not just one. See
+test_doubled_news_segment_in_href_is_still_recognized() below for one
+real-world quirk that capture surfaced and is now pinned down as a
+regression guard.
+
 Root cause #1 (0 items found): DETAIL_URL_RE required *two* path segments
 after the news-releases/press-releases/financial-releases keyword (matching
 AbbVie's /news-releases/news-release-details/<slug>), but GE Vernova's detail
@@ -222,3 +234,45 @@ def test_newest_release_keeps_its_own_date_not_the_rss_link_s():
 
     newest = by_title["FedEx Freight Reports Fourth Quarter and Full Fiscal Year 2026 Financial Results"]
     assert newest.publish_date == date(2026, 6, 25)
+
+
+# ---------------------------------------------------------------------------
+# Regression: a doubled "news/news/press-releases/<slug>" href, observed in a
+# real --debug-dump-html capture of GE Vernova's press-release-filtered
+# listing (one card out of ten had this shape; the rest were the normal
+# single "news/press-releases/<slug>"). Presumed a site-side quirk, not
+# something primary_wire caused.
+#
+# DETAIL_URL_RE uses re.search() rather than an anchored match, so it finds
+# "/press-releases/<slug>" wherever it sits in the href and doesn't care
+# about the doubled "news/news" prefix ahead of it. This test just pins
+# that down as a regression guard, in case a future refactor tightens the
+# regex (e.g. anchoring it, or asserting the keyword is the first path
+# segment) without realizing real sites can have paths like this.
+# ---------------------------------------------------------------------------
+
+GE_VERNOVA_DOUBLED_SEGMENT_CARD = """
+<div class="pr-content-card pr-container">
+  <a class="card-wrapper" href="https://www.gevernova.com/news/news/press-releases/ge-vernova-releases-2025-sustainability-report">
+    <div class="flex-column">
+      <p class="read-time">Press Release</p>
+      <p class="eyebrow-text"><time datetime="2026-06-17T08:35:33-04:00" title="June 17 2026">June 17, 2026</time></p>
+      <h5 class="card-title">GE Vernova's New Sustainability Report Highlights Progress</h5>
+      <div class="info-text"><p>Summary text.</p></div>
+    </div>
+  </a>
+</div>
+"""
+
+
+def test_doubled_news_segment_in_href_is_still_recognized():
+    href = "https://www.gevernova.com/news/news/press-releases/ge-vernova-releases-2025-sustainability-report"
+    assert is_detail_url(href)
+
+    items = parse_listing_page(
+        GE_VERNOVA_DOUBLED_SEGMENT_CARD, BASE_URL, slug="ge-vernova", ticker="GEV"
+    )
+    assert len(items) == 1
+    assert items[0].url == href
+    assert items[0].publish_date == date(2026, 6, 17)
+    assert items[0].title == "GE Vernova's New Sustainability Report Highlights Progress"
