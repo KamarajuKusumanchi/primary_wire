@@ -3,6 +3,7 @@ abbott,ABT,unknown,https://www.abbott.com/en-us/investors
 accenture,ACN,unknown,https://investor.accenture.com/
 akamai,AKAM,notified,https://www.ir.akamai.com/
 alexandria-real-estate-equities,ARE,q4,https://investor.are.com/
+allegion,ALLE,unknown,https://investor.allegion.com/
 allstate,ALL,notified,https://www.allstateinvestors.com/
 amcor,AMCR,unknown,https://www.amcor.com/investors
 analog-devices,ADI,notified,https://investor.analog.com/
@@ -41,6 +42,7 @@ deere,DE,unknown,https://investor.deere.com/
 dell,DELL,notified,https://investors.delltechnologies.com/
 dexcom,DXCM,q4,https://investors.dexcom.com/
 doordash,DASH,q4,https://ir.doordash.com/
+dover,DOV,unknown,https://www.dovercorporation.com/investors
 eqt,EQT,q4,https://ir.eqt.com/
 equifax,EFX,notified,https://investor.equifax.com/
 erie-indemnity,ERIE,unknown,https://www.erieinsurance.com/investors
@@ -55,7 +57,9 @@ franklin-resources,BEN,unknown,https://investors.franklinresources.com/
 ge-healthcare,GEHC,notified,https://investor.gehealthcare.com/
 gen-digital,GEN,q4,https://investor.gendigital.com/
 gilead,GILD,q4,https://investors.gilead.com/
+globe-life,GL,notified,https://investors.globelifeinsurance.com/
 godaddy,GDDY,notified,https://aboutus.godaddy.net/investor-relations/
+goldman-sachs,GS,investorroom,https://www.goldmansachs.com/investor-relations
 google,GOOGL,q4,https://abc.xyz/investor/
 halliburton,HAL,notified,https://ir.halliburton.com/
 home-depot,HD,notified,https://ir.homedepot.com/
@@ -71,6 +75,7 @@ kimco-realty,KIM,unknown,https://investors.kimcorealty.com/
 kkr,KKR,unknown,https://ir.kkr.com/
 kla,KLAC,notified,https://ir.kla.com/
 lam-research,LRCX,investorroom,https://investor.lamresearch.com/
+lockheed-martin,LMT,notified,https://investors.lockheedmartin.com/
 lumentum,LITE,q4,https://investor.lumentum.com/
 marvell,MRVL,notified,https://investor.marvell.com/
 meta,META,q4,https://investor.atmeta.com/home/default.aspx
@@ -87,6 +92,8 @@ palantir,PLTR,unknown,https://investors.palantir.com/
 pepsi,PEP,unknown,https://www.pepsico.com/investors
 ptc,PTC,q4,https://investor.ptc.com/
 qualcomm,QCOM,unknown,https://investor.qualcomm.com/
+quest-diagnostics,DGX,unknown,https://ir.questdiagnostics.com/
+rollins,ROL,notified,https://www.rollins.com/investors
 ross-stores,ROST,notified,https://investors.rossstores.com/
 royal-caribbean,RCL,investorroom,https://www.rclinvestor.com/
 sandisk,SNDK,notified,https://investor.sandisk.com/
@@ -99,13 +106,16 @@ spacex,SPCX,unknown,https://ir.spacex.com/
 synchrony-financial,SYF,unknown,https://investors.synchrony.com/
 synopsys,SNPS,q4,https://investor.synopsys.com/
 sysco,SYY,notified,https://investors.sysco.com/
+t-mobile,TMUS,q4,https://investor.t-mobile.com/
 te-connectivity,TEL,notified,https://investors.te.com/
 tesla,TSLA,unknown,https://ir.tesla.com/
 texas-instruments,TXN,notified,https://investor.ti.com/
 the-trade-desk,TTD,q4,https://investors.thetradedesk.com/
+thermo-fisher,TMO,q4,https://ir.thermofisher.com/
 tractor-supply,TSCO,unknown,https://ir.tractorsupply.com/
 uber,UBER,unknown,https://investor.uber.com/
 united-airlines,UAL,notified,https://ir.united.com/
+united-rentals,URI,unknown,https://investor-relations.unitedrentals.com/
 universal-health-services,UHS,notified,https://ir.uhs.com/
 verisign,VRSN,notified,https://investor.verisign.com/
 verizon,VZ,notified,https://www.verizon.com/about/investors
