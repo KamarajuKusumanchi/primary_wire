@@ -42,6 +42,7 @@ notified:
     - slug: paramount
     - slug: teradyne
     - slug: global-payments
+    - slug: ge-vernova
 
 notified_gated:
   scraper: scrape_notified_gated
