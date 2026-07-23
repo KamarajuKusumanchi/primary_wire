@@ -276,6 +276,10 @@ sources:
     name: DoorDash, Inc.
     ticker: DASH
     ir_url: https://ir.doordash.com/
+  - slug: dover
+    name: Dover Corporation
+    ticker: DOV
+    ir_url: https://www.dovercorporation.com/investors
   - slug: eqt
     name: EQT Corporation
     ticker: EQT
@@ -354,6 +358,10 @@ sources:
     ir_url: https://investors.globalpayments.com/
     news_releases_path: news-events/press-releases
     first_page_index: 1
+  - slug: globe-life
+    name: Globe Life Inc.
+    ticker: GL
+    ir_url: https://investors.globelifeinsurance.com/
   - slug: godaddy
     name: GoDaddy Inc.
     ticker: GDDY
@@ -581,6 +589,10 @@ sources:
     name: Sysco Corporation
     ticker: SYY
     ir_url: https://investors.sysco.com/
+  - slug: t-mobile
+    name: T-Mobile US, Inc.
+    ticker: TMUS
+    ir_url: https://investor.t-mobile.com/
   - slug: te-connectivity
     name: TE Connectivity plc
     ticker: TEL
