@@ -242,7 +242,10 @@ def is_detail_url(href: str) -> bool:
 # ---------------------------------------------------------------------------
 
 def listing_page_url(
-    base_url: str, page: int = 0, news_releases_path: str = DEFAULT_NEWS_RELEASES_PATH
+    base_url: str,
+    page: int = 0,
+    news_releases_path: str = DEFAULT_NEWS_RELEASES_PATH,
+    extra_params: Optional[dict[str, str]] = None,
 ) -> str:
     """Build a paginated listing URL using Notified/Drupal's ?page= parameter.
 
@@ -266,10 +269,27 @@ def listing_page_url(
     returns page 0 (or errors) every time. Parse out any existing query
     params from news_releases_path first (however many there are) and
     merge "page" into them instead.
+
+    extra_params carries any query string the user passed directly on
+    --url (e.g. https://.../news-releases?category=788) -- resolve_source()
+    strips --url down to its site root (see resolve_source_identity() in
+    sources_utils.py) so news_releases_path can be joined onto the site
+    root instead of whatever path --url happened to have, and without this
+    that query string would otherwise be silently discarded. It's merged in
+    ahead of any query params already embedded in news_releases_path, which
+    take precedence on key collision (those are the ones sources.yaml/
+    --news-releases-path deliberately configured for this site).
     """
     joined = join_url_path(base_url, news_releases_path)
     parts = urlsplit(joined)
-    params = [(k, v) for k, v in parse_qsl(parts.query, keep_blank_values=True) if k != "page"]
+    path_params = [
+        (k, v) for k, v in parse_qsl(parts.query, keep_blank_values=True) if k != "page"
+    ]
+    path_keys = {k for k, _ in path_params}
+    params: list[tuple[str, object]] = []
+    if extra_params:
+        params.extend((k, v) for k, v in extra_params.items() if k not in path_keys)
+    params.extend(path_params)
     params.append(("page", page))
     new_query = urlencode(params)
     return urlunsplit((parts.scheme, parts.netloc, parts.path, new_query, parts.fragment))
@@ -340,12 +360,15 @@ def page_year_range(
     ticker: str,
     timeout: int,
     news_releases_path: str = DEFAULT_NEWS_RELEASES_PATH,
+    extra_params: Optional[dict[str, str]] = None,
 ) -> tuple[Optional[int], Optional[int]]:
     """Fetch page ``page`` and return (min_year, max_year) of items on it.
 
     Returns (None, None) if the page is empty or no dates can be parsed.
     """
-    url = listing_page_url(base_url, page=page, news_releases_path=news_releases_path)
+    url = listing_page_url(
+        base_url, page=page, news_releases_path=news_releases_path, extra_params=extra_params
+    )
     try:
         html = fetch_html(url, timeout=timeout)
     except Exception as exc:
@@ -367,6 +390,7 @@ def find_start_page(
     timeout: int,
     news_releases_path: str = DEFAULT_NEWS_RELEASES_PATH,
     first_page_index: int = DEFAULT_FIRST_PAGE_INDEX,
+    extra_params: Optional[dict[str, str]] = None,
 ) -> int:
     """Binary-search for the first page that might contain items from ``target_years``.
 
@@ -386,7 +410,8 @@ def find_start_page(
     # Quick sanity probe: if the first page already only has items older
     # than max_target, there is nothing to fetch at all.
     min_yr, max_yr = page_year_range(
-        base_url, first_page_index, slug, ticker, timeout, news_releases_path=news_releases_path
+        base_url, first_page_index, slug, ticker, timeout,
+        news_releases_path=news_releases_path, extra_params=extra_params,
     )
     if max_yr is not None and max_yr < min_target:
         logger.info(
@@ -398,7 +423,8 @@ def find_start_page(
     while lo < hi:
         mid = (lo + hi) // 2
         min_yr, max_yr = page_year_range(
-            base_url, mid, slug, ticker, timeout, news_releases_path=news_releases_path
+            base_url, mid, slug, ticker, timeout,
+            news_releases_path=news_releases_path, extra_params=extra_params,
         )
         logger.debug(
             "Binary search: page %d year range %s–%s (target %d–%d)",
@@ -441,6 +467,7 @@ def scrape_one_pass(
     end_page: Optional[int] = None,
     target_years: Optional[set[int]] = None,
     news_releases_path: str = DEFAULT_NEWS_RELEASES_PATH,
+    extra_params: Optional[dict[str, str]] = None,
 ) -> list[NewsItem]:
     """Fetch listing pages from ``start_page`` through ``end_page``.
 
@@ -467,7 +494,10 @@ def scrape_one_pass(
             logger.info("Reached end page %d. Done.", stop_at)
             break
 
-        url = listing_page_url(base_url, page=page_idx, news_releases_path=news_releases_path)
+        url = listing_page_url(
+            base_url, page=page_idx, news_releases_path=news_releases_path,
+            extra_params=extra_params,
+        )
 
         logger.info("Fetching listing page %d (page=%d): %s", page_num_offset + 1, page_idx, url)
 
@@ -549,6 +579,7 @@ def scrape(
     debug_dump_html: Optional[Path],
     news_releases_path: str = DEFAULT_NEWS_RELEASES_PATH,
     first_page_index: int = DEFAULT_FIRST_PAGE_INDEX,
+    extra_params: Optional[dict[str, str]] = None,
 ) -> list[NewsItem]:
     """Scrape listing pages, using binary search when a year filter is active.
 
@@ -572,7 +603,8 @@ def scrape(
     if years:
         # Step 1: fetch the first page to learn last_page.
         url0 = listing_page_url(
-            base_url, page=first_page_index, news_releases_path=news_releases_path
+            base_url, page=first_page_index, news_releases_path=news_releases_path,
+            extra_params=extra_params,
         )
         logger.info("Fetching first page (page=%d) to determine pagination: %s", first_page_index, url0)
         try:
@@ -610,6 +642,7 @@ def scrape(
                 timeout=timeout,
                 news_releases_path=news_releases_path,
                 first_page_index=first_page_index,
+                extra_params=extra_params,
             )
 
             if start_page > last_page:
@@ -670,9 +703,9 @@ def resolve_source(
     ticker: Optional[str],
     news_releases_path: Optional[str] = None,
     first_page_index: Optional[int] = None,
-) -> tuple[str, str, str, str, int]:
-    """Resolve (base_url, slug, ticker, news_releases_path, first_page_index)
-    from CLI args and sources.yaml.
+) -> tuple[str, str, str, str, int, dict[str, str]]:
+    """Resolve (base_url, slug, ticker, news_releases_path, first_page_index,
+    extra_query_params) from CLI args and sources.yaml.
 
     base_url is the IR site root (e.g. https://investors.abbvie.com), NOT the
     news-releases listing URL.  Callers append news_releases_path themselves
@@ -693,10 +726,16 @@ def resolve_source(
       1. the first_page_index argument (i.e. --first-page-index on the CLI)
       2. the "first_page_index" field on the matched sources.yaml record
       3. DEFAULT_FIRST_PAGE_INDEX (0)
+
+    extra_query_params holds any query string that was present on --url
+    (e.g. ?category=788) before resolve_source_identity() stripped --url
+    down to its site root -- see that function's docstring. Pass it to
+    listing_page_url() (via scrape()'s extra_params argument) so it isn't
+    silently lost.
     """
     from utils.sources_utils import resolve_field_precedence, resolve_source_identity
 
-    url, slug, ticker, record = resolve_source_identity(
+    url, slug, ticker, record, extra_query_params = resolve_source_identity(
         url, slug, ticker,
         default_slug=DEFAULT_SLUG, default_ticker=DEFAULT_TICKER, default_url=DEFAULT_BASE_URL,
         strip_url_to_root=True, logger=logger,
@@ -713,7 +752,7 @@ def resolve_source(
         first_page_index = record_value if record_value is not None else DEFAULT_FIRST_PAGE_INDEX
     first_page_index = int(first_page_index)
 
-    return url, slug, ticker, news_releases_path, first_page_index
+    return url, slug, ticker, news_releases_path, first_page_index, extra_query_params
 
 
 # ---------------------------------------------------------------------------
@@ -791,7 +830,7 @@ def main(argv: Optional[list[str]] = None) -> int:
 
     configure_logging(args.verbose)
 
-    base_url, slug, ticker, news_releases_path, first_page_index = resolve_source(
+    base_url, slug, ticker, news_releases_path, first_page_index, extra_query_params = resolve_source(
         args.url, args.slug, args.ticker, args.news_releases_path, args.first_page_index
     )
     logger.info(
@@ -811,6 +850,7 @@ def main(argv: Optional[list[str]] = None) -> int:
         debug_dump_html=args.debug_dump_html,
         news_releases_path=news_releases_path,
         first_page_index=first_page_index,
+        extra_params=extra_query_params,
     )
     logger.info("Scraped %d item(s) total (before filtering).", len(all_items))
 

@@ -295,24 +295,41 @@ def get_form_tokens(page) -> FormTokens:
     return FormTokens(widget_hash=widget_hash, form_build_id=form_build_id)
 
 
-def build_year_url(base_url: str, year: int, tokens: FormTokens, form_id: str = FORM_ID) -> str:
+def build_year_url(
+    base_url: str, year: int, tokens: FormTokens, form_id: str = FORM_ID,
+    extra_params: Optional[dict[str, str]] = None,
+) -> str:
     """Construct the filtered press-releases URL for a given year.
 
     *base_url* is the full listing-page URL (site root + news-releases
     path), e.g. https://investor.tjx.com/investors/press-releases.
+
+    extra_params carries any site-specific query string the user passed
+    directly on --url (e.g. ?category=788) -- resolve_source() strips --url
+    down to its site root (see resolve_source_identity() in
+    sources_utils.py) so news_releases_path can be joined onto the site
+    root instead of whatever path --url happened to have, and without this
+    that query string would otherwise be silently discarded, the same bug
+    fixed for scrape_investorroom.py/scrape_notified.py. Merged in ahead of
+    the exposed-filter's own params, which win on a key collision (those
+    are the ones this function actually needs to hit the right form).
     """
-    params = {
+    params: dict[str, str] = {}
+    if extra_params:
+        params.update(extra_params)
+    params.update({
         f"{tokens.widget_hash}_year[value]": str(year),
         f"{tokens.widget_hash}_widget_id": tokens.widget_hash,
         "form_build_id": tokens.form_build_id,
         "form_id": form_id,
-    }
+    })
     query = urlencode(params)
     return f"{base_url}?{query}#widget-form-base"
 
 
 def get_year_url(base_url: str, year: int, timeout_ms: int = DEFAULT_TIMEOUT_MS,
-                  form_id: str = FORM_ID) -> str:
+                  form_id: str = FORM_ID,
+                  extra_params: Optional[dict[str, str]] = None) -> str:
     """Return the year-filtered press-releases URL for *year*.
 
     This is the ONLY function in this module that touches Playwright. It
@@ -321,6 +338,11 @@ def get_year_url(base_url: str, year: int, timeout_ms: int = DEFAULT_TIMEOUT_MS,
     enough to read the exposed-filter form's tokens, builds the URL via
     build_year_url(), and closes the browser immediately. Everything
     downstream of this call is plain HTTP.
+
+    extra_params (see build_year_url()) is also appended to the page the
+    browser loads to read the form tokens, so that initial load reflects
+    the same site-specific filter (e.g. ?category=788) as the final
+    year-filtered URL, rather than silently loading the unfiltered listing.
     """
     try:
         from playwright.sync_api import sync_playwright
@@ -332,19 +354,21 @@ def get_year_url(base_url: str, year: int, timeout_ms: int = DEFAULT_TIMEOUT_MS,
             "playwright install chrome"
         )
 
+    nav_url = f"{base_url}?{urlencode(extra_params)}" if extra_params else base_url
+
     try:
         with sync_playwright() as p:
             browser = p.chromium.launch(channel="chrome", headless=False)
             try:
                 page = browser.new_page()
                 page.set_default_timeout(timeout_ms)
-                page.goto(base_url, wait_until="networkidle")
+                page.goto(nav_url, wait_until="networkidle")
                 tokens = get_form_tokens(page)
-                return build_year_url(base_url, year, tokens, form_id=form_id)
+                return build_year_url(base_url, year, tokens, form_id=form_id, extra_params=extra_params)
             finally:
                 browser.close()
     except PWTimeoutError as exc:
-        raise RuntimeError(f"Timed out loading {base_url} to read form tokens: {exc}") from exc
+        raise RuntimeError(f"Timed out loading {nav_url} to read form tokens: {exc}") from exc
     except PWError as exc:
         raise RuntimeError(f"Browser/navigation error reading form tokens: {exc}") from exc
 
@@ -487,7 +511,8 @@ def parse_listing_page(html: str, base_url: str, slug: str, ticker: str) -> list
 def scrape_year(base_url: str, year: int, slug: str, ticker: str, timeout: int = 30,
                  timeout_ms: int = DEFAULT_TIMEOUT_MS, form_id: str = FORM_ID,
                  debug_dump_html: Optional[Path] = None,
-                 polite_delay: float = 15.0) -> list[NewsItem]:
+                 polite_delay: float = 15.0,
+                 extra_params: Optional[dict[str, str]] = None) -> list[NewsItem]:
     """Scrape one gated-Notified site's press releases for *year*.
 
     1. get_year_url() -- the one Playwright touchpoint (see its docstring).
@@ -505,8 +530,15 @@ def scrape_year(base_url: str, year: int, slug: str, ticker: str, timeout: int =
     page (TJX, at least for the years this was tested against); others
     (confirmed: Robinhood) still paginate within a single year, so without
     this loop only the newest 10 items for that year would be returned.
+
+    extra_params (see build_year_url()) is forwarded to get_year_url() so
+    it isn't silently dropped -- add_page_param() then preserves it
+    automatically on every subsequent page, since it keeps every existing
+    query param except "page".
     """
-    year_url = get_year_url(base_url, year, timeout_ms=timeout_ms, form_id=form_id)
+    year_url = get_year_url(
+        base_url, year, timeout_ms=timeout_ms, form_id=form_id, extra_params=extra_params
+    )
     logger.info("Year-filtered URL for %d: %s", year, year_url)
 
     all_items: list[NewsItem] = []
@@ -569,9 +601,13 @@ def scrape_year(base_url: str, year: int, slug: str, ticker: str, timeout: int =
 
 def scrape(base_url: str, slug: str, ticker: str, years: Optional[set[int]],
            timeout: int = 30, timeout_ms: int = DEFAULT_TIMEOUT_MS, form_id: str = FORM_ID,
-           debug_dump_html: Optional[Path] = None, polite_delay: float = 15.0) -> list[NewsItem]:
+           debug_dump_html: Optional[Path] = None, polite_delay: float = 15.0,
+           extra_params: Optional[dict[str, str]] = None) -> list[NewsItem]:
     """Scrape one or more years, tolerating a per-year failure so one bad
     year (e.g. a transient block or timeout) doesn't abort the whole run.
+
+    extra_params (see build_year_url()) is forwarded to scrape_year() for
+    every year scraped.
     """
     years_to_scrape = sorted(years) if years else [datetime.now().year]
 
@@ -583,6 +619,7 @@ def scrape(base_url: str, slug: str, ticker: str, years: Optional[set[int]],
                 base_url, year, slug, ticker,
                 timeout=timeout, timeout_ms=timeout_ms, form_id=form_id,
                 debug_dump_html=debug_dump_html, polite_delay=polite_delay,
+                extra_params=extra_params,
             )
         except RuntimeError as exc:
             logger.error("Scraping error for %d: %s", year, exc)
@@ -603,9 +640,9 @@ def scrape(base_url: str, slug: str, ticker: str, years: Optional[set[int]],
 def resolve_source(
     url: Optional[str], slug: Optional[str], ticker: Optional[str],
     news_releases_path: Optional[str] = None,
-) -> tuple[str, str, str, str]:
-    """Resolve (listing_url, slug, ticker, news_releases_path) from CLI args
-    and sources.yaml.
+) -> tuple[str, str, str, str, dict[str, str]]:
+    """Resolve (listing_url, slug, ticker, news_releases_path,
+    extra_query_params) from CLI args and sources.yaml.
 
     The site root (sources.yaml's ir_url) is looked up here, same as
     before. The listing path now follows the same precedence
@@ -622,10 +659,17 @@ def resolve_source(
     When --url is provided with a path, the path is stripped so only the
     site root is retained (matching scrape_notified.py's convention),
     before news_releases_path is joined onto it.
+
+    extra_query_params holds any query string that was present on --url
+    (e.g. ?category=788) before resolve_source_identity() stripped --url
+    down to its site root -- see that function's docstring. Pass it to
+    scrape()/scrape_year()/get_year_url()/build_year_url() so it isn't
+    silently lost -- the same bug fixed for scrape_investorroom.py and
+    scrape_notified.py.
     """
     from utils.sources_utils import resolve_field_precedence, resolve_source_identity
 
-    url, slug, ticker, record = resolve_source_identity(
+    url, slug, ticker, record, extra_query_params = resolve_source_identity(
         url, slug, ticker,
         default_slug=DEFAULT_SLUG, default_ticker=DEFAULT_TICKER, default_url=DEFAULT_BASE_URL,
         strip_url_to_root=True, logger=logger,
@@ -636,7 +680,7 @@ def resolve_source(
     )
 
     listing_url = join_url_path(url, news_releases_path)
-    return listing_url, slug, ticker, news_releases_path
+    return listing_url, slug, ticker, news_releases_path, extra_query_params
 
 
 # ---------------------------------------------------------------------------
@@ -696,7 +740,7 @@ def main(argv: Optional[list[str]] = None) -> int:
 
     configure_logging(args.verbose)
 
-    base_url, slug, ticker, news_releases_path = resolve_source(
+    base_url, slug, ticker, news_releases_path, extra_query_params = resolve_source(
         args.url, args.slug, args.ticker, args.news_releases_path,
     )
     logger.info("Scraping %s (%s) from %s (news_releases_path=%r)", slug, ticker, base_url, news_releases_path)
@@ -712,6 +756,7 @@ def main(argv: Optional[list[str]] = None) -> int:
         timeout_ms=args.browser_timeout * 1000,
         debug_dump_html=args.debug_dump_html,
         polite_delay=args.polite_delay,
+        extra_params=extra_query_params,
     )
     logger.info("Scraped %d item(s) total (before filtering).", len(all_items))
 

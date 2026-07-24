@@ -15,7 +15,7 @@ import logging
 import sys
 from pathlib import Path
 from typing import Optional
-from urllib.parse import urlparse, urlunparse
+from urllib.parse import parse_qsl, urlparse, urlunparse
 
 try:
     from ruamel.yaml import YAML
@@ -217,12 +217,24 @@ def resolve_source_identity(
     strip, listing_path_suffix would be joined onto that sub-page path
     instead of the site root.
 
-    Returns (url, slug, ticker, record). record is None when no sources.yaml
-    entry matched (or the file could not be loaded). Warns (via `logger`,
-    defaulting to this module's logger) for any field that could not be
-    resolved, matching the original scrapers' behavior.
+    Any query string on the URL being stripped (e.g. --url ".../news-releases
+    ?category=788") is captured into the returned extra_query_params dict
+    before it's discarded, rather than silently dropped. Callers that build
+    their own listing URL afterwards (scrape_investorroom.py's
+    listing_page_url()/year_filter_url(), scrape_notified.py's
+    listing_page_url()) should merge extra_query_params back into whatever
+    params they construct, so a site-specific filter like ?category=788
+    survives alongside the scraper's own ?l=/?o=/?year= params.
+
+    Returns (url, slug, ticker, record, extra_query_params). record is None
+    when no sources.yaml entry matched (or the file could not be loaded).
+    extra_query_params is {} when strip_url_to_root is False, or when the
+    stripped URL had no query string. Warns (via `logger`, defaulting to
+    this module's logger) for any field that could not be resolved, matching
+    the original scrapers' behavior.
     """
     log = logger or globals()["logger"]
+    extra_query_params: dict[str, str] = {}
 
     try:
         sources = load_sources(sources_path)
@@ -269,6 +281,8 @@ def resolve_source_identity(
                 if ir_url:
                     if strip_url_to_root:
                         parsed = urlparse(ir_url)
+                        if parsed.query:
+                            extra_query_params.update(parse_qsl(parsed.query, keep_blank_values=True))
                         ir_url = urlunparse((parsed.scheme, parsed.netloc, "", "", "", ""))
                     url = join_url_path(ir_url, listing_path_suffix)
                 else:
@@ -278,6 +292,8 @@ def resolve_source_identity(
     elif url:
         if strip_url_to_root:
             parsed = urlparse(url)
+            if parsed.query:
+                extra_query_params.update(parse_qsl(parsed.query, keep_blank_values=True))
             url = urlunparse((parsed.scheme, parsed.netloc, "", "", "", ""))
         record = find_source_by_ir_url(sources, url) if sources else None
         if record is None:
@@ -296,4 +312,4 @@ def resolve_source_identity(
     if not ticker:
         log.warning("Ticker is empty; CSV rows will have an empty ticker column.")
 
-    return url, slug, ticker, record
+    return url, slug, ticker, record, extra_query_params

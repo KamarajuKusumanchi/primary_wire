@@ -135,3 +135,50 @@ def test_only_one_item_for_the_press_release_url():
     assert len(items) == 1
     assert items[0].title == "Danaher Reports Second Quarter 2026 Results"
     assert items[0].publish_date == date(2026, 7, 21)
+
+
+# ---------------------------------------------------------------------------
+# Regression: a site-specific query filter on --url (e.g. Lockheed Martin's
+# ?category=788) was silently dropped.
+#
+# Running:
+#   python src/scrape_investorroom.py --dry-run \
+#       --url https://news.lockheedmartin.com/news-releases?category=788 --year 2026
+# scraped .../news-releases?year=2026&l=100 instead of
+# .../news-releases?category=788&year=2026&l=100 -- resolve_source() strips
+# --url down to its site root (scheme+host) before news_releases_path is
+# joined back on, and listing_page_url()/year_filter_url() built their own
+# ?l=/?o=/?year= from scratch, discarding anything else that had been on
+# --url. See sources_utils.resolve_source_identity()'s extra_query_params
+# and this module's listing_page_url()/year_filter_url().
+# ---------------------------------------------------------------------------
+
+from scrape_investorroom import listing_page_url, year_filter_url  # noqa: E402
+
+
+def test_year_filter_url_preserves_extra_query_params():
+    url = year_filter_url(
+        "https://news.lockheedmartin.com",
+        year=2026,
+        page_limit=100,
+        extra_params={"category": "788"},
+    )
+    assert url == (
+        "https://news.lockheedmartin.com/news-releases"
+        "?category=788&year=2026&l=100"
+    )
+
+
+def test_listing_page_url_preserves_extra_query_params():
+    url = listing_page_url(
+        "https://news.lockheedmartin.com",
+        page_limit=100,
+        extra_params={"category": "788"},
+    )
+    assert url == "https://news.lockheedmartin.com/news-releases?category=788&l=100"
+
+
+def test_no_extra_params_matches_old_behavior():
+    """Sanity check: omitting extra_params (the common case) is unaffected."""
+    url = year_filter_url("https://ir.chipotle.com", year=2025, page_limit=100)
+    assert url == "https://ir.chipotle.com/news-releases?year=2025&l=100"

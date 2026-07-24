@@ -827,7 +827,7 @@ def resolve_source(
             or DEFAULT_NEWS_DETAILS_SEGMENT
         )
 
-    url, slug, ticker, record = resolve_source_identity(
+    url, slug, ticker, record, _extra_query_params = resolve_source_identity(
         url, slug, ticker,
         default_slug=DEFAULT_SLUG, default_ticker=DEFAULT_TICKER, default_url=DEFAULT_URL,
         listing_path_suffix=news_path, logger=logger,

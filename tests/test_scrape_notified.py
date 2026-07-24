@@ -276,3 +276,45 @@ def test_doubled_news_segment_in_href_is_still_recognized():
     assert items[0].url == href
     assert items[0].publish_date == date(2026, 6, 17)
     assert items[0].title == "GE Vernova's New Sustainability Report Highlights Progress"
+
+
+# ---------------------------------------------------------------------------
+# Regression: a site-specific query filter on --url (e.g. Lockheed Martin's
+# ?category=788) was silently dropped -- the same bug reported and fixed for
+# scrape_investorroom.py (see tests/test_scrape_investorroom.py). resolve_source()
+# strips --url down to its site root before news_releases_path is joined back
+# on, and listing_page_url() built its own ?page= from scratch, discarding
+# anything else that had been on --url. See sources_utils.resolve_source_identity()'s
+# extra_query_params and this module's listing_page_url().
+# ---------------------------------------------------------------------------
+
+from scrape_notified import listing_page_url  # noqa: E402
+
+
+def test_listing_page_url_preserves_extra_query_params():
+    url = listing_page_url(
+        "https://news.lockheedmartin.com",
+        page=0,
+        news_releases_path="news-releases",
+        extra_params={"category": "788"},
+    )
+    assert url == "https://news.lockheedmartin.com/news-releases?category=788&page=0"
+
+
+def test_extra_query_params_do_not_override_news_releases_path_query():
+    """A query string already embedded in news_releases_path (the deliberately
+    configured case, e.g. GE Vernova's tag=/type[]= filters) wins on a key
+    collision over extra_params (whatever happened to be on --url)."""
+    url = listing_page_url(
+        "https://www.gevernova.com",
+        page=0,
+        news_releases_path="news/media-hub?tag=Investor+Relations",
+        extra_params={"tag": "Something+Else"},
+    )
+    assert url == "https://www.gevernova.com/news/media-hub?tag=Investor+Relations&page=0"
+
+
+def test_no_extra_params_matches_old_behavior():
+    """Sanity check: omitting extra_params (the common case) is unaffected."""
+    url = listing_page_url("https://investors.abbvie.com", page=0)
+    assert url == "https://investors.abbvie.com/news-releases?page=0"

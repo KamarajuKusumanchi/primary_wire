@@ -331,6 +331,7 @@ def listing_page_url(
     offset: int = 0,
     page_limit: int = DEFAULT_PAGE_LIMIT,
     news_releases_path: str = DEFAULT_NEWS_RELEASES_PATH,
+    extra_params: Optional[dict[str, str]] = None,
 ) -> str:
     """Build a paginated listing URL using InvestorRoom's ?l= / ?o= parameters.
 
@@ -339,9 +340,23 @@ def listing_page_url(
 
     news_releases_path defaults to "news-releases"; callers resolve the
     right value via resolve_source() / sources.yaml before calling this.
+
+    extra_params carries any site-specific query string the user passed on
+    --url (e.g. https://.../news-releases?category=788), threaded through
+    from resolve_source()'s extra_query_params -- see resolve_source_identity()
+    in sources_utils.py. Without this, --url's query string was silently
+    dropped: resolve_source() strips --url down to scheme+host (so
+    news_releases_path can be joined onto the site root instead of whatever
+    path the user happened to pass), and this function then built ?l=/?o=
+    from scratch, discarding anything else that had been on --url. Placed
+    first in the dict so ?l=/?o=/?year= (set below/by year_filter_url) always
+    win if a name collides, and so it renders first in the URL.
     """
     base = join_url_path(base_url, news_releases_path)
-    params: dict[str, int] = {"l": page_limit}
+    params: dict[str, object] = {}
+    if extra_params:
+        params.update(extra_params)
+    params["l"] = page_limit
     if offset > 0:
         params["o"] = offset
     return base + "?" + urlencode(params)
@@ -353,10 +368,16 @@ def year_filter_url(
     offset: int = 0,
     page_limit: int = DEFAULT_PAGE_LIMIT,
     news_releases_path: str = DEFAULT_NEWS_RELEASES_PATH,
+    extra_params: Optional[dict[str, str]] = None,
 ) -> str:
-    """Build a year-filtered listing URL. See listing_page_url() for news_releases_path."""
+    """Build a year-filtered listing URL. See listing_page_url() for news_releases_path
+    and extra_params."""
     base = join_url_path(base_url, news_releases_path)
-    params: dict[str, object] = {"year": year, "l": page_limit}
+    params: dict[str, object] = {}
+    if extra_params:
+        params.update(extra_params)
+    params["year"] = year
+    params["l"] = page_limit
     if offset > 0:
         params["o"] = offset
     return base + "?" + urlencode(params)
@@ -724,11 +745,17 @@ def scrape(
     page_limit: int,
     debug_dump_html: Optional[Path],
     news_releases_path: str = DEFAULT_NEWS_RELEASES_PATH,
+    extra_params: Optional[dict[str, str]] = None,
 ) -> list[NewsItem]:
     """Scrape all years (or the default all-years view).
 
     When years are specified, one pass per year is made using the ?year= filter.
     Results are globally deduplicated before returning.
+
+    extra_params is forwarded to listing_page_url()/year_filter_url() -- see
+    those functions' docstrings; it's how a site-specific query filter
+    passed via --url (e.g. ?category=788) survives into the first listing
+    request instead of being silently dropped by resolve_source().
     """
     years_to_visit: list[Optional[int]] = sorted(years) if years else [None]
     all_items: list[NewsItem] = []
@@ -739,11 +766,13 @@ def scrape(
 
         if year is not None:
             start_url = year_filter_url(
-                base_url, year, page_limit=page_limit, news_releases_path=news_releases_path
+                base_url, year, page_limit=page_limit, news_releases_path=news_releases_path,
+                extra_params=extra_params,
             )
         else:
             start_url = listing_page_url(
-                base_url, page_limit=page_limit, news_releases_path=news_releases_path
+                base_url, page_limit=page_limit, news_releases_path=news_releases_path,
+                extra_params=extra_params,
             )
 
         dump_path = debug_dump_html
@@ -783,22 +812,28 @@ def resolve_source(
     slug: Optional[str],
     ticker: Optional[str],
     news_releases_path: Optional[str] = None,
-) -> tuple[str, str, str, str]:
-    """Resolve (base_url, slug, ticker, news_releases_path) from CLI args and sources.yaml.
+) -> tuple[str, str, str, str, dict[str, str]]:
+    """Resolve (base_url, slug, ticker, news_releases_path, extra_query_params)
+    from CLI args and sources.yaml.
 
-    Returns (base_url, slug, ticker, news_releases_path).  base_url is the IR
-    site root (e.g. https://ir.chipotle.com), NOT the news-releases listing
-    URL.  Callers append news_releases_path themselves via listing_page_url()
-    / year_filter_url().
+    base_url is the IR site root (e.g. https://ir.chipotle.com), NOT the
+    news-releases listing URL.  Callers append news_releases_path themselves
+    via listing_page_url() / year_filter_url().
 
     news_releases_path precedence (highest wins):
       1. the news_releases_path argument (i.e. --news-releases-path on the CLI)
       2. the "news_releases_path" field on the matched sources.yaml record
       3. DEFAULT_NEWS_RELEASES_PATH ("news-releases")
+
+    extra_query_params holds any query string that was present on --url
+    (e.g. ?category=788) before resolve_source_identity() stripped --url
+    down to its site root -- see that function's docstring. Pass it to
+    listing_page_url()/year_filter_url() (via scrape()'s extra_params
+    argument) so it isn't silently lost.
     """
     from utils.sources_utils import resolve_field_precedence, resolve_source_identity
 
-    url, slug, ticker, record = resolve_source_identity(
+    url, slug, ticker, record, extra_query_params = resolve_source_identity(
         url, slug, ticker,
         default_slug=DEFAULT_SLUG, default_ticker=DEFAULT_TICKER, default_url=DEFAULT_BASE_URL,
         strip_url_to_root=True, logger=logger,
@@ -808,7 +843,7 @@ def resolve_source(
         news_releases_path, record, "news_releases_path", DEFAULT_NEWS_RELEASES_PATH
     )
 
-    return url, slug, ticker, news_releases_path
+    return url, slug, ticker, news_releases_path, extra_query_params
 
 
 # ---------------------------------------------------------------------------
@@ -871,7 +906,7 @@ def main(argv: Optional[list[str]] = None) -> int:
 
     configure_logging(args.verbose)
 
-    base_url, slug, ticker, news_releases_path = resolve_source(
+    base_url, slug, ticker, news_releases_path, extra_query_params = resolve_source(
         args.url, args.slug, args.ticker, args.news_releases_path
     )
     logger.info("Scraping %s (%s) from %s", slug, ticker, join_url_path(base_url, news_releases_path))
@@ -888,6 +923,7 @@ def main(argv: Optional[list[str]] = None) -> int:
         page_limit=args.page_limit,
         debug_dump_html=args.debug_dump_html,
         news_releases_path=news_releases_path,
+        extra_params=extra_query_params,
     )
     logger.info("Scraped %d item(s) total (before filtering).", len(all_items))
 

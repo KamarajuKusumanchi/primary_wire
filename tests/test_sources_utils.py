@@ -90,7 +90,7 @@ def test_resolve_source_identity_strips_path_bearing_ir_url_via_slug(tmp_path: P
     sources_path = _write_sources(tmp_path, [
         {"slug": "genuine-parts", "ticker": "GPC", "ir_url": "https://www.genpt.com/overview"},
     ])
-    url, slug, ticker, record = resolve_source_identity(
+    url, slug, ticker, record, extra_query_params = resolve_source_identity(
         None, "genuine-parts", None,
         default_slug="chipotle", default_ticker="CMG", default_url="https://ir.chipotle.com",
         strip_url_to_root=True, sources_path=sources_path,
@@ -106,7 +106,7 @@ def test_resolve_source_identity_root_only_ir_url_unaffected_via_slug(tmp_path: 
     sources_path = _write_sources(tmp_path, [
         {"slug": "chipotle", "ticker": "CMG", "ir_url": "https://ir.chipotle.com/"},
     ])
-    url, slug, ticker, record = resolve_source_identity(
+    url, slug, ticker, record, extra_query_params = resolve_source_identity(
         None, "chipotle", None,
         default_slug="chipotle", default_ticker="CMG", default_url="https://ir.chipotle.com",
         strip_url_to_root=True, sources_path=sources_path,
@@ -120,7 +120,7 @@ def test_resolve_source_identity_listing_path_suffix_without_strip(tmp_path: Pat
     sources_path = _write_sources(tmp_path, [
         {"slug": "amd", "ticker": "AMD", "ir_url": "https://ir.amd.com/"},
     ])
-    url, slug, ticker, record = resolve_source_identity(
+    url, slug, ticker, record, extra_query_params = resolve_source_identity(
         None, "amd", None,
         default_slug="chipotle", default_ticker="CMG", default_url="https://ir.chipotle.com",
         listing_path_suffix="news-events/press-releases", sources_path=sources_path,
@@ -134,13 +134,47 @@ def test_resolve_source_identity_strips_explicit_url(tmp_path: Path) -> None:
     sources_path = _write_sources(tmp_path, [
         {"slug": "genuine-parts", "ticker": "GPC", "ir_url": "https://www.genpt.com/overview"},
     ])
-    url, slug, ticker, record = resolve_source_identity(
+    url, slug, ticker, record, extra_query_params = resolve_source_identity(
         "https://www.genpt.com/overview/some-page", None, None,
         default_slug="chipotle", default_ticker="CMG", default_url="https://ir.chipotle.com",
         strip_url_to_root=True, sources_path=sources_path,
     )
     assert url == "https://www.genpt.com"
     assert slug == "genuine-parts"
+
+
+# ---------------------------------------------------------------------------
+# resolve_source_identity: extra_query_params
+#
+# Bug this covers: passing --url with a query string (e.g.
+# https://news.lockheedmartin.com/news-releases?category=788) into a
+# scraper that uses strip_url_to_root=True (scrape_investorroom.py,
+# scrape_notified.py) silently dropped the "?category=788" -- it wasn't
+# just the path that got stripped, the query string vanished too, with no
+# way for the caller to get it back. extra_query_params is how it survives.
+# ---------------------------------------------------------------------------
+
+def test_resolve_source_identity_captures_query_string_from_explicit_url(tmp_path: Path) -> None:
+    """The reported bug: --url with a query string, strip_url_to_root=True."""
+    sources_path = _write_sources(tmp_path, [])
+    url, slug, ticker, record, extra_query_params = resolve_source_identity(
+        "https://news.lockheedmartin.com/news-releases?category=788", None, None,
+        default_slug="chipotle", default_ticker="CMG", default_url="https://ir.chipotle.com",
+        strip_url_to_root=True, sources_path=sources_path,
+    )
+    assert url == "https://news.lockheedmartin.com"
+    assert extra_query_params == {"category": "788"}
+
+
+def test_resolve_source_identity_no_query_string_gives_empty_dict(tmp_path: Path) -> None:
+    """No query string on --url -> extra_query_params is {}, not omitted/None."""
+    sources_path = _write_sources(tmp_path, [])
+    url, slug, ticker, record, extra_query_params = resolve_source_identity(
+        "https://news.lockheedmartin.com/news-releases", None, None,
+        default_slug="chipotle", default_ticker="CMG", default_url="https://ir.chipotle.com",
+        strip_url_to_root=True, sources_path=sources_path,
+    )
+    assert extra_query_params == {}
 
 @pytest.mark.parametrize(
     "cli_value, record, expected",
