@@ -1,6 +1,6 @@
 year,slug,ticker,release_count
 2026,abbvie,ABBV,11
-2026,amd,AMD,23
+2026,amd,AMD,25
 2026,apollo,APO,38
 2026,axon,AXON,6
 2026,bio-techne,TECH,17
@@ -16,8 +16,8 @@ year,slug,ticker,release_count
 2026,fedex-freight,FDXF,6
 2026,ge-vernova,GEV,32
 2026,genuine-parts,GPC,10
-2026,global-payments,GPN,15
-2026,ibm,IBM,79
+2026,global-payments,GPN,16
+2026,ibm,IBM,80
 2026,netapp,NTAP,25
 2026,netflix,NFLX,7
 2026,nike,NKE,1
@@ -25,7 +25,7 @@ year,slug,ticker,release_count
 2026,robinhood,HOOD,16
 2026,seagate,STX,16
 2026,spacex,SPCX,1
-2026,super-micro,SMCI,40
+2026,super-micro,SMCI,41
 2026,teradyne,TER,15
 2026,tjx,TJX,6
 2026,travelers,TRV,23
