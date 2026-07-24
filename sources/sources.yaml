@@ -630,6 +630,7 @@ sources:
     name: Thermo Fisher Scientific Inc.
     ticker: TMO
     ir_url: https://ir.thermofisher.com/
+    news_path: investors/news-events/news/default.aspx
   - slug: tjx
     name: The TJX Companies, Inc.
     ticker: TJX

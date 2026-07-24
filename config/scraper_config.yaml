@@ -68,3 +68,5 @@ q4_ir:
       args: [--show-browser]
     - slug: super-micro
       args: [--show-browser]
+    - slug: thermo-fisher
+      args: [--show-browser]

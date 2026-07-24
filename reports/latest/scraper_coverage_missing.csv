@@ -75,7 +75,7 @@ kimco-realty,KIM,unknown,https://investors.kimcorealty.com/
 kkr,KKR,unknown,https://ir.kkr.com/
 kla,KLAC,notified,https://ir.kla.com/
 lam-research,LRCX,investorroom,https://investor.lamresearch.com/
-lockheed-martin,LMT,notified,https://investors.lockheedmartin.com/
+lockheed-martin,LMT,investorroom,https://news.lockheedmartin.com/
 lumentum,LITE,q4,https://investor.lumentum.com/
 marvell,MRVL,notified,https://investor.marvell.com/
 meta,META,q4,https://investor.atmeta.com/home/default.aspx
@@ -111,11 +111,10 @@ te-connectivity,TEL,notified,https://investors.te.com/
 tesla,TSLA,unknown,https://ir.tesla.com/
 texas-instruments,TXN,notified,https://investor.ti.com/
 the-trade-desk,TTD,q4,https://investors.thetradedesk.com/
-thermo-fisher,TMO,q4,https://ir.thermofisher.com/
 tractor-supply,TSCO,unknown,https://ir.tractorsupply.com/
 uber,UBER,unknown,https://investor.uber.com/
 united-airlines,UAL,notified,https://ir.united.com/
-united-rentals,URI,unknown,https://investor-relations.unitedrentals.com/
+united-rentals,URI,q4,https://investor-relations.unitedrentals.com/
 universal-health-services,UHS,notified,https://ir.uhs.com/
 verisign,VRSN,notified,https://investor.verisign.com/
 verizon,VZ,notified,https://www.verizon.com/about/investors
