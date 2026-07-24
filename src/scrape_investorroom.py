@@ -133,7 +133,7 @@ from dataclasses import dataclass
 from datetime import date
 from pathlib import Path
 from typing import Optional
-from urllib.parse import urlencode, urljoin, urlsplit
+from urllib.parse import parse_qsl, urlencode, urljoin, urlsplit, urlunsplit
 
 try:
     import requests
@@ -351,15 +351,35 @@ def listing_page_url(
     from scratch, discarding anything else that had been on --url. Placed
     first in the dict so ?l=/?o=/?year= (set below/by year_filter_url) always
     win if a name collides, and so it renders first in the URL.
+
+    news_releases_path may itself carry a query string (e.g. Lockheed
+    Martin's sources.yaml entry uses "news-releases?category=788" so only
+    its Investor/Financial category is scraped -- see sources.yaml).
+    join_url_path() only concatenates path segments and knows nothing about
+    query strings, so naively appending "?" + urlencode(params) after it
+    produced a second, bogus "?" (e.g. ".../news-releases?category=788?l=100"),
+    which is parsed as one query string where "?l=100" ends up as literal
+    text stuck onto the end of "category"'s value -- so the category filter
+    (and pagination) silently broke. Parse out any existing query params
+    from news_releases_path first and merge l/o into them instead, the same
+    fix applied to scrape_notified.py's listing_page_url().
     """
-    base = join_url_path(base_url, news_releases_path)
-    params: dict[str, object] = {}
+    joined = join_url_path(base_url, news_releases_path)
+    parts = urlsplit(joined)
+    path_params = [
+        (k, v) for k, v in parse_qsl(parts.query, keep_blank_values=True)
+        if k not in ("l", "o")
+    ]
+    path_keys = {k for k, _ in path_params}
+    params: list[tuple[str, object]] = []
     if extra_params:
-        params.update(extra_params)
-    params["l"] = page_limit
+        params.extend((k, v) for k, v in extra_params.items() if k not in path_keys)
+    params.extend(path_params)
+    params.append(("l", page_limit))
     if offset > 0:
-        params["o"] = offset
-    return base + "?" + urlencode(params)
+        params.append(("o", offset))
+    new_query = urlencode(params)
+    return urlunsplit((parts.scheme, parts.netloc, parts.path, new_query, parts.fragment))
 
 
 def year_filter_url(
@@ -371,16 +391,25 @@ def year_filter_url(
     extra_params: Optional[dict[str, str]] = None,
 ) -> str:
     """Build a year-filtered listing URL. See listing_page_url() for news_releases_path
-    and extra_params."""
-    base = join_url_path(base_url, news_releases_path)
-    params: dict[str, object] = {}
+    and extra_params, and for why the query string is merged via parse_qsl/urlencode
+    instead of naively appended with a second "?"."""
+    joined = join_url_path(base_url, news_releases_path)
+    parts = urlsplit(joined)
+    path_params = [
+        (k, v) for k, v in parse_qsl(parts.query, keep_blank_values=True)
+        if k not in ("year", "l", "o")
+    ]
+    path_keys = {k for k, _ in path_params}
+    params: list[tuple[str, object]] = []
     if extra_params:
-        params.update(extra_params)
-    params["year"] = year
-    params["l"] = page_limit
+        params.extend((k, v) for k, v in extra_params.items() if k not in path_keys)
+    params.extend(path_params)
+    params.append(("year", year))
+    params.append(("l", page_limit))
     if offset > 0:
-        params["o"] = offset
-    return base + "?" + urlencode(params)
+        params.append(("o", offset))
+    new_query = urlencode(params)
+    return urlunsplit((parts.scheme, parts.netloc, parts.path, new_query, parts.fragment))
 
 
 # ---------------------------------------------------------------------------

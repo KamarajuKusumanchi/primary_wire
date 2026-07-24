@@ -302,29 +302,45 @@ def build_year_url(
     """Construct the filtered press-releases URL for a given year.
 
     *base_url* is the full listing-page URL (site root + news-releases
-    path), e.g. https://investor.tjx.com/investors/press-releases.
+    path), e.g. https://investor.tjx.com/investors/press-releases. It may
+    itself carry a query string when news_releases_path was configured
+    with one (e.g. a "press-releases?category=788"-style
+    sources.yaml news_releases_path, mirroring Lockheed Martin's
+    scrape_investorroom.py entry) -- naively appending "?" + urlencode(...)
+    after it would produce a second, bogus "?" (e.g.
+    ".../press-releases?category=788?form_id=...#widget-form-base"), which
+    is parsed as one query string where everything after the second "?"
+    ends up as literal text stuck onto the end of "category"'s value -- the
+    same bug fixed for scrape_investorroom.py/scrape_notified.py. Parse out
+    any existing query params from base_url first and merge the rest in
+    instead.
 
     extra_params carries any site-specific query string the user passed
     directly on --url (e.g. ?category=788) -- resolve_source() strips --url
     down to its site root (see resolve_source_identity() in
     sources_utils.py) so news_releases_path can be joined onto the site
     root instead of whatever path --url happened to have, and without this
-    that query string would otherwise be silently discarded, the same bug
-    fixed for scrape_investorroom.py/scrape_notified.py. Merged in ahead of
-    the exposed-filter's own params, which win on a key collision (those
-    are the ones this function actually needs to hit the right form).
+    that query string would otherwise be silently discarded. Merged in
+    ahead of the exposed-filter's own params, which win on a key collision
+    (those are the ones this function actually needs to hit the right form).
     """
-    params: dict[str, str] = {}
+    parts = urlparse(base_url)
+    path_params = list(parse_qsl(parts.query, keep_blank_values=True))
+    path_keys = {k for k, _ in path_params}
+
+    params: list[tuple[str, str]] = []
     if extra_params:
-        params.update(extra_params)
-    params.update({
-        f"{tokens.widget_hash}_year[value]": str(year),
-        f"{tokens.widget_hash}_widget_id": tokens.widget_hash,
-        "form_build_id": tokens.form_build_id,
-        "form_id": form_id,
-    })
+        params.extend((k, v) for k, v in extra_params.items() if k not in path_keys)
+    params.extend(path_params)
+    params.extend([
+        (f"{tokens.widget_hash}_year[value]", str(year)),
+        (f"{tokens.widget_hash}_widget_id", tokens.widget_hash),
+        ("form_build_id", tokens.form_build_id),
+        ("form_id", form_id),
+    ])
     query = urlencode(params)
-    return f"{base_url}?{query}#widget-form-base"
+    base_no_query = urlunparse(parts._replace(query=""))
+    return f"{base_no_query}?{query}#widget-form-base"
 
 
 def get_year_url(base_url: str, year: int, timeout_ms: int = DEFAULT_TIMEOUT_MS,
@@ -343,6 +359,9 @@ def get_year_url(base_url: str, year: int, timeout_ms: int = DEFAULT_TIMEOUT_MS,
     browser loads to read the form tokens, so that initial load reflects
     the same site-specific filter (e.g. ?category=788) as the final
     year-filtered URL, rather than silently loading the unfiltered listing.
+    base_url may itself already carry a query string (see build_year_url()'s
+    docstring), so this is merged in via parse_qsl/urlencode rather than a
+    naive f"{base_url}?{...}" that would produce a second, bogus "?".
     """
     try:
         from playwright.sync_api import sync_playwright
@@ -354,7 +373,14 @@ def get_year_url(base_url: str, year: int, timeout_ms: int = DEFAULT_TIMEOUT_MS,
             "playwright install chrome"
         )
 
-    nav_url = f"{base_url}?{urlencode(extra_params)}" if extra_params else base_url
+    if extra_params:
+        parts = urlparse(base_url)
+        path_params = list(parse_qsl(parts.query, keep_blank_values=True))
+        path_keys = {k for k, _ in path_params}
+        params = [(k, v) for k, v in extra_params.items() if k not in path_keys] + path_params
+        nav_url = urlunparse(parts._replace(query=urlencode(params)))
+    else:
+        nav_url = base_url
 
     try:
         with sync_playwright() as p:

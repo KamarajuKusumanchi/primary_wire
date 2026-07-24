@@ -450,7 +450,7 @@ sources:
       Technically, the correct url for LMT's investor relations website is
       https://investors.lockheedmartin.com/ . But the press releases are in
       https://news.lockheedmartin.com/news-releases . Here there are two
-      categories: (1) Investor and Finanacial news (2) Uncategorized. To
+      categories: (1) Investor and Finanacial News (2) Uncategorized. To
       minimize the noise, only the first category is scraped for now.
   - slug: lumentum
     name: Lumentum Holdings Inc.
