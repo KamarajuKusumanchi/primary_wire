@@ -444,7 +444,14 @@ sources:
   - slug: lockheed-martin
     name: Lockheed Martin Corporation
     ticker: LMT
-    ir_url: https://investors.lockheedmartin.com/
+    ir_url: https://news.lockheedmartin.com/
+    news_releases_path: news-releases?category=788
+    notes: >
+      Technically, the correct url for LMT's investor relations website is
+      https://investors.lockheedmartin.com/ . But the press releases are in
+      https://news.lockheedmartin.com/news-releases . Here there are two
+      categories: (1) Investor and Finanacial news (2) Uncategorized. To
+      minimize the noise, only the first category is scraped for now.
   - slug: lumentum
     name: Lumentum Holdings Inc.
     ticker: LITE
