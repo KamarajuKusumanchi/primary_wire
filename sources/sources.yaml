@@ -656,6 +656,7 @@ sources:
     name: United Rentals, Inc.
     ticker: URI
     ir_url: https://investor-relations.unitedrentals.com/
+    news_path: press-releases/default.aspx
   - slug: universal-health-services
     name: Universal Health Services, Inc.
     ticker: UHS
