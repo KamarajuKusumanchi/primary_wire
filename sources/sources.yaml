@@ -152,6 +152,10 @@ sources:
     name: Builders FirstSource, Inc.
     ticker: BLDR
     ir_url: https://investors.bldr.com/
+  - slug: c-h-robinson
+    name: C.H. Robinson Worldwide, Inc.
+    ticker: CHRW
+    ir_url: https://investor.chrobinson.com/
   - slug: cadence
     name: Cadence Design Systems, Inc.
     ticker: CDNS
@@ -272,6 +276,10 @@ sources:
     name: DexCom, Inc.
     ticker: DXCM
     ir_url: https://investors.dexcom.com/
+  - slug: digital-realty-trust
+    name: Digital Realty Trust, Inc.
+    ticker: DLR
+    ir_url: https://investor.digitalrealty.com/
   - slug: doordash
     name: DoorDash, Inc.
     ticker: DASH
@@ -413,6 +421,10 @@ sources:
     name: Intercontinental Exchange, Inc.
     ticker: ICE
     ir_url: https://ir.theice.com/
+  - slug: international-paper
+    name: International Paper Company
+    ticker: IP
+    ir_url: https://www.internationalpaper.com/investors
   - slug: intuitive-surgical
     name: Intuitive Surgical, Inc.
     ticker: ISRG
@@ -510,6 +522,10 @@ sources:
     name: ON Semiconductor Corporation
     ticker: "ON"
     ir_url: https://investor.onsemi.com/
+  - slug: packaging-corp
+    name: Packaging Corporation of America
+    ticker: PKG
+    ir_url: https://ir.packagingcorp.com/
   - slug: palantir
     name: Palantir Technologies Inc.
     ticker: PLTR
@@ -572,6 +588,10 @@ sources:
     name: Skyworks Solutions, Inc.
     ticker: SWKS
     ir_url: https://www.skyworksinc.com/investors
+  - slug: slb
+    name: SLB N.V.
+    ticker: SLB
+    ir_url: https://investorcenter.slb.com/
   - slug: smurfit-westrock
     name: Smurfit Westrock Plc
     ticker: SW
