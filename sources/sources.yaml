@@ -105,6 +105,10 @@ sources:
     name: Applied Materials, Inc.
     ticker: AMAT
     ir_url: https://ir.appliedmaterials.com/
+  - slug: archer-daniels-midland
+    name: Archer-Daniels-Midland Company
+    ticker: ADM
+    ir_url: https://www.investors.adm.com/
   - slug: ares
     name: Ares Management Corporation
     ticker: ARES
@@ -304,6 +308,10 @@ sources:
     name: Expedia Group, Inc.
     ticker: EXPE
     ir_url: https://ir.expediagroup.com/
+  - slug: exxonmobil
+    name: ExxonMobil Holdings Corporation
+    ticker: XOM
+    ir_url: https://investor.exxonmobil.com/
   - slug: factset
     name: FactSet Research Systems Inc.
     ticker: FDS
@@ -390,9 +398,13 @@ sources:
     name: Home Depot, Inc. (The)
     ticker: HD
     ir_url: https://ir.homedepot.com/
-  - slug: honeywell
+  - slug: honeywell-aerospace
     name: Honeywell Aerospace Inc.
     ticker: HONA
+    ir_url: https://investor.honeywellaerospace.com/
+  - slug: honeywell-international
+    name: Honeywell International Inc.
+    ticker: HON
     ir_url: https://investor.honeywell.com/investor-relations
   - slug: hp
     name: Hewlett Packard Enterprise Company
@@ -488,6 +500,10 @@ sources:
     name: Molson Coors Beverage Company
     ticker: TAP
     ir_url: https://ir.molsoncoors.com/
+  - slug: morgan-stanley
+    name: Morgan Stanley
+    ticker: MS
+    ir_url: https://www.morganstanley.com/about-us-ir
   - slug: msci
     name: MSCI Inc.
     ticker: MSCI
@@ -600,6 +616,10 @@ sources:
     name: Solventum Corporation
     ticker: SOLV
     ir_url: https://investors.solventum.com/
+  - slug: southern-company
+    name: The Southern Company
+    ticker: SO
+    ir_url: https://investor.southerncompany.com/
   - slug: spacex
     name: Space Exploration Technologies Corp.
     ticker: SPCX
