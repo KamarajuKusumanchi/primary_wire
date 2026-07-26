@@ -1,0 +1,237 @@
+====== primary_wire: Scrapers ======
+
+''config/scraper_config.yaml'' drives automated scraping for ~20 sources,
+across three IR platforms (Q4, InvestorRoom, Notified). This file documents
+each scraper script under ''src/'' in detail. See README.txt for the
+high-level picture; this is the one to read before running a scraper, adding
+a new source to an existing platform, or debugging one that broke.
+
+===== scrape_all.py =====
+
+Orchestrates every scraper configured in ''config/scraper_config.yaml'' in
+one command, instead of invoking each scraper script by hand.
+
+Usage:
+
+  # Scrape every configured source for the current year
+  python src/scrape_all.py
+
+  # Preview only, nothing written
+  python src/scrape_all.py --dry-run
+
+  # One specific source, or one platform group
+  python src/scrape_all.py --slug cdw
+  python src/scrape_all.py --platform investorroom
+
+  # Quick "is anything broken?" check: one random source per distinct
+  # (scraper, extra CLI args) combination, instead of every source
+  python src/scrape_all.py --smoke-test --dry-run
+
+  # Same, but with a fixed seed for reproducible picks
+  python src/scrape_all.py --smoke-test --dry-run --seed 42
+
+''--smoke-test'' is also available as a single ''invoke'' command --
+see [[tasks.txt]].
+
+===== scrape_q4_ir.py =====
+
+The main scraper. Collects press release links from any investor relations
+site powered by Q4 Inc. -- a widely used IR platform. Many S&P 500 companies
+use Q4, including Costco, CDW, Qualcomm, Corning, and ON Semiconductor. Q4
+sites share a common URL structure and page layout, so a single scraper
+handles all of them.
+
+Because Q4 pages are rendered client-side, a plain HTTP request returns only
+a "Loading..." placeholder. The scraper drives Chrome via Playwright to
+render the full page, then parses the DOM with BeautifulSoup. No private API
+is used -- it reads exactly what a human visiting the page would see.
+
+Date extraction works in two stages:
+
+  1. Listing-page parse (fast, zero extra requests): looks for a date in the
+     HTML near each news link. Works on many Q4 themes (e.g. Costco).
+
+  2. Detail-page fallback (opt-in via --fetch-detail-pages): for items where
+     no date was found in stage 1, fetches each individual press release page
+     and extracts the date from there. Required for some Q4 themes (e.g. CDW)
+     where dates are not present in the listing-page HTML. Fetches are spaced
+     by --polite-delay.
+
+Usage:
+
+  # Costco -- dates found on listing page, no detail fetches needed
+  python src/scrape_q4_ir.py --dry-run
+
+  # CDW -- dates only on detail pages; --fetch-detail-pages is required
+  python src/scrape_q4_ir.py \
+      --url https://investor.cdw.com/news/default.aspx \
+      --fetch-detail-pages --dry-run
+
+  # Any Q4 IR site by slug or ticker (looked up from sources.yaml)
+  python src/scrape_q4_ir.py --slug cdw --fetch-detail-pages --dry-run
+  python src/scrape_q4_ir.py --ticker CDW --fetch-detail-pages --dry-run
+
+  # Scrape a specific year
+  python src/scrape_q4_ir.py --year 2025
+
+  # Scrape a range of years and output as JSON
+  python src/scrape_q4_ir.py --start-year 2023 --end-year 2025 \
+      --format json --output out.json --dry-run
+
+  # Watch the browser and save rendered HTML for debugging
+  python src/scrape_q4_ir.py --show-browser --debug-dump-html /tmp/page.html --dry-run
+
+Chrome is assumed to already be installed. No ''playwright install'' download
+is needed.
+
+There are no company-specific wrapper scripts (e.g. a dedicated Costco or CDW
+script) -- every Q4-powered IR site, including Costco and CDW, is scraped
+through scrape_q4_ir.py directly via --slug or --ticker, as shown above.
+
+===== scrape_investorroom.py =====
+
+Collects press release links from any IR site powered by the InvestorRoom
+platform (sold by Notified, formerly Intrado/West). Chipotle, Centene, and
+IBM's newsroom are examples. Unlike Q4 sites, InvestorRoom pages are
+server-side rendered -- a plain HTTP request returns full HTML, so no
+Playwright is needed.
+
+The listing page paginates by offset (''?l=100&o=100'', not a page number).
+Detail pages come in three URL styles -- a legacy ''?item=NNNNN'' form, a
+date-prefixed slug, and a bare slug with no date or item ID -- and this
+scraper handles all three.
+
+Date extraction prefers the date shown next to each link on the listing page
+itself, since some sites' detail-page-style URLs embed a date that doesn't
+always match the article's real publish date. For items where the listing
+page has no date, ''--fetch-detail-pages'' fetches the detail page and reads
+the date from the article header instead.
+
+Usage:
+
+  # Chipotle, dry-run
+  python src/scrape_investorroom.py --dry-run
+
+  # Any InvestorRoom site by slug, ticker, or URL
+  python src/scrape_investorroom.py --slug chipotle --dry-run
+  python src/scrape_investorroom.py --ticker CMG --dry-run
+  python src/scrape_investorroom.py --url https://ir.chipotle.com/news-releases --dry-run
+
+  # Restrict to a year or range
+  python src/scrape_investorroom.py --year 2025 --dry-run
+
+  # Fetch detail pages to resolve missing dates
+  python src/scrape_investorroom.py --fetch-detail-pages --dry-run
+
+Requires:
+
+  pip install requests beautifulsoup4 lxml ruamel.yaml
+
+===== scrape_notified.py =====
+
+Collects press release links from any investor relations site powered by the
+Notified platform (formerly Business Wire / Nasdaq IR), built on Drupal 10.
+AbbVie and AMD are examples. Notified sites share a common listing-page and
+detail-page structure, so a single scraper handles all of them.
+
+The listing page paginates with a 0-based page index (''?page=0'',
+''?page=1'', ...). There is no server-side year filter reflected in the URL --
+the site's year dropdown reloads via a form POST -- so this scraper instead
+paginates the full unfiltered listing and filters by year client-side. Dates
+are read from the listing table (M/D/YY format, e.g. ''6/26/26''), falling
+back to the date embedded in each row's summary text when needed.
+
+curl_cffi is required (not plain ''requests''): these sites enforce TLS
+fingerprinting that silently drops connections from the standard Python
+requests stack, and curl_cffi impersonates Chrome's JA3/JA4 fingerprint to
+get past it.
+
+Usage:
+
+  # AbbVie, dry-run
+  python src/scrape_notified.py --dry-run
+
+  # Any Notified/Drupal IR site by URL, slug, or ticker
+  python src/scrape_notified.py --url https://investors.abbvie.com --dry-run
+  python src/scrape_notified.py --slug abbvie --dry-run
+  python src/scrape_notified.py --ticker ABBV --dry-run
+
+  # Restrict to a year or range
+  python src/scrape_notified.py --year 2025 --dry-run
+  python src/scrape_notified.py --start-year 2023 --end-year 2025 --dry-run
+
+Requires:
+
+  pip install curl_cffi beautifulsoup4 lxml ruamel.yaml
+
+===== scrape_notified_gated.py =====
+
+A gated variant of scrape_notified.py for Notified/Drupal IR sites that are
+additionally protected by bot mitigation (e.g. Akamai) strict enough to block
+even a plain/headless request for the year-filter widget. It is not a
+different platform -- the listing markup, detail-page URLs, and date format
+are identical to scrape_notified.py. Defaults are set for The TJX Companies,
+the first known site of this kind.
+
+Where scrape_notified.py filters by year client-side by paginating the entire
+unfiltered listing, this scraper instead obtains a year-filtered listing URL
+directly, by resubmitting hidden tokens (a ''widget_hash''-prefixed
+''_widget_id'' and a ''form_build_id'') exposed by the page's Drupal Views
+year-filter widget -- much cheaper than paginating everything. Those tokens
+only exist in the live, JS-rendered DOM, and the target site's bot mitigation
+403s headless browser sessions specifically (confirmed against TJX by testing
+headless vs. headed Chrome), so the one-time token-reading step always drives
+a headed (non-headless) Chrome via Playwright. That means it needs an
+environment with a display -- a desktop machine, or a VM with a virtual
+display like Xvfb -- and will not run as-is on a headless server/CI box.
+Once the year-filtered URL is in hand, Playwright is dropped entirely: the
+listing itself is fetched and parsed with curl_cffi (Chrome TLS/JA3
+impersonation) + BeautifulSoup, exactly as in scrape_notified.py.
+
+Usage:
+
+  # TJX, current year, dry-run
+  python src/scrape_notified_gated.py --dry-run
+
+  # Specific year
+  python src/scrape_notified_gated.py --year 2024 --dry-run
+
+  # By slug (site root looked up from sources.yaml; the gating-specific
+  # form ID is still a hardcoded constant tuned for TJX)
+  python src/scrape_notified_gated.py --slug tjx --dry-run
+
+  # A gated site without a sources.yaml news_releases_path entry yet
+  python src/scrape_notified_gated.py --slug robinhood \
+      --news-releases-path press-releases --dry-run
+
+Requires:
+
+  pip install playwright curl_cffi beautifulsoup4 lxml
+  playwright install chrome   # if Playwright can't find your Chrome install
+
+Because the token-reading step needs a real display, this scraper is not yet
+expected to run unattended on a headless CI box -- see the module docstring
+for the known limitation.
+
+===== Guidelines for automated contributions =====
+
+See README.txt's "Guidelines for automated contributions" section -- every
+scraper above already follows it (polite delays, once-per-day runs, backing
+off on errors). Read it before adding a new scraper or a ''--polite-delay''
+override.
+
+===== Adding a new scraper (or a new source to an existing one) =====
+
+Most new sources fit an existing platform -- check the platform fingerprints
+in the relevant scraper's module docstring first (e.g. ''?item=NNNNN'' or
+''/news-releases'' URLs for InvestorRoom, a Drupal 10 generator meta tag for
+Notified). ''src/reporting/detect_ir_platform.py'' can classify a source's
+platform automatically -- see [[reporting.txt]]. Adding such a source is
+usually just a new ''sources.yaml'' entry plus a ''config/scraper_config.yaml''
+entry, not a new script.
+
+A genuinely new platform gets its own ''scrape_<platform>.py'' script,
+following the pattern of the existing ones: share argparse/date/output
+plumbing via ''utils/scrape_utils.py'', share ''sources.yaml'' lookups via
+''utils/sources_utils.py'', and add a one-line bullet plus a full section to
+this file (not README.txt).
