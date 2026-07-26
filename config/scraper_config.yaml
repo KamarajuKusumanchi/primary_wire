@@ -30,6 +30,7 @@ investorroom:
     - slug: ibm
     - slug: centene
     - slug: danaher
+    - slug: lockheed-martin
 
 notified:
   scraper: scrape_notified
