@@ -1,8 +1,17 @@
-====== Changelog ======
+====== Checkpoints ======
 
-All notable changes to this project are documented here, most recent first.
+This is not a complete record of every change. It's a set of dated
+checkpoints for incompatible changes, removals, or other cases where I
+might later want to revert to an earlier version of the code, most recent
+first.
 
-===== 2026-07-26 =====
+===== Policy =====
+
+  * Heading can be a date (''YYYY-MM-DD'') or a date with time
+    (''YYYY-MM-DD H:MM am/pm''). Use whichever fits -- add the time if it's
+    useful to distinguish multiple checkpoints on the same day.
+
+===== 2026-07-26 8:45 am =====
 
 ==== Removed ====
 
