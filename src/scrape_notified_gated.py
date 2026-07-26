@@ -172,8 +172,10 @@ DEFAULT_SLUG = "tjx"
 DEFAULT_TICKER = "TJX"
 DEFAULT_BASE_URL = "https://investor.tjx.com"
 # Site root only. resolve_source() below derives this from sources.yaml's
-# ir_url when --slug/--ticker is given; DEFAULT_BASE_URL is just the
-# no-flags-at-all fallback, matching scrape_notified.py's convention.
+# scrape URL (news_url if set, else ir_url -- see
+# utils.sources_utils.resolve_scrape_url()) when --slug/--ticker is given;
+# DEFAULT_BASE_URL is just the no-flags-at-all fallback, matching
+# scrape_notified.py's convention.
 
 # --- Hardcoded, single-source config (see "Site-specific config" above) ---
 DEFAULT_NEWS_RELEASES_PATH = "investors/press-releases"
@@ -670,7 +672,8 @@ def resolve_source(
     """Resolve (listing_url, slug, ticker, news_releases_path,
     extra_query_params) from CLI args and sources.yaml.
 
-    The site root (sources.yaml's ir_url) is looked up here, same as
+    The site root (sources.yaml's news_url if set, else ir_url -- see
+    utils.sources_utils.resolve_scrape_url()) is looked up here, same as
     before. The listing path now follows the same precedence
     scrape_notified.py uses (highest wins):
       1. the news_releases_path argument (i.e. --news-releases-path on the CLI)

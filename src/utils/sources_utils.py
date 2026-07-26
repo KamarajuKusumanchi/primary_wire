@@ -101,12 +101,19 @@ def find_source(
     return None
 
 
-def find_source_by_ir_url(sources: list[dict], url: str) -> Optional[dict]:
-    """Return the first record whose ir_url matches the host of *url*.
+def find_source_by_url(sources: list[dict], url: str) -> Optional[dict]:
+    """Return the first record whose ir_url or news_url matches the host of *url*.
 
     Matching is by hostname only (scheme-insensitive, www-stripped) so that
     ``https://investor.cdw.com/news/default.aspx`` finds the record whose
-    ir_url is ``https://investor.cdw.com/``. Returns None if not found.
+    ir_url is ``https://investor.cdw.com/``.
+
+    Checks both "ir_url" and the optional "news_url" field (see
+    resolve_scrape_url()'s docstring), because a caller may hand in either
+    host -- e.g. Lockheed Martin's press releases live at
+    news.lockheedmartin.com (news_url), but a caller could just as
+    plausibly pass investors.lockheedmartin.com (ir_url). Either one must
+    resolve to the same record. Returns None if neither field matches.
     """
 
     def _host(u: str) -> str:
@@ -116,10 +123,26 @@ def find_source_by_ir_url(sources: list[dict], url: str) -> Optional[dict]:
     if not target:
         return None
     for record in sources:
-        ir_url = record.get("ir_url", "")
-        if ir_url and _host(ir_url) == target:
+        candidate_urls = (record.get("ir_url", ""), record.get("news_url", ""))
+        if any(candidate and _host(candidate) == target for candidate in candidate_urls):
             return record
     return None
+
+
+def resolve_scrape_url(record: dict) -> str:
+    """Return the base URL scrapers should use to find press releases.
+
+    For most sources, one host serves both the investor relations page and
+    the press-release listing, so "ir_url" alone is enough. A few sources
+    (e.g. IBM, Lockheed Martin) host their press releases on a different
+    domain than their official investor relations site; those set the
+    optional "news_url" field in sources.yaml to the press-release host,
+    while "ir_url" keeps pointing at the real IR page for reference.
+
+    Precedence: "news_url" wins if set and truthy; otherwise "ir_url".
+    Returns "" if neither field is set.
+    """
+    return record.get("news_url") or record.get("ir_url", "")
 
 
 def load_source_record(slug: str, sources_path: Path = SOURCES_PATH) -> dict:
@@ -200,16 +223,17 @@ def resolve_source_identity(
       3. nothing given         -> fall back to (default_slug, default_ticker,
          default_url) so a bare invocation with no flags keeps working.
 
-    listing_path_suffix is appended to a URL derived from a record's
-    ir_url (case 1 above, when the caller didn't pass --url) -- e.g.
-    scrape_q4_ir.py passes NEWS_PATH so it ends up with one complete
-    listing URL. Scrapers that keep the site root and listing path separate
-    (scrape_investorroom.py, scrape_notified.py) leave this as "".
+    listing_path_suffix is appended to a URL derived from a record's scrape
+    URL -- resolve_scrape_url()'s "news_url if set, else ir_url" (case 1
+    above, when the caller didn't pass --url) -- e.g. scrape_q4_ir.py passes
+    NEWS_PATH so it ends up with one complete listing URL. Scrapers that
+    keep the site root and listing path separate (scrape_investorroom.py,
+    scrape_notified.py) leave this as "".
 
     strip_url_to_root, when True, reduces the resolved URL to just its
     scheme+host before it is returned -- whether that URL came from an
     explicitly-passed --url (case 2 above, stripped before matching) or was
-    derived from a sources.yaml record's ir_url (case 1 above, stripped
+    derived from a sources.yaml record's scrape URL (case 1 above, stripped
     before listing_path_suffix is joined onto it). This is for scrapers
     whose listing path is appended separately elsewhere, and whose
     sources.yaml ir_url may point at a specific IR sub-page rather than the
@@ -277,17 +301,18 @@ def resolve_source_identity(
             slug = record.get("slug", "")
             ticker = record.get("ticker", "")
             if not url:
-                ir_url = record.get("ir_url", "")
-                if ir_url:
+                scrape_url = resolve_scrape_url(record)
+                if scrape_url:
                     if strip_url_to_root:
-                        parsed = urlparse(ir_url)
+                        parsed = urlparse(scrape_url)
                         if parsed.query:
                             extra_query_params.update(parse_qsl(parsed.query, keep_blank_values=True))
-                        ir_url = urlunparse((parsed.scheme, parsed.netloc, "", "", "", ""))
-                    url = join_url_path(ir_url, listing_path_suffix)
+                        scrape_url = urlunparse((parsed.scheme, parsed.netloc, "", "", "", ""))
+                    url = join_url_path(scrape_url, listing_path_suffix)
                 else:
                     log.warning(
-                        "Record '%s' has no ir_url; cannot derive --url automatically.", query
+                        "Record '%s' has neither news_url nor ir_url; "
+                        "cannot derive --url automatically.", query
                     )
     elif url:
         if strip_url_to_root:
@@ -295,7 +320,7 @@ def resolve_source_identity(
             if parsed.query:
                 extra_query_params.update(parse_qsl(parsed.query, keep_blank_values=True))
             url = urlunparse((parsed.scheme, parsed.netloc, "", "", "", ""))
-        record = find_source_by_ir_url(sources, url) if sources else None
+        record = find_source_by_url(sources, url) if sources else None
         if record is None:
             log.warning(
                 "No sources.yaml record matched the host of '%s'. "

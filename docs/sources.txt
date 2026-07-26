@@ -8,7 +8,8 @@ This guide covers how to add new sources to ''sources/sources.yaml''.
 | slug     | Yes      | Short unique identifier used in CSV data files       |
 | name     | Yes      | Full display name of the organization                |
 | ticker   | No       | Stock ticker symbol — omit for non-public sources    |
-| ir_url   | Yes      | Investor relations or official newsroom page URL     |
+| ir_url   | Yes      | Official investor relations page URL                 |
+| news_url | No       | Press-release listing base URL, only if it's on a different host than ir_url (see below) |
 | notes    | No       | Useful context about finding press releases          |
 
 ===== Adding a new source =====
@@ -27,6 +28,28 @@ This guide covers how to add new sources to ''sources/sources.yaml''.
 </code>
 
   - Submit a pull request with the updated ''sources.yaml''
+
+===== When press releases live on a different host (news_url) =====
+
+Most sources serve both the investor relations page and the press-release
+listing from the same host, so ''ir_url'' alone is enough. A few companies
+host their press releases somewhere else entirely -- e.g. IBM's investor
+relations page is ''https://www.ibm.com/investor'', but its press releases
+are at ''https://newsroom.ibm.com/announcements''. For those, set ''ir_url''
+to the real investor relations page and add ''news_url'' for the
+press-release host. Every scraper resolves its actual base URL as
+"news_url if set, else ir_url", so nothing else needs to change:
+
+<code yaml>
+  - slug: ibm
+    name: International Business Machines Corporation
+    ticker: IBM
+    ir_url: https://www.ibm.com/investor
+    news_url: https://newsroom.ibm.com/
+    news_releases_path: announcements
+</code>
+
+Leave ''news_url'' out entirely for the common case.
 
 ===== Slug naming conventions =====
 

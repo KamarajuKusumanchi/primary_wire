@@ -24,8 +24,11 @@ import pytest
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
 from utils.sources_utils import (  # noqa: E402
+    find_source_by_url,
     join_url_path,
+    load_sources,
     resolve_field_precedence,
+    resolve_scrape_url,
     resolve_source_identity,
 )
 
@@ -80,6 +83,8 @@ def _write_sources(tmp_path: Path, records: list[dict]) -> Path:
         lines.append(f"  - slug: {r['slug']}")
         lines.append(f"    ticker: {r.get('ticker', '')}")
         lines.append(f"    ir_url: {r['ir_url']}")
+        if "news_url" in r:
+            lines.append(f"    news_url: {r['news_url']}")
     sources_path = tmp_path / "sources.yaml"
     sources_path.write_text("\n".join(lines) + "\n")
     return sources_path
@@ -195,3 +200,91 @@ def test_resolve_field_precedence(cli_value, record, expected) -> None:
     assert resolve_field_precedence(
         cli_value, record, "news_releases_path", "default-path"
     ) == expected
+
+
+# ---------------------------------------------------------------------------
+# resolve_scrape_url / find_source_by_url: news_url overriding ir_url
+#
+# Covers the IBM/Lockheed Martin case -- press releases hosted on a
+# different domain than the official investor relations page. news_url is
+# optional and only meaningful when it differs from ir_url; most sources
+# never set it, and must keep resolving via ir_url exactly as before.
+# ---------------------------------------------------------------------------
+
+@pytest.mark.parametrize(
+    "record, expected",
+    [
+        # Both set -> news_url wins.
+        (
+            {"ir_url": "https://investors.lockheedmartin.com/",
+             "news_url": "https://news.lockheedmartin.com/"},
+            "https://news.lockheedmartin.com/",
+        ),
+        # Only ir_url set (the common case) -> falls back to it.
+        ({"ir_url": "https://ir.chipotle.com/"}, "https://ir.chipotle.com/"),
+        # news_url present but empty -> falls back to ir_url, not "".
+        ({"ir_url": "https://ir.chipotle.com/", "news_url": ""}, "https://ir.chipotle.com/"),
+        # Neither set -> "".
+        ({}, ""),
+    ],
+)
+def test_resolve_scrape_url(record, expected) -> None:
+    assert resolve_scrape_url(record) == expected
+
+
+def test_find_source_by_url_matches_news_url_host(tmp_path: Path) -> None:
+    """A URL on the news_url host (e.g. the press-release host) must resolve
+    to the record, not just URLs on the ir_url host."""
+    sources_path = _write_sources(tmp_path, [
+        {"slug": "lockheed-martin", "ticker": "LMT",
+         "ir_url": "https://investors.lockheedmartin.com/",
+         "news_url": "https://news.lockheedmartin.com/"},
+    ])
+    sources = load_sources(sources_path)
+    record = find_source_by_url(sources, "https://news.lockheedmartin.com/news-releases")
+    assert record is not None
+    assert record["slug"] == "lockheed-martin"
+
+
+def test_find_source_by_url_matches_ir_url_host_even_when_news_url_set(tmp_path: Path) -> None:
+    """The official ir_url host must still match, even though news_url is
+    what scrapers actually use -- a caller may hand in either host."""
+    sources_path = _write_sources(tmp_path, [
+        {"slug": "lockheed-martin", "ticker": "LMT",
+         "ir_url": "https://investors.lockheedmartin.com/",
+         "news_url": "https://news.lockheedmartin.com/"},
+    ])
+    sources = load_sources(sources_path)
+    record = find_source_by_url(sources, "https://investors.lockheedmartin.com/overview")
+    assert record is not None
+    assert record["slug"] == "lockheed-martin"
+
+
+def test_find_source_by_url_no_news_url_still_matches_ir_url(tmp_path: Path) -> None:
+    """Regression guard: the common case (no news_url at all) must keep
+    working exactly as find_source_by_ir_url did before the rename."""
+    sources_path = _write_sources(tmp_path, [
+        {"slug": "chipotle", "ticker": "CMG", "ir_url": "https://ir.chipotle.com/"},
+    ])
+    sources = load_sources(sources_path)
+    record = find_source_by_url(sources, "https://ir.chipotle.com/news/default.aspx")
+    assert record is not None
+    assert record["slug"] == "chipotle"
+
+
+def test_resolve_source_identity_uses_news_url_over_ir_url_via_slug(tmp_path: Path) -> None:
+    """The core IBM/Lockheed fix: when a record has both fields, the scrape
+    URL derived via --slug must come from news_url, not ir_url."""
+    sources_path = _write_sources(tmp_path, [
+        {"slug": "lockheed-martin", "ticker": "LMT",
+         "ir_url": "https://investors.lockheedmartin.com/",
+         "news_url": "https://news.lockheedmartin.com/"},
+    ])
+    url, slug, ticker, record, extra_query_params = resolve_source_identity(
+        None, "lockheed-martin", None,
+        default_slug="chipotle", default_ticker="CMG", default_url="https://ir.chipotle.com",
+        sources_path=sources_path,
+    )
+    assert url == "https://news.lockheedmartin.com"
+    assert slug == "lockheed-martin"
+    assert ticker == "LMT"

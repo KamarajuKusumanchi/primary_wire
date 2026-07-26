@@ -21,7 +21,7 @@ from utils.sources_utils import SOURCES_PATH, find_source, load_sources
 
 def format_record(record: dict) -> str:
     lines = []
-    for key in ("slug", "name", "ticker", "ir_url", "notes"):
+    for key in ("slug", "name", "ticker", "ir_url", "news_url", "notes"):
         value = record.get(key)
         if value is not None:
             lines.append(f"  {key}: {value}")

@@ -150,17 +150,31 @@ def main():
     else:
         ir_url = prompt("IR URL")
 
+    # news_url is optional and only needed when press releases are hosted on
+    # a different domain than the IR URL above (e.g. IBM, Lockheed Martin --
+    # see sources.yaml's field documentation). Leave blank for the common
+    # case where ir_url's host serves both.
+    news_url = prompt_optional(
+        "News URL (press releases, only if different host than IR URL)",
+        default=existing.get("news_url", "") if existing else "",
+    )
+
     if existing:
         original_snapshot = {
             "slug": existing.get("slug"),
             "name": existing.get("name"),
             "ticker": existing.get("ticker"),
             "ir_url": existing.get("ir_url"),
+            "news_url": existing.get("news_url"),
             "notes": existing.get("notes"),
         }
         existing["slug"] = slug
         existing["name"] = name
         existing["ir_url"] = ir_url
+        if news_url:
+            existing["news_url"] = news_url
+        elif "news_url" in existing:
+            del existing["news_url"]
         notes = prompt_optional("Notes", default=existing.get("notes", ""))
         if notes:
             existing["notes"] = notes
@@ -173,21 +187,25 @@ def main():
             "name": entry.get("name"),
             "ticker": entry.get("ticker"),
             "ir_url": entry.get("ir_url"),
+            "news_url": entry.get("news_url"),
             "notes": entry.get("notes"),
         }
         has_changes = new_snapshot != original_snapshot
     else:
         entry = {"slug": slug, "name": name, "ticker": ticker, "ir_url": ir_url}
+        if news_url:
+            entry["news_url"] = news_url
         sources.append(entry)
         action = "Added"
         has_changes = True
 
     print("\n--- Summary ---")
-    print(f"slug:   {entry.get('slug')}")
-    print(f"name:   {entry.get('name')}")
-    print(f"ticker: {entry.get('ticker')}")
-    print(f"ir_url: {entry.get('ir_url')}")
-    print(f"notes:  {entry.get('notes', '(none)')}")
+    print(f"slug:     {entry.get('slug')}")
+    print(f"name:     {entry.get('name')}")
+    print(f"ticker:   {entry.get('ticker')}")
+    print(f"ir_url:   {entry.get('ir_url')}")
+    print(f"news_url: {entry.get('news_url', '(none)')}")
+    print(f"notes:    {entry.get('notes', '(none)')}")
     print("---------------")
 
     if not has_changes:

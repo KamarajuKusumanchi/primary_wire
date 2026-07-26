@@ -5,8 +5,25 @@
 #   slug:                short unique identifier used in CSV data files
 #   name:                full display name of the organization
 #   ticker:              stock ticker symbol (omit for non-public sources)
-#   ir_url:               investor relations or official newsroom page
-#   news_releases_path:  path appended to ir_url's host for the press-release
+#   ir_url:               the official investor relations page. This is also
+#                         the base URL scrapers use to find press releases,
+#                         UNLESS news_url (below) is set.
+#   news_url:             base URL for the press-release listing, if and only
+#                         if it lives on a different host than ir_url. Optional
+#                         -- omit entirely for the common case where ir_url's
+#                         own host serves both the IR page and the press
+#                         releases. Set this only for the exceptions (e.g. IBM:
+#                         ir_url is https://www.ibm.com/investor but releases
+#                         are at https://newsroom.ibm.com/announcements; Lockheed Martin:
+#                         ir_url is https://investors.lockheedmartin.com but
+#                         releases are at https://news.lockheedmartin.com/news-releases).
+#                         Every scraper resolves its actual base URL as
+#                         "news_url if set, else ir_url" -- see
+#                         utils.sources_utils.resolve_scrape_url() -- so
+#                         nothing else in this file changes meaning based on
+#                         whether news_url is present.
+#   news_releases_path:  path appended to the resolved scrape URL's host
+#                         (news_url if set, else ir_url) for the press-release
 #                         listing page, e.g. "press-releases". Optional --
 #                         omit to use the scraper's default ("news-releases").
 #                         Only meaningful for scrape_investorroom.py and
@@ -27,7 +44,8 @@
 #                         This is a durable fact about the site's Q4 theme, not a
 #                         per-run behavior choice, so it lives here rather than as
 #                         an 'args' override in config/scraper_config.yaml.
-#   news_path:            listing path appended to ir_url for a Q4 IR site, e.g.
+#   news_path:            listing path appended to the resolved scrape URL
+#                         (news_url if set, else ir_url) for a Q4 IR site, e.g.
 #                         "investor-news-and-events/financial-releases/{year}/default.aspx"
 #                         for Netflix. Optional -- omit to use the default
 #                         ("news/default.aspx", e.g. Costco/CDW). Include a
@@ -353,7 +371,7 @@ sources:
     name: GE Vernova Inc.
     ticker: GEV
     ir_url: https://www.gevernova.com/investors
-    news_releases_path: 
+    news_releases_path:
       news/media-hub?tag=Investor+Relations&type[press_release]=press_release
   - slug: gen-digital
     name: Gen Digital Inc.
@@ -413,13 +431,14 @@ sources:
   - slug: ibm
     name: International Business Machines Corporation
     ticker: IBM
-    ir_url: https://newsroom.ibm.com/announcements
+    ir_url: https://www.ibm.com/investor
+    news_url: https://newsroom.ibm.com/
     news_releases_path: announcements
     notes: >
-      Technically, the correct url for IBM's investor relations website is https://www.ibm.com/investor
-      . But this does not have all press releases. For example, it did not have
-      the "Arvind Krishna's Letter to IBM Investors" published on 2026--07-14
-      which tanked IBM's stock by 25.21%. On the other hand
+      The investor relations site, https://www.ibm.com/investor,
+      does not have all the press releases. For example, it did not have
+      "Arvind Krishna's Letter to IBM Investors" published on 2026-07-14 which
+      tanked IBM's stock by 25.21%. On the other hand,
       https://newsroom.ibm.com/announcements contains all the press releases.
   - slug: ingersoll-rand
     name: Ingersoll Rand Inc.
@@ -468,14 +487,16 @@ sources:
   - slug: lockheed-martin
     name: Lockheed Martin Corporation
     ticker: LMT
-    ir_url: https://news.lockheedmartin.com/
+    ir_url: https://investors.lockheedmartin.com/
+    news_url: https://news.lockheedmartin.com/
     news_releases_path: news-releases?category=788
     notes: >
-      Technically, the correct url for LMT's investor relations website is
-      https://investors.lockheedmartin.com/ . But the press releases are in
-      https://news.lockheedmartin.com/news-releases . Here there are two
-      categories: (1) Investor and Finanacial News (2) Uncategorized. To
-      minimize the noise, only the first category is scraped for now.
+      The investor relations site, https://investors.lockheedmartin.com/, does
+      not have any press releases. They are hosted at 
+      https://news.lockheedmartin.com/news-releases. That listing has two
+      categories: (1) Investor and Financial News (2) Uncategorized. To
+      minimize the noise, only the first category (category=788) is scraped
+      for now.
   - slug: lumentum
     name: Lumentum Holdings Inc.
     ticker: LITE

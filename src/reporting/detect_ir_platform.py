@@ -213,6 +213,23 @@ GATED_SLUGS = {"tjx", "robinhood", "caseys"}
 # dependency on that larger function.
 
 
+def _resolve_scrape_url(row: dict) -> str:
+    """Return the URL to actually fetch for platform detection.
+
+    Mirrors utils.sources_utils.resolve_scrape_url() rather than importing
+    it, for the same reason _join_news_path() below mirrors join_url_path()
+    instead of depending on it: this module intentionally has no
+    dependency on utils/sources_utils.py.
+
+    Prefers "news_url" when set -- some sources (e.g. IBM, Lockheed Martin)
+    host their actual press-release platform on a different domain than
+    their official investor relations page ("ir_url"). Detection has to
+    fetch wherever the press releases actually live, or it will sniff the
+    wrong site's HTML and misclassify the platform as "unknown".
+    """
+    return row.get("news_url") or row.get("ir_url", "")
+
+
 def _join_news_path(ir_url: str, news_path: str) -> str:
     """Join *ir_url* with sources.yaml's "news_path" field, if any.
 
@@ -498,15 +515,20 @@ def detect_platform(
 
 def load_sources(yaml_path: Path) -> pd.DataFrame:
     """Load sources.yaml and return a DataFrame (slug, name, ticker, ir_url,
-    news_path, news_details_segment).
+    news_url, news_path, news_details_segment).
 
-    news_path (used by Q4 sites whose listing page is a sub-path of ir_url,
-    e.g. Travelers, Netflix -- see scrape_q4_ir.py's DEFAULT_NEWS_PATH) and
-    news_details_segment (used by Q4 sites whose "-details" path segment
-    isn't the default "news-details", e.g. Netflix's
-    "press-release-details") are carried through so detect_platform() can
-    fetch the actual listing page and recognize its actual link shape,
-    instead of assuming every Q4 site looks like the Costco/CDW default.
+    ir_url is the official investor relations page; news_url is optional
+    and set only for sources whose press releases live on a different host
+    (e.g. IBM, Lockheed Martin -- see _resolve_scrape_url()).
+
+    news_path (used by Q4 sites whose listing page is a sub-path of the
+    scrape URL, e.g. Travelers, Netflix -- see scrape_q4_ir.py's
+    DEFAULT_NEWS_PATH) and news_details_segment (used by Q4 sites whose
+    "-details" path segment isn't the default "news-details", e.g.
+    Netflix's "press-release-details") are carried through so
+    detect_platform() can fetch the actual listing page and recognize its
+    actual link shape, instead of assuming every Q4 site looks like the
+    Costco/CDW default.
     """
     try:
         from ruamel.yaml import YAML
@@ -526,17 +548,24 @@ def load_sources(yaml_path: Path) -> pd.DataFrame:
                 "name":                  rec.get("name", ""),
                 "ticker":                rec.get("ticker", ""),
                 "ir_url":                rec.get("ir_url", ""),
+                "news_url":              rec.get("news_url", ""),
                 "news_path":             rec.get("news_path", ""),
                 "news_details_segment":  rec.get("news_details_segment", ""),
             }
             for rec in records
         ],
-        columns=["slug", "name", "ticker", "ir_url", "news_path", "news_details_segment"],
+        columns=["slug", "name", "ticker", "ir_url", "news_url", "news_path", "news_details_segment"],
     )
 
 
 def find_row(df: pd.DataFrame, query: str) -> Optional[pd.Series]:
-    """Find a row matching *query* as slug, ticker, or ir_url hostname."""
+    """Find a row matching *query* as slug, ticker, or ir_url/news_url hostname.
+
+    Checks both URL fields' hosts (mirroring
+    utils.sources_utils.find_source_by_url()) so a query URL matches the
+    record regardless of whether it's the official IR host or the
+    press-release host.
+    """
     q = query.strip().lower()
 
     mask = df["slug"].str.lower() == q
@@ -556,11 +585,11 @@ def find_row(df: pd.DataFrame, query: str) -> Optional[pd.Series]:
     if query_host:
         def host_match(url: str) -> bool:
             try:
-                return urlparse(url).netloc.lower().lstrip("www.") == query_host
+                return bool(url) and urlparse(url).netloc.lower().lstrip("www.") == query_host
             except Exception:
                 return False
 
-        mask = df["ir_url"].apply(host_match)
+        mask = df["ir_url"].apply(host_match) | df["news_url"].apply(host_match)
         if mask.any():
             return df[mask].iloc[0]
 
@@ -574,9 +603,12 @@ def detect_platforms_parallel(df: pd.DataFrame, workers: int, timeout: int) -> p
     """Detect IR platform for every row in *df*, using a thread pool.
 
     Returns a new DataFrame with columns: slug, ticker, platform, ir_url.
-    Rows retain the same order as *df*.
+    Rows retain the same order as *df*. Detection fetches each row's
+    resolved scrape URL (news_url if set, else ir_url -- see
+    _resolve_scrape_url()), but the output still reports the record's
+    ir_url, since that's the stable identifier humans recognize.
     """
-    rows = df[["slug", "ticker", "ir_url", "news_path", "news_details_segment"]].to_dict("records")
+    rows = df[["slug", "ticker", "ir_url", "news_url", "news_path", "news_details_segment"]].to_dict("records")
 
     # Pre-allocate results list so we can fill by index (preserves order)
     results = [None] * len(rows)
@@ -584,7 +616,7 @@ def detect_platforms_parallel(df: pd.DataFrame, workers: int, timeout: int) -> p
     def detect_one(idx_row: tuple[int, dict]) -> tuple[int, str]:
         idx, row = idx_row
         platform = detect_platform(
-            row["ir_url"], timeout=timeout, slug=row.get("slug", ""),
+            _resolve_scrape_url(row), timeout=timeout, slug=row.get("slug", ""),
             news_path=row.get("news_path", ""),
             news_details_segment=row.get("news_details_segment", ""),
         )
@@ -700,13 +732,15 @@ def main(argv: Optional[list[str]] = None) -> int:
 
     if row is not None:
         ir_url                = row["ir_url"]
+        scrape_url            = _resolve_scrape_url(row.to_dict())
         slug                  = row.get("slug", "")
         ticker                = row.get("ticker", "")
         news_path             = row.get("news_path", "")
         news_details_segment  = row.get("news_details_segment", "")
     elif args.url:
-        # URL not in sources.yaml — detect directly
+        # URL not in sources.yaml — detect directly, nothing to fall back to
         ir_url                = args.url
+        scrape_url            = args.url
         slug                  = ""
         ticker                = ""
         news_path             = ""
@@ -716,7 +750,7 @@ def main(argv: Optional[list[str]] = None) -> int:
         return 1
 
     platform = detect_platform(
-        ir_url, timeout=args.timeout, slug=slug,
+        scrape_url, timeout=args.timeout, slug=slug,
         news_path=news_path, news_details_segment=news_details_segment,
     )
     result = pd.DataFrame([{

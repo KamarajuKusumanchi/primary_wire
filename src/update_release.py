@@ -15,18 +15,13 @@ Requires:
 import sys
 from pathlib import Path
 from typing import Optional
-from urllib.parse import urlparse
 
 import pandas as pd
 
-try:
-    from ruamel.yaml import YAML
-except ImportError:
-    sys.exit("Missing dependency. Install with: pip install ruamel.yaml")
+sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-# Assumes this script lives in <repo_root>/src/update_release.py
-REPO_ROOT = Path(__file__).resolve().parent.parent
-SOURCES_PATH = REPO_ROOT / "sources" / "sources.yaml"
+from utils.sources_utils import REPO_ROOT, SOURCES_PATH, find_source_by_url, load_sources  # noqa: E402
+
 CSV_FIELDS = ["slug", "ticker", "title", "url", "publish_date"]
 SORT_FIELDS = ["publish_date", "slug", "ticker", "title", "url"]
 
@@ -59,29 +54,6 @@ def confirm(text: str) -> bool:
 
 
 # ---------------------------------------------------------------------------
-# Source matching
-# ---------------------------------------------------------------------------
-
-def find_source_by_url(sources: list, url: str) -> Optional[dict]:
-    """
-    Match a press-release URL to a source in sources.yaml.
-    Tries prefix match on ir_url first, then falls back to hostname match.
-    """
-    for source in sources:
-        ir_url = source.get("ir_url", "")
-        if ir_url and url.startswith(ir_url):
-            return source
-
-    url_host = urlparse(url).netloc.lstrip("www.")
-    for source in sources:
-        ir_url = source.get("ir_url", "")
-        if ir_url and urlparse(ir_url).netloc.lstrip("www.") == url_host:
-            return source
-
-    return None
-
-
-# ---------------------------------------------------------------------------
 # CSV helpers
 # ---------------------------------------------------------------------------
 
@@ -109,11 +81,11 @@ def main():
     # 1. Prompt for URL
     url = prompt("Press-release URL")
 
-    # 2. Match URL to a source in sources/sources.yaml
-    yaml = YAML()
-    yaml.preserve_quotes = True
-    with open(SOURCES_PATH) as f:
-        sources = yaml.load(f)["sources"]
+    # 2. Match URL to a source in sources/sources.yaml.
+    # find_source_by_url() checks both "ir_url" and the optional "news_url"
+    # field, since a press-release URL for a source like Lockheed Martin
+    # lives under news_url's host, not ir_url's.
+    sources = load_sources(SOURCES_PATH)
 
     source = find_source_by_url(sources, url)
     if source is None:

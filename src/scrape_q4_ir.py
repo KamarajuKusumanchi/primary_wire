@@ -154,7 +154,9 @@ DEFAULT_SLUG = "costco"
 DEFAULT_TICKER = "COST"
 
 # DEFAULT_NEWS_PATH: listing-page path appended to a slug/ticker-derived
-# ir_url. Most Q4 themes (Costco, CDW) use a fixed listing URL and select
+# scrape URL (sources.yaml's news_url if set, else ir_url -- see
+# utils.sources_utils.resolve_scrape_url()). Most Q4 themes (Costco, CDW)
+# use a fixed listing URL and select
 # the year via an in-page dropdown instead (see _try_select_year()). Some
 # themes (e.g. Netflix) embed the year directly in the listing URL's path;
 # for those, sources.yaml's "news_path" field (or --news-path) should
@@ -799,7 +801,7 @@ def resolve_source(
     url/slug/ticker are plain strings (never None); fetch_detail_pages is a
     plain bool. Logs warnings for any fields that could not be resolved.
     """
-    from utils.sources_utils import find_source, find_source_by_ir_url, load_sources, resolve_source_identity
+    from utils.sources_utils import find_source, find_source_by_url, load_sources, resolve_source_identity
 
     peeked_record: Optional[dict] = None
     try:
@@ -815,7 +817,7 @@ def resolve_source(
             else:
                 peeked_record = find_source(sources, ticker, field="ticker")
         elif url:
-            peeked_record = find_source_by_ir_url(sources, url)
+            peeked_record = find_source_by_url(sources, url)
     except Exception as exc:
         logger.warning("Could not pre-load sources.yaml (%s); using defaults.", exc)
 
@@ -923,7 +925,8 @@ def build_arg_parser() -> argparse.ArgumentParser:
     source.add_argument(
         "--news-path", default=None, metavar="PATH",
         help=(
-            "Listing path appended to a slug/ticker-derived ir_url, e.g. "
+            "Listing path appended to a slug/ticker-derived scrape URL "
+            "(news_url if set, else ir_url), e.g. "
             "'investor-news-and-events/financial-releases/{year}/default.aspx' "
             "(default: 'news/default.aspx'). Include a literal '{year}' path "
             "segment for themes whose listing URL is year-specific (e.g. "
