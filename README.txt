@@ -164,43 +164,9 @@ Usage:
 Chrome is assumed to already be installed. No ''playwright install'' download
 is needed.
 
-==== scrape_costco.py ====
-
-A thin wrapper around scrape_q4_ir.py for Costco specifically. Reads the
-Costco entry from sources.yaml to get the IR URL and ticker, then delegates
-all scraping and output to scrape_q4_ir. Costco's Q4 theme embeds dates in
-listing-page cards, so detail-page fetches are not needed.
-
-Usage:
-
-  # Preview what would be written, without writing anything
-  python src/scrape_costco.py --dry-run
-
-  # Scrape and write to data/YYYY/YYYY-MM-DD.csv
-  python src/scrape_costco.py
-
-  # Scrape a specific year
-  python src/scrape_costco.py --year 2025
-
-All flags supported by scrape_q4_ir.py (--year, --start-year, --end-year,
---since, --until, --format, --dry-run, --verbose, etc.) are passed through.
-
-==== scrape_cdw.py ====
-
-A thin wrapper around scrape_q4_ir.py for CDW specifically. Identical in
-structure to scrape_costco.py, except that CDW's Q4 theme does not embed dates
-in listing-page cards — so --fetch-detail-pages is enabled by default. Pass
---no-fetch-detail-pages to disable it.
-
-Usage:
-
-  # Preview what would be written, without writing anything
-  python src/scrape_cdw.py --dry-run
-
-  # Scrape and write to data/YYYY/YYYY-MM-DD.csv
-  python src/scrape_cdw.py
-
-All flags supported by scrape_q4_ir.py are passed through.
+There are no company-specific wrapper scripts (e.g. a dedicated Costco or CDW
+script) -- every Q4-powered IR site, including Costco and CDW, is scraped
+through scrape_q4_ir.py directly via --slug or --ticker, as shown above.
 
 ===== Guidelines for automated contributions =====
 
@@ -244,8 +210,6 @@ functional but not yet complete, and more tooling is planned.
     src/
       scrape_all.py       Orchestrate all scrapers in scraper_config.yaml (incl. --smoke-test)
       scrape_q4_ir.py     Scrape any Q4 Inc. IR site for press release links
-      scrape_costco.py    Wrapper: scrape Costco's IR page via scrape_q4_ir
-      scrape_cdw.py       Wrapper: scrape CDW's IR page via scrape_q4_ir
       update_source.py    Interactively add or update an entry in sources.yaml
       update_release.py   Interactively add a press release to a daily CSV file
       reporting/          Read-only diagnostic scripts (see docs/reporting.txt)

@@ -6,9 +6,7 @@ Shared utilities for reading sources/sources.yaml.
 
 Imported by get_source.py, update_source.py, scrape_q4_ir.py,
 scrape_investorroom.py, scrape_notified.py, scrape_notified_gated.py,
-src/reporting/detect_ir_platform.py, src/reporting/check_scraper_coverage.py,
-and any company-specific scraper wrappers (scrape_cdw.py, scrape_costco.py,
-...).
+src/reporting/detect_ir_platform.py, and src/reporting/check_scraper_coverage.py.
 
 ruamel.yaml is only imported lazily, inside load_sources() (the one
 function that actually needs it), rather than at module level -- so a

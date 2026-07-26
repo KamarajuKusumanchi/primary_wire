@@ -3,8 +3,8 @@ tests/test_sources_utils.py
 
 Covers sources_utils.join_url_path() -- the helper that replaced the naive
 `base_url.rstrip("/") + path` concatenation used across the scrapers (see
-sources_utils.py, scrape_notified.py, scrape_investorroom.py, scrape_cdw.py,
-scrape_costco.py, scrape_company_template.py).
+sources_utils.py, scrape_notified.py, scrape_investorroom.py,
+scrape_q4_ir.py).
 
 Run with:
     uv run pytest
@@ -18,7 +18,7 @@ from pathlib import Path
 import pytest
 
 # src/ is a flat module directory, not an installed package (matches the
-# sys.path.insert() pattern already used by scrape_cdw.py etc. to import
+# sys.path.insert() pattern already used by get_source.py etc. to import
 # sibling modules). The three shared utility modules live in src/utils/,
 # a regular subpackage of src/, so src/ is what needs to be on sys.path.
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
