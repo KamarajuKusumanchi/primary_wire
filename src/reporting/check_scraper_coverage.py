@@ -139,8 +139,8 @@ def load_platform_map(path: Path = IR_PLATFORM_CSV_PATH) -> pd.DataFrame:
     return pd.read_csv(path, usecols=["slug", "platform"], dtype=str, keep_default_na=False)
 
 
-def missing_coverage_csv(uncovered: list[dict], platform_map: pd.DataFrame) -> str:
-    """Return CSV text (with header) for slug,ticker,platform,scrape_url of *uncovered*.
+def build_missing_df(uncovered: list[dict], platform_map: pd.DataFrame) -> pd.DataFrame:
+    """Return a slug,ticker,platform,scrape_url DataFrame for *uncovered*.
 
     *uncovered* is a list of sources.yaml records (dicts with at least
     slug/ticker/ir_url, and optionally news_url, news_path,
@@ -159,6 +159,10 @@ def missing_coverage_csv(uncovered: list[dict], platform_map: pd.DataFrame) -> s
     out on stderr so the gap is visible instead of silently blank. Because
     resolve_listing_url() can't guess a listing path for "unknown", those
     rows fall back to showing just the site root.
+
+    This is the single source of truth for "uncovered + platform" used by
+    both missing_coverage_csv() and platform_breakdown(), so the two can't
+    disagree about which platform a given missing slug got assigned.
     """
     df = pd.DataFrame(
         uncovered,
@@ -166,10 +170,9 @@ def missing_coverage_csv(uncovered: list[dict], platform_map: pd.DataFrame) -> s
     )
     if df.empty:
         # Nothing uncovered -- skip the merge (platform_map may not even
-        # have a "slug" column in this case) and emit a header-only CSV.
-        return pd.DataFrame(columns=["slug", "ticker", "platform", "scrape_url"]).to_csv(
-            index=False, lineterminator="\n"
-        )
+        # have a "slug" column in this case) and return an empty frame
+        # with the right columns.
+        return pd.DataFrame(columns=["slug", "ticker", "platform", "scrape_url"])
     # Records that never set these optional sources.yaml fields come back
     # from pd.DataFrame() as NaN (not "" or missing), and NaN is truthy in
     # Python -- resolve_scrape_url()'s "news_url or ir_url" precedence (and
@@ -207,8 +210,171 @@ def missing_coverage_csv(uncovered: list[dict], platform_map: pd.DataFrame) -> s
         axis=1,
     )
 
-    df = df[["slug", "ticker", "platform", "scrape_url"]]
-    return df.to_csv(index=False, lineterminator="\n")
+    return df[["slug", "ticker", "platform", "scrape_url"]]
+
+
+def missing_coverage_csv(missing_df: pd.DataFrame) -> str:
+    """Return CSV text (with header) for a slug,ticker,platform,scrape_url DataFrame.
+
+    *missing_df* is the output of build_missing_df().
+    """
+    return missing_df.to_csv(index=False, lineterminator="\n")
+
+
+# scraper_config.yaml group names that don't match the platform name
+# detect_ir_platform.py's detect_platform() assigns for the same platform
+# (see that module's detect_platform() return values: "investorroom",
+# "notified", "notified_gated", "q4", "unknown"). Every group not listed
+# here is assumed to already match its platform name 1:1 (true today for
+# investorroom, notified, notified_gated).
+CONFIG_GROUP_TO_PLATFORM = {
+    "q4_ir": "q4",
+}
+
+# Platforms that detect_platform() can only ever assign via a curated,
+# manually-maintained override list rather than from an actual page
+# signal -- see detect_ir_platform.py's GATED_SLUGS docstring: "there's no
+# general-purpose signal yet to detect 'gated' automatically". A slug not
+# already on that list will be classified under whatever platform it
+# would be *without* the override (currently "notified"), never flagged
+# as needing the gated variant. So counting "missing" rows tagged with
+# one of these platforms doesn't tell you how many uncovered sources
+# actually need that variant -- it only tells you how many of the
+# already-curated slugs happen to be uncovered, which for a scraper this
+# targeted should usually be zero anyway. platform_breakdown() leaves
+# these platforms' "missing" cell as NaN rather than 0 for that reason:
+# 0 would claim "no missing sources need this", when the honest state is
+# "this pipeline can't tell you that".
+UNMEASURABLE_MISSING_PLATFORMS = {"notified_gated"}
+
+
+def platform_breakdown(
+    groups_by_slug: dict[str, list[str]],
+    covered: list[dict],
+    missing_df: pd.DataFrame,
+) -> pd.DataFrame:
+    """Return a per-platform configured/missing breakdown, indexed by platform.
+
+    "configured" counts *covered* sources.yaml slugs, grouped by the
+    scraper_config.yaml group they're configured under (mapped to the
+    matching detect_platform() name via CONFIG_GROUP_TO_PLATFORM, e.g.
+    "q4_ir" -> "q4"). Every group in scraper_config.yaml is fully
+    enumerated, so a platform with no configured sources is a real 0
+    here, not a gap in measurement -- "configured" is always filled.
+
+    "missing" counts *missing_df* rows grouped by its already-computed
+    "platform" column (see build_missing_df() -- detected from
+    ir_platform.csv, "unknown" fallback included). "configured" and
+    "missing" come from two different classification schemes -- one is
+    "which scraper module is this slug configured under", the other is
+    "what did detect_ir_platform.py's site fingerprint find" -- so a
+    platform can legitimately appear in one without the other.
+
+    Platforms in UNMEASURABLE_MISSING_PLATFORMS (currently
+    "notified_gated") always get NaN for "missing", regardless of what
+    (if anything) is in missing_df, since that pipeline has no way to
+    positively identify an uncovered source as needing that variant --
+    see UNMEASURABLE_MISSING_PLATFORMS's docstring. Every other platform
+    with zero rows in missing_df is left as NaN too (rather than filled
+    with 0), on the same "don't assert a count you didn't actually
+    measure" principle, though in practice this only matters if a new,
+    not-yet-detected platform shows up in scraper_config.yaml.
+    """
+    configured_counts = (
+        pd.Series(
+            [
+                CONFIG_GROUP_TO_PLATFORM.get(group, group)
+                for record in covered
+                for group in groups_by_slug.get(record.get("slug", ""), [])
+            ],
+            dtype="object",
+        )
+        .value_counts()
+        .rename("configured")
+    )
+
+    if missing_df.empty or "platform" not in missing_df.columns:
+        missing_counts = pd.Series(dtype="float64", name="missing")
+    else:
+        missing_counts = missing_df["platform"].value_counts().rename("missing")
+
+    table = pd.concat([configured_counts, missing_counts], axis=1)
+    # "configured" is safe to fill with 0: scraper_config.yaml fully
+    # enumerates its groups, so absence really does mean zero. "missing"
+    # is deliberately left as NaN wherever it wasn't populated above --
+    # see the docstring above and UNMEASURABLE_MISSING_PLATFORMS.
+    table["configured"] = table["configured"].fillna(0).astype(int)
+    for platform in UNMEASURABLE_MISSING_PLATFORMS:
+        if platform in table.index:
+            table.loc[platform, "missing"] = pd.NA
+
+    # "total" and "percentage_done" treat a NaN "missing" as 0 -- i.e.
+    # "assume none missing until proven otherwise" -- even though the
+    # "missing" column itself stays blank for those rows (see above). This
+    # means total/percentage_done are answering a slightly different,
+    # more optimistic question than "missing" is: "how done are we,
+    # assuming nothing currently unmeasurable turns out to be missing"
+    # rather than "how done are we, for certain". Worth remembering when
+    # reading notified_gated's 100%: it's a best-case assumption, not a
+    # verified one, since detect_ir_platform.py's GATED_SLUGS override
+    # (see UNMEASURABLE_MISSING_PLATFORMS's docstring) has no way to
+    # surface an actual missing gated source if one exists.
+    missing_filled = table["missing"].fillna(0)
+    table["total"] = table["configured"] + missing_filled
+    table["percentage_done"] = (100 * table["configured"] / table["total"]).round(1)
+    table = table[["total", "configured", "missing", "percentage_done"]]
+
+    return table.sort_values("missing", ascending=False, na_position="last")
+
+
+def add_total_row(table: pd.DataFrame, label: str = "TOTAL") -> pd.DataFrame:
+    """Return *table* with a final row summing "configured" and "missing".
+
+    "missing" is summed with skipna=True (pandas' default), so a platform
+    left NaN there (see platform_breakdown()) contributes nothing to the
+    total -- which is correct, not a gap: an unmeasurable-platform slug
+    that's actually uncovered is already counted under whatever platform
+    it *was* detected as (see UNMEASURABLE_MISSING_PLATFORMS's docstring),
+    so it's already in another row's "missing" and shouldn't be added
+    again here. That's also why this total is expected to tie out to the
+    top-of-report "Sources in sources.yaml" / "With automated scraper" /
+    "Without automated scraper" figures -- it's a useful sanity check
+    that the platform breakdown accounts for every source exactly once.
+    """
+    configured_sum = table["configured"].sum()
+    missing_sum = table["missing"].sum()  # skipna=True by default
+    total_sum = configured_sum + missing_sum
+    pct_sum = round(100 * configured_sum / total_sum, 1) if total_sum else 0.0
+    totals = pd.DataFrame(
+        [[total_sum, configured_sum, missing_sum, pct_sum]],
+        columns=["total", "configured", "missing", "percentage_done"],
+        index=[label],
+    )
+    return pd.concat([table, totals])
+
+
+def render_platform_breakdown(table: pd.DataFrame) -> str:
+    """Render platform_breakdown()'s (optionally add_total_row()'d) table.
+
+    A blank "missing"/"total"/"percentage_done" cell means "not
+    measurable from current data" (see platform_breakdown()'s docstring)
+    -- deliberately distinct from a "0" cell, which means "measured, and
+    the count/percentage is zero".
+    """
+    header = (
+        f"  {'platform':<16}{'total':>8}{'configured':>12}"
+        f"{'missing':>10}{'percentage_done':>17}"
+    )
+    lines = ["", "Coverage by platform:", "", header]
+    for platform, row in table.iterrows():
+        total_display = "" if pd.isna(row["total"]) else str(int(row["total"]))
+        missing_display = "" if pd.isna(row["missing"]) else str(int(row["missing"]))
+        pct_display = "" if pd.isna(row["percentage_done"]) else f"{row['percentage_done']:.1f}%"
+        lines.append(
+            f"  {platform:<16}{total_display:>8}{int(row['configured']):>12}"
+            f"{missing_display:>10}{pct_display:>17}"
+        )
+    return "\n".join(lines) + "\n"
 
 
 def render_summary(total: int, n_covered: int, pct: float, problems: list[str]) -> str:
@@ -296,30 +462,35 @@ def main(argv: list[str] | None = None) -> int:
             return f"config: {'/'.join(groups_by_slug[slug])}"
         return "none"
 
-    # Only modes that actually emit the CSV need ir_platform.csv, so only
-    # load it (and only warn about it being missing/stale) in those modes.
-    # Otherwise a plain summary run would print a spurious warning about a
-    # file it never uses.
-    needs_platform_map = uncovered and (args.missing_only or args.write_reports)
+    # Every mode except --missing-only ends up printing/writing render_summary()
+    # output, and that output now includes the per-platform breakdown, so
+    # platform_map (and therefore missing_df, built from it) is needed
+    # everywhere there's anything uncovered -- not just --missing-only /
+    # --write-reports as before.
+    needs_platform_map = bool(uncovered)
     platform_map = load_platform_map(args.ir_platform) if needs_platform_map else pd.DataFrame()
+    missing_df = build_missing_df(uncovered, platform_map)
+    breakdown = add_total_row(platform_breakdown(groups_by_slug, covered, missing_df))
 
     exit_code = 1 if args.strict and (uncovered or problems) else 0
 
     if args.write_reports:
         # Single pass: both files are built from the same in-memory
-        # uncovered/problems computed above, so they can't disagree the way
-        # two separate `check_scraper_coverage.py` invocations could if
-        # sources.yaml or scraper_config.yaml changed in between.
+        # uncovered/problems/missing_df computed above, so they can't
+        # disagree the way two separate `check_scraper_coverage.py`
+        # invocations could if sources.yaml or scraper_config.yaml changed
+        # in between.
         REPORTS_LATEST_DIR.mkdir(parents=True, exist_ok=True)
-        SUMMARY_OUT_PATH.write_text(render_summary(total, n_covered, pct, problems))
-        MISSING_OUT_PATH.write_text(missing_coverage_csv(uncovered, platform_map))
+        summary_text = render_summary(total, n_covered, pct, problems) + render_platform_breakdown(breakdown)
+        SUMMARY_OUT_PATH.write_text(summary_text)
+        MISSING_OUT_PATH.write_text(missing_coverage_csv(missing_df))
         print(f"wrote {SUMMARY_OUT_PATH.relative_to(REPO_ROOT)} "
               f"and {MISSING_OUT_PATH.relative_to(REPO_ROOT)}")
         return exit_code
 
     if args.missing_only:
         # Pure CSV, nothing else -- no summary lines, no problems section.
-        print(missing_coverage_csv(uncovered, platform_map), end="")
+        print(missing_coverage_csv(missing_df), end="")
         return exit_code
 
     if args.verbose:
@@ -332,6 +503,7 @@ def main(argv: list[str] | None = None) -> int:
         print()
 
     print(render_summary(total, n_covered, pct, problems), end="")
+    print(render_platform_breakdown(breakdown), end="")
     return exit_code
 
 
