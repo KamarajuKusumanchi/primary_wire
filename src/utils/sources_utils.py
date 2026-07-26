@@ -5,8 +5,16 @@ src/utils/sources_utils.py
 Shared utilities for reading sources/sources.yaml.
 
 Imported by get_source.py, update_source.py, scrape_q4_ir.py,
-scrape_investorroom.py, scrape_notified.py, and any company-specific
-scraper wrappers (scrape_cdw.py, scrape_costco.py, ...).
+scrape_investorroom.py, scrape_notified.py, scrape_notified_gated.py,
+src/reporting/detect_ir_platform.py, src/reporting/check_scraper_coverage.py,
+and any company-specific scraper wrappers (scrape_cdw.py, scrape_costco.py,
+...).
+
+ruamel.yaml is only imported lazily, inside load_sources() (the one
+function that actually needs it), rather than at module level -- so a
+caller that only wants the pure URL-building helpers below (e.g.
+resolve_scrape_url, join_url_path, resolve_listing_url) can import this
+module without being forced to have ruamel.yaml installed.
 """
 
 from __future__ import annotations
@@ -17,10 +25,7 @@ from pathlib import Path
 from typing import Optional
 from urllib.parse import parse_qsl, urlparse, urlunparse
 
-try:
-    from ruamel.yaml import YAML
-except ImportError:
-    sys.exit("Missing dependency. Install with: pip install ruamel.yaml")
+from utils.q4_link_pattern import DEFAULT_NEWS_PATH, strip_year_placeholder
 
 logger = logging.getLogger(__name__)
 
@@ -60,6 +65,10 @@ def load_sources(sources_path: Path = SOURCES_PATH) -> list[dict]:
     so callers that write the file back (e.g. update_source.py) won't mangle
     it. Read-only callers can ignore that detail.
     """
+    try:
+        from ruamel.yaml import YAML
+    except ImportError:
+        sys.exit("Missing dependency. Install with: pip install ruamel.yaml")
     if not sources_path.exists():
         sys.exit(f"sources.yaml not found at {sources_path}")
     yaml = YAML()
@@ -143,6 +152,81 @@ def resolve_scrape_url(record: dict) -> str:
     Returns "" if neither field is set.
     """
     return record.get("news_url") or record.get("ir_url", "")
+
+
+# Platform-specific listing-path field name and fallback default. The
+# field name mirrors what each scraper's resolve_source() reads from a
+# sources.yaml record; the default value is the same constant each scraper
+# falls back to when that field isn't set -- see the DEFAULT_NEWS_PATH /
+# DEFAULT_NEWS_RELEASES_PATH constants  immediately below, which are the
+# actual single source of truth (scrape_investorroom.py, scrape_notified.py,
+# and scrape_notified_gated.py import theirs from here instead of each
+# defining their own, the same way scrape_q4_ir.py already imports
+# DEFAULT_NEWS_PATH from utils/q4_link_pattern.py). Retyping the same value
+# in more than one place is exactly how this table and each scraper's own
+# constant could silently drift apart; importing one shared name everywhere
+# is what prevents that.
+#
+# notified_gated's default is tuned for TJX; in practice every currently
+# known gated slug sets its own news_releases_path in sources.yaml, so this
+# default rarely applies.
+INVESTORROOM_DEFAULT_NEWS_RELEASES_PATH = "news-releases"
+NOTIFIED_DEFAULT_NEWS_RELEASES_PATH = "news-releases"
+NOTIFIED_GATED_DEFAULT_NEWS_RELEASES_PATH = "investors/press-releases"
+
+# Q4 is the only platform whose listing-path field is "news_path" rather
+# than "news_releases_path"; see resolve_listing_url()'s "{year}" handling
+# below for the other Q4-specific wrinkle.
+_LISTING_PATH_DEFAULTS: dict[str, tuple[str, str]] = {
+    "q4": ("news_path", DEFAULT_NEWS_PATH),
+    "investorroom": ("news_releases_path", INVESTORROOM_DEFAULT_NEWS_RELEASES_PATH),
+    "notified": ("news_releases_path", NOTIFIED_DEFAULT_NEWS_RELEASES_PATH),
+    "notified_gated": ("news_releases_path", NOTIFIED_GATED_DEFAULT_NEWS_RELEASES_PATH),
+}
+
+
+def resolve_listing_url(record: dict, platform: str) -> str:
+    """Return the full press-release *listing* URL a scraper would fetch.
+
+    resolve_scrape_url() only returns the site root (news_url if set, else
+    ir_url) -- e.g. "https://news.lockheedmartin.com/" for Lockheed Martin,
+    not the actual listing page a human (or scraper) needs,
+    "https://news.lockheedmartin.com/news-releases?category=788". This
+    function fills in that gap by joining the platform-appropriate listing
+    path onto the site root, so reports can show a URL that's directly
+    pasteable into a browser and matches what the scraper actually parses.
+
+    *platform* (one of "q4", "investorroom", "notified", "notified_gated",
+    or "unknown"/anything else) selects which sources.yaml field holds the
+    listing path and what its platform-specific default is -- see
+    _LISTING_PATH_DEFAULTS. This mirrors each scraper's own
+    resolve_source()/resolve_field_precedence() field lookup, minus the
+    CLI-override layer (reports have no CLI flags of their own to override
+    with).
+
+    For "q4", a "{year}" placeholder in the listing path (e.g. Netflix's
+    news_path) is dropped rather than filled in -- like
+    detect_ir_platform.py's own detection fetch, this just needs *a*
+    browsable listing URL, not one pinned to a specific year.
+
+    For "unknown" (or any platform not in _LISTING_PATH_DEFAULTS), there's
+    no reliable field to join -- we don't know what shape this site's
+    listing path takes -- so the site root from resolve_scrape_url() is
+    returned unchanged.
+    """
+    base_url = resolve_scrape_url(record)
+    if not base_url:
+        return ""
+
+    field_default = _LISTING_PATH_DEFAULTS.get(platform)
+    if field_default is None:
+        return base_url
+
+    field_name, default_path = field_default
+    path = record.get(field_name) or default_path
+    if platform == "q4":
+        path = strip_year_placeholder(path)
+    return join_url_path(base_url, path)
 
 
 def load_source_record(slug: str, sources_path: Path = SOURCES_PATH) -> dict:

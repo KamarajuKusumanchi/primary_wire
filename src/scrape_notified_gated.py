@@ -140,6 +140,7 @@ try:
 except ImportError:
     sys.exit("Missing dependency. Install with: pip install beautifulsoup4 lxml")
 
+from utils.sources_utils import NOTIFIED_GATED_DEFAULT_NEWS_RELEASES_PATH as DEFAULT_NEWS_RELEASES_PATH
 from utils.sources_utils import join_url_path
 from utils.scrape_utils import (
     NewsItem as _BaseNewsItem,
@@ -178,7 +179,8 @@ DEFAULT_BASE_URL = "https://investor.tjx.com"
 # scrape_notified.py's convention.
 
 # --- Hardcoded, single-source config (see "Site-specific config" above) ---
-DEFAULT_NEWS_RELEASES_PATH = "investors/press-releases"
+# DEFAULT_NEWS_RELEASES_PATH is imported above from utils.sources_utils
+# (single source of truth shared with the reporting scripts).
 FORM_ID = "widget_form_base"
 
 DEFAULT_TIMEOUT_MS = 45_000  # per-navigation timeout for the browser step

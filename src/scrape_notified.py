@@ -117,6 +117,7 @@ try:
 except ImportError:
     sys.exit("Missing dependency. Install with: pip install beautifulsoup4 lxml")
 
+from utils.sources_utils import NOTIFIED_DEFAULT_NEWS_RELEASES_PATH as DEFAULT_NEWS_RELEASES_PATH
 from utils.sources_utils import join_url_path
 from utils.scrape_utils import (
     NewsItem as _BaseNewsItem,
@@ -150,7 +151,8 @@ DEFAULT_SLUG = "abbvie"
 DEFAULT_TICKER = "ABBV"
 DEFAULT_BASE_URL = "https://investors.abbvie.com"
 
-DEFAULT_NEWS_RELEASES_PATH = "news-releases"
+# DEFAULT_NEWS_RELEASES_PATH is imported above from utils.sources_utils
+# (single source of truth shared with the reporting scripts).
 # Actual path used for a given source resolves as (highest wins):
 #   --news-releases-path CLI flag
 #   > sources.yaml "news_releases_path" field for the matched source

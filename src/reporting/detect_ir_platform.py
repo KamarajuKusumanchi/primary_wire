@@ -83,12 +83,18 @@ Usage
 Output
 ------
 CSV with header row: slug,ticker,platform,scrape_url
-scrape_url is the URL actually fetched for detection -- news_url if set,
-else ir_url (see _resolve_scrape_url()) -- so the reported platform always
-lines up with the URL it was detected from. For the handful of sources
-where news_url differs from ir_url (e.g. IBM, Lockheed Martin), ir_url
-itself is intentionally NOT in this output; look it up in sources.yaml by
-slug if you need it.
+scrape_url is the full press-release *listing* URL for the detected
+platform -- the site root actually fetched for detection (news_url if
+set, else ir_url; see resolve_scrape_url()) plus that platform's listing
+path (sources.yaml's "news_path" for q4, "news_releases_path" for
+investorroom/notified/notified_gated; see resolve_listing_url()) -- so
+it's directly pasteable into a browser to see the same page the platform
+was detected from, e.g. https://news.lockheedmartin.com/news-releases?category=788
+rather than just https://news.lockheedmartin.com/. For "unknown" rows,
+there's no reliable listing path to join, so scrape_url falls back to the
+bare site root. For the handful of sources where news_url differs from
+ir_url (e.g. IBM, Lockheed Martin), ir_url itself is intentionally NOT in
+this output; look it up in sources.yaml by slug if you need it.
 To view this as a human-friendly fixed-width table, pipe it through the
 companion script, e.g.:
   python src/reporting/detect_ir_platform.py --all | python src/print_csv_table.py
@@ -120,6 +126,11 @@ from utils.q4_link_pattern import (  # noqa: E402
     DEFAULT_NEWS_PATH,
     q4_news_link_re,
     strip_year_placeholder,
+)
+from utils.sources_utils import (  # noqa: E402
+    join_url_path,
+    resolve_listing_url,
+    resolve_scrape_url,
 )
 
 # curl_cffi impersonates Chrome's TLS fingerprint (JA3/JA4), which is required
@@ -208,52 +219,21 @@ GATED_SLUGS = {"tjx", "robinhood", "caseys"}
 # scrapes -- see that script's DEFAULT_NEWS_PATH / resolve_source()). If we
 # only ever fetch ir_url itself, sites like this never show the Q4
 # news-details links and get misclassified as "unknown".
-#
-# _join_news_path mirrors join_url_path() in utils/sources_utils.py (used by
-# every scraper's resolve_source()) rather than importing it. This is no
-# longer a blanket policy across the module -- the Q4 link regex above IS
-# imported from utils/q4_link_pattern.py, since that pattern is genuinely
-# identical to scrape_q4_ir.py's and worth keeping in one place. join_url_path()
-# handles a broader general-purpose URL-joining job than the narrow "{year}"-
-# stripping this function needs, so it stays a small local copy rather than a
-# dependency on that larger function.
-
-
-def _resolve_scrape_url(row: dict) -> str:
-    """Return the URL to actually fetch for platform detection.
-
-    Mirrors utils.sources_utils.resolve_scrape_url() rather than importing
-    it, for the same reason _join_news_path() below mirrors join_url_path()
-    instead of depending on it: this module intentionally has no
-    dependency on utils/sources_utils.py.
-
-    Prefers "news_url" when set -- some sources (e.g. IBM, Lockheed Martin)
-    host their actual press-release platform on a different domain than
-    their official investor relations page ("ir_url"). Detection has to
-    fetch wherever the press releases actually live, or it will sniff the
-    wrong site's HTML and misclassify the platform as "unknown".
-    """
-    return row.get("news_url") or row.get("ir_url", "")
 
 
 def _join_news_path(ir_url: str, news_path: str) -> str:
     """Join *ir_url* with sources.yaml's "news_path" field, if any.
 
-    Tolerates a missing/extra slash between the two, matching
-    utils.sources_utils.join_url_path(). Returns *ir_url* unchanged if
-    *news_path* is empty.
-
-    A "{year}" placeholder (used by year-specific listing URLs, e.g.
-    Netflix's) is dropped rather than filled in, via the shared
-    strip_year_placeholder() -- detection only needs *some* listing page to
-    check for platform fingerprints, not a particular year, mirroring
-    scrape_q4_ir.py's _resolve_year_url() when no --year is given.
+    Thin wrapper around utils.sources_utils.join_url_path() that also drops
+    a "{year}" placeholder (used by year-specific listing URLs, e.g.
+    Netflix's) via strip_year_placeholder() first -- detection only needs
+    *some* listing page to check for platform fingerprints, not a
+    particular year, mirroring scrape_q4_ir.py's _resolve_year_url() when
+    no --year is given. Returns *ir_url* unchanged if *news_path* is empty.
     """
     if not news_path:
         return ir_url
-    path = strip_year_placeholder(news_path)
-    base = ir_url.rstrip("/")
-    return base + "/" + path.lstrip("/")
+    return join_url_path(ir_url, strip_year_placeholder(news_path))
 
 # ---------------------------------------------------------------------------
 # HTTP fetch
@@ -521,11 +501,11 @@ def detect_platform(
 
 def load_sources(yaml_path: Path) -> pd.DataFrame:
     """Load sources.yaml and return a DataFrame (slug, name, ticker, ir_url,
-    news_url, news_path, news_details_segment).
+    news_url, news_path, news_details_segment, news_releases_path).
 
     ir_url is the official investor relations page; news_url is optional
     and set only for sources whose press releases live on a different host
-    (e.g. IBM, Lockheed Martin -- see _resolve_scrape_url()).
+    (e.g. IBM, Lockheed Martin -- see resolve_scrape_url()).
 
     news_path (used by Q4 sites whose listing page is a sub-path of the
     scrape URL, e.g. Travelers, Netflix -- see scrape_q4_ir.py's
@@ -535,6 +515,12 @@ def load_sources(yaml_path: Path) -> pd.DataFrame:
     detect_platform() can fetch the actual listing page and recognize its
     actual link shape, instead of assuming every Q4 site looks like the
     Costco/CDW default.
+
+    news_releases_path (used by InvestorRoom/Notified/notified_gated sites,
+    e.g. Lockheed Martin's "news-releases?category=788" -- see
+    scrape_investorroom.py's / scrape_notified.py's DEFAULT_NEWS_RELEASES_PATH)
+    is carried through so resolve_listing_url() can report the full
+    listing URL for those platforms too, not just Q4's.
     """
     try:
         from ruamel.yaml import YAML
@@ -557,10 +543,14 @@ def load_sources(yaml_path: Path) -> pd.DataFrame:
                 "news_url":              rec.get("news_url", ""),
                 "news_path":             rec.get("news_path", ""),
                 "news_details_segment":  rec.get("news_details_segment", ""),
+                "news_releases_path":    rec.get("news_releases_path", ""),
             }
             for rec in records
         ],
-        columns=["slug", "name", "ticker", "ir_url", "news_url", "news_path", "news_details_segment"],
+        columns=[
+            "slug", "name", "ticker", "ir_url", "news_url",
+            "news_path", "news_details_segment", "news_releases_path",
+        ],
     )
 
 
@@ -611,14 +601,21 @@ def detect_platforms_parallel(df: pd.DataFrame, workers: int, timeout: int) -> p
     Returns a new DataFrame with columns: slug, ticker, platform, scrape_url.
     Rows retain the same order as *df*. Detection fetches each row's
     resolved scrape URL (news_url if set, else ir_url -- see
-    _resolve_scrape_url()), and the output reports that same resolved
-    scrape_url, so the platform column always lines up with the URL it was
-    actually detected from. (Previously this reported the record's ir_url
-    unconditionally, which was misleading for sources like IBM/Lockheed
-    Martin whose press releases are actually fetched from a different
-    news_url host.)
+    resolve_scrape_url()), but the output's scrape_url column reports the
+    full press-release *listing* URL for the detected platform instead --
+    see resolve_listing_url() -- so a reader can paste this column
+    directly into a browser and land on the same listing page the platform
+    was detected from (and that a scraper would parse), rather than just
+    the site root. (Previously this reported the bare resolved scrape URL
+    unconditionally, which for InvestorRoom/Notified sources with a
+    non-default news_releases_path -- e.g. Lockheed Martin's
+    "news-releases?category=788" -- looked plausible but wasn't the actual
+    listing page.)
     """
-    rows = df[["slug", "ticker", "ir_url", "news_url", "news_path", "news_details_segment"]].to_dict("records")
+    rows = df[
+        ["slug", "ticker", "ir_url", "news_url", "news_path",
+         "news_details_segment", "news_releases_path"]
+    ].to_dict("records")
 
     # Pre-allocate results list so we can fill by index (preserves order)
     results = [None] * len(rows)
@@ -626,7 +623,7 @@ def detect_platforms_parallel(df: pd.DataFrame, workers: int, timeout: int) -> p
     def detect_one(idx_row: tuple[int, dict]) -> tuple[int, str]:
         idx, row = idx_row
         platform = detect_platform(
-            _resolve_scrape_url(row), timeout=timeout, slug=row.get("slug", ""),
+            resolve_scrape_url(row), timeout=timeout, slug=row.get("slug", ""),
             news_path=row.get("news_path", ""),
             news_details_segment=row.get("news_details_segment", ""),
         )
@@ -640,7 +637,9 @@ def detect_platforms_parallel(df: pd.DataFrame, workers: int, timeout: int) -> p
 
     result_df = df[["slug", "ticker"]].copy()
     result_df["platform"] = results
-    result_df["scrape_url"] = [_resolve_scrape_url(r) for r in rows]
+    result_df["scrape_url"] = [
+        resolve_listing_url(r, platform) for r, platform in zip(rows, results)
+    ]
     return result_df[["slug", "ticker", "platform", "scrape_url"]]
 
 # ---------------------------------------------------------------------------
@@ -742,7 +741,7 @@ def main(argv: Optional[list[str]] = None) -> int:
     row = find_row(df, query)
 
     if row is not None:
-        scrape_url            = _resolve_scrape_url(row.to_dict())
+        scrape_url            = resolve_scrape_url(row.to_dict())
         slug                  = row.get("slug", "")
         ticker                = row.get("ticker", "")
         news_path             = row.get("news_path", "")
@@ -762,11 +761,20 @@ def main(argv: Optional[list[str]] = None) -> int:
         scrape_url, timeout=args.timeout, slug=slug,
         news_path=news_path, news_details_segment=news_details_segment,
     )
+    # Report the full listing URL now that the platform is known -- e.g.
+    # https://news.lockheedmartin.com/news-releases?category=788 rather
+    # than just https://news.lockheedmartin.com/ -- see
+    # resolve_listing_url(). row (when matched) carries news_releases_path
+    # for this; a bare --url with no sources.yaml match has no such field,
+    # so it falls back to the un-joined scrape_url for any known platform.
+    listing_url = resolve_listing_url(
+        row.to_dict() if row is not None else {"ir_url": scrape_url}, platform
+    )
     result = pd.DataFrame([{
         "slug":        slug,
         "ticker":      ticker,
         "platform":    platform,
-        "scrape_url":  scrape_url,
+        "scrape_url":  listing_url,
     }])
     print_csv(result[["slug", "ticker", "platform", "scrape_url"]])
     return 0
