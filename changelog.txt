@@ -1,0 +1,31 @@
+====== Changelog ======
+
+All notable changes to this project are documented here, most recent first.
+
+===== 2026-07-26 =====
+
+==== Removed ====
+
+  * ''src/playground/scrape_costco.py'', ''src/playground/scrape_tjx_urls.py'',
+    and ''src/playground/tjx_yearly_url.py''. These were exploratory drafts
+    that have been fully superseded by the production scrapers:
+
+    * ''scrape_costco.py'' -> generalized into ''src/scrape_q4_ir.py'', which
+      covers any Q4 Inc.-powered IR site (not just Costco) via
+      ''sources.yaml'', and adds ''--fallback-to-visible'' handling for
+      Cloudflare-blocked headless sessions plus a two-stage (listing-page +
+      detail-page) date-extraction fallback.
+
+    * ''scrape_tjx_urls.py'' / ''tjx_yearly_url.py'' -> generalized into
+      ''src/scrape_notified_gated.py'', which covers any Akamai-gated
+      Notified/Drupal IR site (TJX was the first) instead of hardcoding
+      TJX's base URL, and shares config via ''utils/sources_utils.py'' /
+      ''utils/scrape_notified_utils.py''.
+
+  Reviewed both playground files line-by-line against their successors
+  first; no logic, regex, date-parsing edge case, or docstring finding
+  (e.g. the Akamai headless-403 behavior, the TJX markup confirmation) was
+  unique to the playground versions -- everything of value had already
+  been carried forward. Removed rather than archived, since the production
+  scrapers are a strict superset and git history preserves the originals
+  if ever needed.
