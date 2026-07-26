@@ -28,8 +28,8 @@ by hand-editing YAML and scrape_all.py won't catch them until run time:
 
 To regenerate reports/latest/scraper_coverage_summary.txt (prose) and
 reports/latest/scraper_coverage_missing.csv (CSV, header
-"slug,ticker,platform,ir_url") in one pass, use --write-reports (this is
-what tasks.py's scraper-coverage task runs):
+"slug,ticker,platform,scrape_url") in one pass, use --write-reports (this
+is what tasks.py's scraper-coverage task runs):
 
     python src/reporting/check_scraper_coverage.py --write-reports
 
@@ -65,7 +65,7 @@ except ImportError:
     sys.exit("Missing dependency. Install with: pip install ruamel.yaml")
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-from utils.sources_utils import load_sources  # noqa: E402
+from utils.sources_utils import load_sources, resolve_scrape_url  # noqa: E402
 
 REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 SOURCES_PATH = REPO_ROOT / "sources" / "sources.yaml"
@@ -140,21 +140,36 @@ def load_platform_map(path: Path = IR_PLATFORM_CSV_PATH) -> pd.DataFrame:
 
 
 def missing_coverage_csv(uncovered: list[dict], platform_map: pd.DataFrame) -> str:
-    """Return CSV text (with header) for slug,ticker,platform,ir_url of *uncovered*.
+    """Return CSV text (with header) for slug,ticker,platform,scrape_url of *uncovered*.
 
-    *uncovered* is a list of sources.yaml records (dicts with at least slug/
-    ticker/ir_url). Platform is looked up from *platform_map* by slug; a
-    slug with no match (ir_platform.csv missing or stale) gets "unknown"
-    and is called out on stderr so the gap is visible instead of silently
-    blank.
+    *uncovered* is a list of sources.yaml records (dicts with at least
+    slug/ticker/ir_url, and optionally news_url). scrape_url is the URL a
+    scraper would actually fetch for that record -- news_url if set, else
+    ir_url (see utils.sources_utils.resolve_scrape_url()) -- so this column
+    lines up with what detect_ir_platform.py itself fetched to produce the
+    platform value next to it, rather than always showing ir_url even for
+    the handful of sources (e.g. IBM, Lockheed Martin) whose press releases
+    are actually hosted elsewhere.
+
+    Platform is looked up from *platform_map* by slug; a slug with no
+    match (ir_platform.csv missing or stale) gets "unknown" and is called
+    out on stderr so the gap is visible instead of silently blank.
     """
-    df = pd.DataFrame(uncovered, columns=["slug", "ticker", "ir_url"])
+    df = pd.DataFrame(uncovered, columns=["slug", "ticker", "ir_url", "news_url"])
     if df.empty:
         # Nothing uncovered -- skip the merge (platform_map may not even
         # have a "slug" column in this case) and emit a header-only CSV.
-        return pd.DataFrame(columns=["slug", "ticker", "platform", "ir_url"]).to_csv(
+        return pd.DataFrame(columns=["slug", "ticker", "platform", "scrape_url"]).to_csv(
             index=False, lineterminator="\n"
         )
+    # Records that never set "news_url" in sources.yaml come back from
+    # pd.DataFrame() as NaN (not "" or missing), and NaN is truthy in
+    # Python -- resolve_scrape_url()'s "news_url or ir_url" precedence
+    # would then wrongly pick NaN over a real ir_url. Normalize to "" first.
+    df[["ir_url", "news_url"]] = df[["ir_url", "news_url"]].fillna("")
+    df["scrape_url"] = df.apply(
+        lambda r: resolve_scrape_url({"ir_url": r["ir_url"], "news_url": r["news_url"]}), axis=1
+    )
     df = df.merge(platform_map, on="slug", how="left")
 
     unknown_mask = df["platform"].isna()
@@ -168,7 +183,7 @@ def missing_coverage_csv(uncovered: list[dict], platform_map: pd.DataFrame) -> s
         )
     df["platform"] = df["platform"].fillna("unknown")
 
-    df = df[["slug", "ticker", "platform", "ir_url"]]
+    df = df[["slug", "ticker", "platform", "scrape_url"]]
     return df.to_csv(index=False, lineterminator="\n")
 
 

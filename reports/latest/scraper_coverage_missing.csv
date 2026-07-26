@@ -1,4 +1,4 @@
-slug,ticker,platform,ir_url
+slug,ticker,platform,scrape_url
 abbott,ABT,unknown,https://www.abbott.com/en-us/investors
 accenture,ACN,unknown,https://investor.accenture.com/
 akamai,AKAM,notified,https://www.ir.akamai.com/

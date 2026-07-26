@@ -82,7 +82,13 @@ Usage
 
 Output
 ------
-CSV with header row: slug,ticker,platform,ir_url
+CSV with header row: slug,ticker,platform,scrape_url
+scrape_url is the URL actually fetched for detection -- news_url if set,
+else ir_url (see _resolve_scrape_url()) -- so the reported platform always
+lines up with the URL it was detected from. For the handful of sources
+where news_url differs from ir_url (e.g. IBM, Lockheed Martin), ir_url
+itself is intentionally NOT in this output; look it up in sources.yaml by
+slug if you need it.
 To view this as a human-friendly fixed-width table, pipe it through the
 companion script, e.g.:
   python src/reporting/detect_ir_platform.py --all | python src/print_csv_table.py
@@ -602,11 +608,15 @@ def find_row(df: pd.DataFrame, query: str) -> Optional[pd.Series]:
 def detect_platforms_parallel(df: pd.DataFrame, workers: int, timeout: int) -> pd.DataFrame:
     """Detect IR platform for every row in *df*, using a thread pool.
 
-    Returns a new DataFrame with columns: slug, ticker, platform, ir_url.
+    Returns a new DataFrame with columns: slug, ticker, platform, scrape_url.
     Rows retain the same order as *df*. Detection fetches each row's
     resolved scrape URL (news_url if set, else ir_url -- see
-    _resolve_scrape_url()), but the output still reports the record's
-    ir_url, since that's the stable identifier humans recognize.
+    _resolve_scrape_url()), and the output reports that same resolved
+    scrape_url, so the platform column always lines up with the URL it was
+    actually detected from. (Previously this reported the record's ir_url
+    unconditionally, which was misleading for sources like IBM/Lockheed
+    Martin whose press releases are actually fetched from a different
+    news_url host.)
     """
     rows = df[["slug", "ticker", "ir_url", "news_url", "news_path", "news_details_segment"]].to_dict("records")
 
@@ -628,9 +638,10 @@ def detect_platforms_parallel(df: pd.DataFrame, workers: int, timeout: int) -> p
             idx, platform = future.result()
             results[idx] = platform
 
-    result_df = df[["slug", "ticker", "ir_url"]].copy()
+    result_df = df[["slug", "ticker"]].copy()
     result_df["platform"] = results
-    return result_df[["slug", "ticker", "platform", "ir_url"]]
+    result_df["scrape_url"] = [_resolve_scrape_url(r) for r in rows]
+    return result_df[["slug", "ticker", "platform", "scrape_url"]]
 
 # ---------------------------------------------------------------------------
 # Output formatting
@@ -640,8 +651,8 @@ def print_csv(df: pd.DataFrame) -> None:
     """Print *df* to stdout as machine-readable CSV, header row included.
 
     Column order is whatever *df* already has (callers pass
-    slug, ticker, platform, ir_url). Use print_csv_table.py to render this
-    back into a human-friendly fixed-width table.
+    slug, ticker, platform, scrape_url). Use print_csv_table.py to render
+    this back into a human-friendly fixed-width table.
     """
     df.to_csv(sys.stdout, index=False, lineterminator="\n")
 
@@ -731,7 +742,6 @@ def main(argv: Optional[list[str]] = None) -> int:
     row = find_row(df, query)
 
     if row is not None:
-        ir_url                = row["ir_url"]
         scrape_url            = _resolve_scrape_url(row.to_dict())
         slug                  = row.get("slug", "")
         ticker                = row.get("ticker", "")
@@ -739,7 +749,6 @@ def main(argv: Optional[list[str]] = None) -> int:
         news_details_segment  = row.get("news_details_segment", "")
     elif args.url:
         # URL not in sources.yaml — detect directly, nothing to fall back to
-        ir_url                = args.url
         scrape_url            = args.url
         slug                  = ""
         ticker                = ""
@@ -754,12 +763,12 @@ def main(argv: Optional[list[str]] = None) -> int:
         news_path=news_path, news_details_segment=news_details_segment,
     )
     result = pd.DataFrame([{
-        "slug":     slug,
-        "ticker":   ticker,
-        "platform": platform,
-        "ir_url":   ir_url,
+        "slug":        slug,
+        "ticker":      ticker,
+        "platform":    platform,
+        "scrape_url":  scrape_url,
     }])
-    print_csv(result[["slug", "ticker", "platform", "ir_url"]])
+    print_csv(result[["slug", "ticker", "platform", "scrape_url"]])
     return 0
 
 
