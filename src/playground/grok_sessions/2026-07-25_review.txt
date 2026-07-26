@@ -1,0 +1,106 @@
+2026-07-25 11:25 pm
+
+Prompt:
+Please review https://github.com/KamarajuKusumanchi/primary_wire/archive/refs/heads/master.zip and tell me what you think? What are the next steps? How to improve the scraper coverage, code quality and make the scripts faster? Is there anything worth refactoring? Is there any dead code that needs to be removed? Any comments that are not inline with the code? Ignore files in src/playground , src/prototypes from your review.
+
+Response:
+**Overall impression**
+
+This is a carefully designed, high-quality personal research tool. The motivation is clear and correct: wire services and EDGAR are noisy or biased samples; the only clean source is the company’s own IR page. Storing only URLs (no content) in daily CSVs under git is simple, auditable, and contribution-friendly.
+
+The code shows real craftsmanship:
+
+- Extensive, accurate comments that explain *why* (date-extraction edge cases, sibling-link deduplication on Q4 cards, aria-label trailing-date preference, Cloudflare/Akamai work-arounds, etc.).
+- Shared utilities (`scrape_utils`, `sources_utils`, `q4_link_pattern`, `scrape_notified_utils`) that avoid most duplication.
+- Politeness baked in (`--polite-delay`, once-per-day guidance).
+- Useful orchestration (`scrape_all.py` with `--smoke-test` that groups by real code-path signature, not just YAML group).
+- Diagnostic tooling under `src/reporting/`.
+- Clear separation of platforms (Q4/Playwright, InvestorRoom/HTTP, Notified/curl_cffi, gated-Notified hybrid).
+
+It is still early-stage (as the README states): ~20 automated sources out of ~120 in `sources.yaml` / ~500 S&P 500, heavy reliance on manual entry for the rest, and a few documentation drifts.
+
+Ignoring `src/playground` and `src/prototypes` as requested.
+
+### Coverage improvements
+
+1. **Leverage the existing detector**
+   Run `src/reporting/detect_ir_platform.py` across every entry in `sources.yaml` that is not yet in `config/scraper_config.yaml`. Many additional Q4 / InvestorRoom / Notified sites should fall out immediately.
+
+2. **Prioritize by value**
+   High-frequency releasers, large-cap names, and government sources (Fed, BLS, etc.) first. The missing-tickers report already helps.
+
+3. **More platform scrapers**
+   - Workiva / other common IR vendors
+   - Custom / bespoke IR sites (one-off parsers that still share `NewsItem` + `finalize_and_output`)
+   - Simple RSS/Atom where the company publishes a clean official feed (still primary source)
+
+4. **Semi-automated discovery**
+   `ddg_search.py` + `update_source.py` already exist. A small pipeline that proposes new `sources.yaml` entries (IR URL + platform guess) for human review would accelerate coverage.
+
+5. **Historical backfill**
+   Once a source is automated, support `--start-year` / `--all-years` more aggressively (with polite delays) so the daily CSVs become useful for research sooner.
+
+### Speed
+
+- **Q4 (Playwright)** is the bottleneck.
+  - Reuse a single browser context across years or even across sources that share the same theme (where safe).
+  - Prefer listing-page dates; the detail-page path is already opt-in / sources.yaml-driven and correctly expensive.
+  - `--fallback-to-visible` / `--show-browser` is necessary for some Cloudflare sites; keep it opt-in.
+  - Consider Playwright’s `channel="chrome"` + persistent context or a small pool of headed browsers if you have a display.
+
+- **HTTP scrapers (InvestorRoom, Notified)** are already fast.
+  - Parallelize independent sources (or even pages of the same source) with `concurrent.futures` or `asyncio` + a per-domain rate limiter.
+  - Keep the global politeness rule (10–30 s between requests to the same host).
+
+- **Orchestration**
+  `scrape_all.py` currently runs sequentially. Add a controlled concurrency flag (default 1–2) so a full run finishes in minutes rather than hours while still respecting politeness.
+
+- **Caching**
+  Optional on-disk cache of rendered listing HTML (keyed by slug+year+hash of URL) would make re-runs and debugging much cheaper.
+
+### Code quality & refactoring worth doing
+
+- **README / docs drift**
+  README still describes `scrape_costco.py` / `scrape_cdw.py` thin wrappers and older CDW detail-page behavior. Those wrappers are gone; Q4 date extraction now works from the listing page for CDW after the sibling-link dedup fix. Update the README and examples to match current `scrape_q4_ir.py` + `scraper_config.yaml` (which uses `--show-browser` for several Q4 sources).
+
+- **Empty `NewsItem` subclasses**
+  InvestorRoom and Notified declare empty subclasses purely for typing consistency. Fine for now, but you could just use the base class everywhere and drop the subclasses.
+
+- **Further centralization**
+  Every scraper has its own `resolve_source()` that mostly calls `resolve_source_identity()` and then layers a couple of platform fields. A slightly richer shared helper (or a small source-config object) would shrink the per-scraper boilerplate.
+
+- **Long comments**
+  The module- and function-level comments are excellent and accurate, but some are multi-hundred-line novels. Consider moving the historical “why we changed this” narratives into `docs/` and keeping the code comments to the current contract + the non-obvious invariants.
+
+- **Category handling in Q4**
+  `CATEGORY_CHOICES` and the category field exist, but most callers ignore them. Either make category a first-class optional CSV column or prune the unused surface.
+
+- **`to_csv_row` alias**
+  Kept “for backward compatibility”. If nothing external depends on it, drop it.
+
+- **Gated Notified**
+  `FORM_ID` is still a module constant. Once more sites are confirmed, promote it (and any other site-specific tokens) into `sources.yaml` the same way `news_releases_path` / `first_page_index` already are.
+
+### Dead code / stale comments
+
+- No large blocks of obviously unreachable code in the main scrapers/utils (playground/prototypes ignored).
+- A few residual comments still talk about “CDW needs detail pages” or the old thin wrappers; they no longer match the code.
+- `sources_utils.py` docstring still mentions the costco/cdw wrappers.
+- Some `--show-browser` vs `--fallback-to-visible` inconsistency between config, README, and code comments.
+
+### Tests & robustness
+
+- Tests are marked “forthcoming” in the README; `pyproject.toml` already has a pytest config that excludes the slow regression markers. Adding unit tests for the pure helpers (`parse_date`, `parse_trailing_date`, link classifiers, URL builders, signature grouping) would be high leverage.
+- The live regression tests that compare release counts against a baseline are a good idea; keep them opt-in.
+
+### Suggested next steps (priority order)
+
+1. Sync README + docs with current code and config.
+2. Run the platform detector on the remaining `sources.yaml` entries and expand `scraper_config.yaml`.
+3. Add controlled concurrency to `scrape_all.py`.
+4. Write unit tests for the date/URL/signature helpers.
+5. Promote remaining site-specific constants (FORM_ID, etc.) into `sources.yaml`.
+6. Consider a lightweight caching layer for rendered pages.
+7. Flesh out `publish_time` support more uniformly (already partially present).
+
+**Bottom line**: the architecture is sound, the edge-case handling is unusually thorough, and the politeness/contribution model is thoughtful. The biggest wins right now are documentation hygiene, broader coverage via the existing detectors, and modest parallelization of the already-fast HTTP path. The project is in a good place to grow from “personal research tool” into a genuinely useful community resource.
