@@ -158,6 +158,10 @@ sources:
     ir_url: https://investors.bio-techne.com/
     news_releases_path: press-releases
     first_page_index: 1
+  - slug: biogen
+    name: Biogen Inc.
+    ticker: BIIB
+    ir_url: https://investors.biogen.com/
   - slug: blackstone
     name: Blackstone Inc.
     ticker: BX
@@ -166,6 +170,11 @@ sources:
     name: U.S. Bureau of Labor Statistics
     ir_url: https://www.bls.gov/newsrelease/
     notes: Covers CPI, jobs reports, and other BLS releases. No ticker.
+  - slug: bny
+    name: The Bank of New York Mellon Cor
+    ticker: BNY
+    ir_url: 
+      https://www.bny.com/corporate/global/en/investor-relations/overview.html
   - slug: booking
     name: Booking Holdings Inc.
     ticker: BKNG
@@ -191,6 +200,10 @@ sources:
     ticker: CASY
     ir_url: https://investor.caseys.com/
     news_releases_path: press-releases
+  - slug: cbre
+    name: CBRE Group, Inc.
+    ticker: CBRE
+    ir_url: https://ir.cbre.com/
   - slug: cdw
     name: CDW Corporation
     ticker: CDW
@@ -314,6 +327,10 @@ sources:
     name: Dover Corporation
     ticker: DOV
     ir_url: https://www.dovercorporation.com/investors
+  - slug: eli-lilly
+    name: Eli Lilly and Company
+    ticker: LLY
+    ir_url: https://investor.lilly.com/
   - slug: eqt
     name: EQT Corporation
     ticker: EQT
@@ -355,6 +372,10 @@ sources:
     name: Flex Ltd.
     ticker: FLEX
     ir_url: https://investors.flex.com/
+  - slug: ford
+    name: Ford Motor Company
+    ticker: F
+    ir_url: https://shareholder.ford.com/
   - slug: fortinet
     name: Fortinet, Inc.
     ticker: FTNT
@@ -432,6 +453,10 @@ sources:
     name: Hewlett Packard Enterprise Company
     ticker: HPE
     ir_url: https://investor.hp.com/
+  - slug: hubbell
+    name: Hubbell Incorporated
+    ticker: HUBB
+    ir_url: https://investor.hubbell.com/
   - slug: ibm
     name: International Business Machines Corporation
     ticker: IBM
@@ -543,6 +568,10 @@ sources:
     ir_url: https://ir.netflix.net
     news_path: investor-news-and-events/financial-releases/{year}/default.aspx
     news_details_segment: press-release-details
+  - slug: news-corp
+    name: News Corporation
+    ticker: NWSA
+    ir_url: https://investors.newscorp.com/
   - slug: nike
     name: NIKE, Inc.
     ticker: NKE
