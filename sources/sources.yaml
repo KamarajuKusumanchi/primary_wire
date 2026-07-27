@@ -135,6 +135,10 @@ sources:
     name: Arista Networks, Inc.
     ticker: ANET
     ir_url: https://investors.arista.com/
+  - slug: autodesk
+    name: Autodesk, Inc.
+    ticker: ADSK
+    ir_url: https://investors.autodesk.com/
   - slug: autozone
     name: AutoZone, Inc.
     ticker: AZO
@@ -371,7 +375,7 @@ sources:
     name: GE Vernova Inc.
     ticker: GEV
     ir_url: https://www.gevernova.com/investors
-    news_releases_path:
+    news_releases_path: 
       news/media-hub?tag=Investor+Relations&type[press_release]=press_release
   - slug: gen-digital
     name: Gen Digital Inc.
@@ -492,8 +496,8 @@ sources:
     news_releases_path: news-releases?category=788
     notes: >
       The investor relations site, https://investors.lockheedmartin.com/, does
-      not have any press releases. They are hosted at 
-      https://news.lockheedmartin.com/news-releases. That listing has two
+      not have any press releases. They are hosted at  https://news.lockheedmartin.com/news-releases.
+      That listing has two
       categories: (1) Investor and Financial News (2) Uncategorized. To
       minimize the noise, only the first category (category=788) is scraped
       for now.
@@ -605,6 +609,10 @@ sources:
     name: Royal Caribbean Cruises Ltd.
     ticker: RCL
     ir_url: https://www.rclinvestor.com/
+  - slug: salesforce
+    name: Salesforce, Inc.
+    ticker: CRM
+    ir_url: https://investor.salesforce.com/
   - slug: sandisk
     name: Sandisk Corporation
     ticker: SNDK
@@ -706,6 +714,10 @@ sources:
     ticker: TRV
     ir_url: https://investor.travelers.com/
     news_path: newsroom/press-releases/default.aspx
+  - slug: tyler-tech
+    name: Tyler Technologies, Inc.
+    ticker: TYL
+    ir_url: https://investors.tylertech.com/
   - slug: uber
     name: Uber Technologies, Inc.
     ticker: UBER
