@@ -16,18 +16,22 @@ applied-materials,AMAT,notified,https://ir.appliedmaterials.com/news-releases
 archer-daniels-midland,ADM,q4,https://www.investors.adm.com/news/default.aspx
 ares,ARES,unknown,https://ir.ares.com/
 arista-networks,ANET,unknown,https://investors.arista.com/
+autodesk,ADSK,notified,https://investors.autodesk.com/news-releases
 autozone,AZO,notified,https://about.autozone.com/investor-overview/news-releases
 axon,AXON,investorroom,https://investor.axon.com/press-releases
 baxter,BAX,q4,https://investor.baxter.com/news/default.aspx
 bio-techne,TECH,notified,https://investors.bio-techne.com/press-releases
+biogen,BIIB,notified,https://investors.biogen.com/news-releases
 blackstone,BX,unknown,https://ir.blackstone.com/
 bls,,unknown,https://www.bls.gov/newsrelease/
+bny,BNY,unknown,https://www.bny.com/corporate/global/en/investor-relations/overview.html
 booking,BKNG,q4,https://ir.bookingholdings.com/news/default.aspx
 broadcom,AVGO,notified,https://investors.broadcom.com/news-releases
 builders-firstsource,BLDR,q4,https://investors.bldr.com/news/default.aspx
 c-h-robinson,CHRW,q4,https://investor.chrobinson.com/news/default.aspx
 cadence,CDNS,q4,https://investor.cadence.com/news/default.aspx
 caseys,CASY,notified_gated,https://investor.caseys.com/press-releases
+cbre,CBRE,notified,https://ir.cbre.com/news-releases
 cdw,CDW,q4,https://investor.cdw.com/news/default.aspx
 centene,CNC,investorroom,https://investors.centene.com/press-releases
 charter,CHTR,notified,https://ir.charter.com/news-releases
@@ -58,6 +62,7 @@ dexcom,DXCM,q4,https://investors.dexcom.com/news/default.aspx
 digital-realty-trust,DLR,notified,https://investor.digitalrealty.com/news-releases
 doordash,DASH,q4,https://ir.doordash.com/news/default.aspx
 dover,DOV,unknown,https://www.dovercorporation.com/investors
+eli-lilly,LLY,notified,https://investor.lilly.com/news-releases
 eqt,EQT,q4,https://ir.eqt.com/news/default.aspx
 equifax,EFX,notified,https://investor.equifax.com/news-releases
 erie-indemnity,ERIE,unknown,https://www.erieinsurance.com/investors
@@ -68,6 +73,7 @@ fedex,FDX,q4,https://investors.fedex.com/news/default.aspx
 fedex-freight,FDXF,notified,https://ir.fedexfreight.com/news-events/press-releases
 fis-global,FIS,notified,https://www.investor.fisglobal.com/news-releases
 flex,FLEX,q4,https://investors.flex.com/news/default.aspx
+ford,F,q4,https://shareholder.ford.com/news/default.aspx
 fortinet,FTNT,notified,https://investor.fortinet.com/news-releases
 fox,FOXA,unknown,https://investor.foxcorporation.com/
 franklin-resources,BEN,unknown,https://investors.franklinresources.com/
@@ -86,6 +92,7 @@ home-depot,HD,investis,https://ir.homedepot.com/
 honeywell-aerospace,HONA,notified,https://investor.honeywellaerospace.com/news-releases
 honeywell-international,HON,notified,https://investor.honeywell.com/investor-relations/news-releases
 hp,HPE,q4,https://investor.hp.com/news/default.aspx
+hubbell,HUBB,unknown,https://investor.hubbell.com/
 ibm,IBM,investorroom,https://newsroom.ibm.com/announcements
 ingersoll-rand,IR,q4,https://investors.irco.com/news/default.aspx
 intel,INTC,notified,https://www.intc.com/news-releases
@@ -109,6 +116,7 @@ morgan-stanley,MS,unknown,https://www.morganstanley.com/about-us-ir
 msci,MSCI,notified,https://ir.msci.com/news-releases
 netapp,NTAP,q4,https://investors.netapp.com/news/default.aspx
 netflix,NFLX,q4,https://ir.netflix.net/investor-news-and-events/financial-releases/default.aspx
+news-corp,NWSA,notified,https://investors.newscorp.com/news-releases
 nike,NKE,unknown,https://investors.nike.com/
 norwegian-cruise-line,NCLH,notified,https://www.nclhltd.com/investors/news-releases
 nvidia,NVDA,unknown,https://investor.nvidia.com/news/press-releases/default.aspx
@@ -125,6 +133,7 @@ robinhood,HOOD,notified_gated,https://investors.robinhood.com/press-releases
 rollins,ROL,notified,https://www.rollins.com/investors/news-releases
 ross-stores,ROST,notified,https://investors.rossstores.com/news-releases
 royal-caribbean,RCL,investorroom,https://www.rclinvestor.com/news-releases
+salesforce,CRM,q4,https://investor.salesforce.com/news/default.aspx
 sandisk,SNDK,notified,https://investor.sandisk.com/news-releases
 sba-communications,SBAC,unknown,https://ir.sbasite.com/
 seagate,STX,q4,https://investors.seagate.com/news/default.aspx
@@ -149,6 +158,7 @@ thermo-fisher,TMO,q4,https://ir.thermofisher.com/investors/news-events/news/defa
 tjx,TJX,notified_gated,https://investor.tjx.com/investors/press-releases
 tractor-supply,TSCO,unknown,https://ir.tractorsupply.com/
 travelers,TRV,q4,https://investor.travelers.com/newsroom/press-releases/default.aspx
+tyler-tech,TYL,q4,https://investors.tylertech.com/news/default.aspx
 uber,UBER,unknown,https://investor.uber.com/
 united-airlines,UAL,notified,https://ir.united.com/news-releases
 united-rentals,URI,q4,https://investor-relations.unitedrentals.com/press-releases/default.aspx

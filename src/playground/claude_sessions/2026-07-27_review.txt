@@ -1,0 +1,73 @@
+2026-07-27 12:58 AM
+
+Prompt:
+Please review https://github.com/KamarajuKusumanchi/primary_wire/archive/refs/heads/master.zip and tell me what you think? What are the next steps? How to improve the scraper coverage, code quality and make it faster? Is there anything worth refactoring? Is there any dead code that needs to be removed? Any comments that are not inline with the code? Ignore files in src/playground , src/prototypes from your review.
+
+Response:
+Good context. Now let's look at the core scraper files and utils.This utils file is actually well-designed with good documentation. Let's look at the individual scrapers now, which are the bigger files.Good — so the parsing logic is actually shared. Let's check `is_detail_url`, `resolve_source`, and `build_arg_parser` duplication more carefully, plus `main()`.All 89 tests pass, nice. Let's check test coverage against src files (which scrapers lack tests) and look at scrape_investorroom / scrape_all for quality concerns, plus reporting scripts.Confirmed — a genuine stale-doc bug. Now let's check the docs/scrapers.txt for the same staleness, and README's project structure section again for the missing mention.Confirmed dead code — `to_csv_row()` and `to_json_dict()` in `scrape_q4_ir.py` aren't referenced anywhere else, including tests.I pulled down and read through the repo (skipping `src/playground` and `src/prototypes` as asked — ran the test suite, diffed the near-duplicate scrapers, and grepped for staleness). Here's the unvarnished version.
+
+## Overall impression
+
+This is unusually polished code for a project that's explicitly "early stage, sparse coverage." The docstrings are exceptional — they explain *why* a regex exists, cite the specific company that broke it, and reference which live fetch confirmed the behavior. 89/89 tests pass out of the box. That's genuinely rare quality.
+
+But that same quality is also a flag worth naming honestly: for a solo project automating 30 of 167 sources, you're carrying q4/investorroom/notified/notified_gated/investis as five separate scraper modules (9,600 lines total) with heavy shared infrastructure, a custom smoke-test signature-grouping system, and multi-paragraph docstrings justifying design decisions. That's a lot of structure for the amount of coverage it's buying you. It reads like the code was written (or heavily refactored) with an LLM doing careful, defensive engineering at every step — which is great for correctness, but it's easy to over-invest in infrastructure polish instead of the thing that actually grows the dataset: more sources.
+
+## Concrete bugs / staleness I found
+
+1. **`docs`/README don't mention `scrape_investis.py` at all.** It's a real, 710-line, actively-configured scraper (Home Depot, `config/scraper_config.yaml`), but README.txt's "Scrapers" section only lists q4/investorroom/notified/notified_gated, and `docs/scrapers.txt` never mentions it either.
+2. **`src/reporting/detect_ir_platform.py`'s module docstring is directly contradicted by the code it's in.** It says (line 34): `investis (no scraper yet -- detection only)` and "There is no scrape_investis.py yet, so an 'investis' result just tells you the site needs one." That's false — the scraper exists. Someone built `scrape_investis.py` and never went back to update this docstring or the README.
+3. **Dead code**: `scrape_q4_ir.py`'s `NewsItem.to_csv_row()` and `.to_json_dict()` (lines 231-238) are unused anywhere — not in the module, not in other scrapers, not in tests. `to_row()` (inherited from the base class) is what's actually called everywhere. These two methods can just go.
+4. **`pyproject.toml` unconditionally depends on `python-certifi-win32`**, a Windows-only SSL workaround, with no `sys_platform == "win32"` environment marker. Every Linux/Mac contributor installs a package they'll never use. Easy fix, and pyproject.toml would also benefit from moving its inline "migration log" comments (the requirements.txt→uv story, the Python 3.14→3.12 story) into a CHANGELOG or docs file — they're useful history but they don't belong living in the dependency manifest.
+5. **`src/ddg_search.py`** is orphaned (not imported anywhere, no test, no docstring) and has a 2-space-indented loop body while the rest of the codebase is consistently 4-space. Minor, but it stands out precisely because everything else is so consistent.
+
+## Duplication worth refactoring
+
+`scrape_notified.py` and `scrape_notified_gated.py` are ~90% duplicate structure (I diffed them — 1,183 of ~1,700 lines differ, but the *shape* — `NewsItem`, `is_detail_url`, `resolve_source`, `build_arg_parser`, `main`, `scrape`/`scrape_year` — is identical). To be fair, the actual row-parsing logic (`parse_listing_page`, `extract_date_and_time_from_row`) is already correctly pulled into `utils/scrape_notified_utils.py` — that part's done right. What's still duplicated is the CLI scaffolding and `resolve_source`/`is_detail_url` boilerplate. Given there are only two callers today, I wouldn't over-abstract it further yet — but if a third gated/non-gated variant ever shows up, that scaffolding should move into the shared utils module too, the same way the parsing already did.
+
+## Test coverage gaps
+
+- `scrape_investis.py` (710 lines, the second-largest scraper) has **zero tests** — every other scraper (q4, investorroom, notified, notified_gated) has a corresponding `tests/test_scrape_*.py`. This is the biggest concrete gap.
+- `src/reporting/check_scraper_coverage.py` and `detect_ir_platform.py` (510 and 845 lines) are also untested, though they're read-only/diagnostic so the risk is lower.
+- **No CI.** There's no `.github/workflows/`, no lint config (no ruff/flake8/mypy anywhere), nothing automatically running these 89 tests on a PR. For a project explicitly soliciting community PRs, this is the highest-leverage fix available: a single GitHub Actions job running `pytest` (and ideally `ruff check`) on every PR would catch regressions before merge, essentially for free — the tests already exist and pass.
+
+## On speed
+
+`scrape_all.py` runs every configured source **serially, in-process** (`run_scraper()` calls each module's `main()` one at a time). Given each source is a different company's domain, running them one after another gains you nothing from a politeness standpoint — the 10-30s "per-domain" spacing rule only matters *within* a single site's pagination, not *across* sites. Notably, the codebase already has the pattern for this: `detect_ir_platform.py` uses `concurrent.futures.ThreadPoolExecutor` to fetch ~167 sources in parallel. That same pattern hasn't been applied to `scrape_all.py`, where it would matter more, since Q4 sources launch a full Playwright browser each (real wall-clock cost). Parallelizing scrape_all.py across sources (thread pool, one source per worker, keeping the polite delay only inside each source's own loop) is probably the single biggest speed win available, and the codebase already proves the team knows how to do it.
+
+## Improving coverage (the thing that actually matters most here)
+
+Given the goal (S&P 500 press releases) and current state (30/167 automated, manual entry for the rest), the highest-leverage next steps aren't code-quality ones:
+
+1. **Run `detect_ir_platform.py --write-reports` regularly** and use `reports/latest/` to find which of the ~137 still-manual sources are on a platform you already have a scraper for (q4/investorroom/notified/investis) — those are near-zero-marginal-cost to onboard, just add them to `scraper_config.yaml`.
+2. **Add tests for `scrape_investis.py`** before adding more Investis sources on top of the one (Home Depot) it's only ever been run against.
+3. Fix the two doc-staleness issues above so a new contributor doesn't get misled about what's already built.
+4. Only after that: consider a 6th platform scraper for whatever shows up most in `check_scraper_coverage.py`'s "missing" report.
+
+Happy to dig into any one of these in more depth — e.g. I can sketch the ThreadPoolExecutor change to `scrape_all.py`, or write a first-pass test file for `scrape_investis.py`, if either would be useful.
+
+Prompt:
+Regarding
+> It reads like the code was written (or heavily refactored) with an LLM doing careful, defensive engineering at every step — which is great for correctness, but it's easy to over-invest in infrastructure polish instead of the thing that actually grows the dataset: more sources.
+
+that is exactly how this project is built. Is that a bad approach? What approach would you suggest instead? Regarding the coverage I am adding sources for each platform one-by-one, testing the data and if necessary, generalizing the code step by step and figuring out the right abstraction as I go along.
+
+Response:
+No, it's not a bad approach — and honestly, the coverage methodology you just described (add one source, test it against real data, generalize only when the second or third source demands it) is *the* correct way to counter the risk I was pointing at. That's YAGNI applied correctly. The failure mode I was worried about isn't "used an LLM," it's "abstracted before you had evidence you needed the abstraction" — and your process is explicitly the opposite of that.
+
+So let me be precise about what the actual risk is, because "LLM-written" isn't it.
+
+**The risk is documentation drift, and I already caught it happening.** The `detect_ir_platform.py` docstring flatly contradicting `scrape_investis.py`'s existence isn't a coincidence — it's the predictable failure mode of this style. When every change comes with a paragraph explaining *why*, you get two compounding problems:
+
+1. Volume makes staleness easy to miss. A wrong sentence buried in 40 lines of careful prose reads exactly as trustworthy as a correct one. Nobody skims-and-catches a contradiction in that much text — least of all future-you, six weeks later, trusting the docstring instead of re-checking the code.
+2. Narrative docstrings describe *history* ("this was tried, this failed, here's why we do X instead") but live in a place that's supposed to describe *current state*. Git commit messages age fine — everyone expects a commit from March to be about March. A docstring that ages the same way is just wrong and doesn't announce itself as wrong.
+
+The defensive engineering itself (fallback-to-visible, the two-stage date parsing, the AP-style-period stripping) all looked *earned* to me, not speculative — each one cites a specific company/site that actually broke without it. That's good. That's the same "generalize after you hit a real case" discipline you're describing for coverage. I wouldn't touch that.
+
+**What I'd actually change, given your process is already sound:**
+
+- Move the "why we don't do X" narrative out of docstrings and into commit messages or a `docs/decisions.txt`-style log, once a decision is settled and not likely to be revisited per-source. Keep docstrings to "what this does now." That halves the staleness surface, because git history isn't expected to stay synced with the present, and a decisions log is explicitly a log.
+- Treat docstring/README accuracy as a thing that decays and needs its own periodic pass — the same way you're already doing for scraper generalization. Not after every change, but say, whenever you add a platform or before a release: a "does the code match what the docs claim" sweep, ideally with the LLM doing the sweep, since it's decent at spot-checking claims against code when explicitly asked (as this review just demonstrated).
+- Weight test coverage over prose coverage. `scrape_investis.py` having zero tests but a page of module docstring is the wrong ratio — a test is a claim that can't silently go stale (it fails loudly), a docstring is a claim that can. If you're deciding where to spend the next hour of polish on a source, a test earns more trust per minute than another paragraph of "why."
+- Add the CI job. This is the cheapest insurance against the whole category of risk — it doesn't catch doc drift, but it guarantees the 89 tests you already have (which *do* catch real regressions) actually get run on every change instead of relying on remembering to run pytest locally.
+
+None of that is "use the LLM less." It's "point the same careful-defensive-engineering instinct at keeping claims-about-the-code in sync with the code, with the same rigor you're already applying to keeping the scrapers in sync with reality."
