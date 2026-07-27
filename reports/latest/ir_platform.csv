@@ -1,10 +1,10 @@
 slug,ticker,platform,scrape_url
 abbott,ABT,unknown,https://www.abbott.com/en-us/investors
 abbvie,ABBV,notified,https://investors.abbvie.com/news-releases
-accenture,ACN,unknown,https://investor.accenture.com/
+accenture,ACN,investis,https://investor.accenture.com/
 akamai,AKAM,notified,https://www.ir.akamai.com/news-releases
 alexandria-real-estate-equities,ARE,q4,https://investor.are.com/news/default.aspx
-allegion,ALLE,unknown,https://investor.allegion.com/
+allegion,ALLE,investis,https://investor.allegion.com/
 allstate,ALL,notified,https://www.allstateinvestors.com/news-releases
 amcor,AMCR,unknown,https://www.amcor.com/investors
 amd,AMD,notified,https://ir.amd.com/news-events/press-releases
@@ -82,7 +82,7 @@ godaddy,GDDY,notified,https://aboutus.godaddy.net/investor-relations/news-releas
 goldman-sachs,GS,investorroom,https://www.goldmansachs.com/investor-relations/news-releases
 google,GOOGL,q4,https://abc.xyz/investor/news/default.aspx
 halliburton,HAL,notified,https://ir.halliburton.com/news-releases
-home-depot,HD,notified,https://ir.homedepot.com/news-releases
+home-depot,HD,investis,https://ir.homedepot.com/
 honeywell-aerospace,HONA,notified,https://investor.honeywellaerospace.com/news-releases
 honeywell-international,HON,notified,https://investor.honeywell.com/investor-relations/news-releases
 hp,HPE,q4,https://investor.hp.com/news/default.aspx
@@ -93,7 +93,7 @@ intercontinental-exchange,ICE,unknown,https://ir.theice.com/
 international-paper,IP,notified,https://www.internationalpaper.com/investors/news-releases
 intuitive-surgical,ISRG,notified,https://isrg.intuitive.com/news-releases
 iqvia,IQV,unknown,https://ir.iqvia.com/
-jb-hunt,JBHT,unknown,https://investor.jbhunt.com/
+jb-hunt,JBHT,investis,https://investor.jbhunt.com/
 kimco-realty,KIM,unknown,https://investors.kimcorealty.com/
 kkr,KKR,unknown,https://ir.kkr.com/
 kla,KLAC,notified,https://ir.kla.com/news-releases

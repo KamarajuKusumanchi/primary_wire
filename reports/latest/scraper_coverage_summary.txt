@@ -5,9 +5,10 @@ Without automated scraper:   138
 Coverage by platform:
 
   platform           total  configured   missing  percentage_done
-  notified              65           9        56            13.8%
-  unknown               42           0        42             0.0%
+  notified              64           9        55            14.1%
+  unknown               39           0        39             0.0%
   q4                    44           9        35            20.5%
   investorroom          12           7         5            58.3%
+  investis               4           0         4             0.0%
   notified_gated         3           3                     100.0%
   TOTAL                166          28       138            16.9%

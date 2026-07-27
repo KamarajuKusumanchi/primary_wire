@@ -31,6 +31,22 @@ notified  (scrape_notified.py)
   * <meta name="Generator" content="Drupal 10 ..."> in the page <head>
   * Links matching /news-releases/news-release-details/<slug>
 
+investis  (no scraper yet -- detection only)
+  * Footer attribution string "Delivered by Investis Digital" (or a link to
+    investisdigital.com) appears in the page source. This is Investis
+    Digital's own branding footer and is unique to that platform.
+  * IMPORTANT: Investis's press-release detail URLs look like
+    /news-releases/<year>/<mm-dd-yyyy>-<serial>, e.g. Home Depot's
+    https://ir.homedepot.com/news-releases/2026/07-15-2026-130113180.
+    That shape has two path segments after "news-releases", which is
+    exactly what Notified's broad link-pattern heuristic
+    (NOTIFIED_DETAIL_RE) looks for -- so before this signal was added,
+    every Investis site was silently misclassified as "notified" instead
+    of getting its own bucket. See _check_investis() and the priority
+    note below for how this is now avoided. There is no scrape_investis.py
+    yet, so an "investis" result just tells you the site needs one --
+    future work, same spirit as notified_gated below.
+
 notified_gated  (scrape_notified_gated.py)
   * Same underlying markup/fingerprints as notified above -- these are
     Notified/Drupal sites that are ALSO protected by bot mitigation (e.g.
@@ -43,17 +59,22 @@ notified_gated  (scrape_notified_gated.py)
     the normal notified/investorroom/q4 signal checks below. See
     GATED_SLUGS. Real sub-classification signals are future work.
 
-Priority when multiple signals fire: notified (meta tag) > investorroom > q4
-> notified (link pattern)
-The Drupal generator meta tag is definitive and is checked first. Notified's
+Priority when multiple signals fire: notified (meta tag) > investis > investorroom
+> q4 > notified (link pattern)
+The Drupal generator meta tag is definitive and is checked first. The Investis
+footer string is also definitive (unique branding) and is checked right after,
+BEFORE Notified's broad link-pattern heuristic gets a chance to misfire on it
+-- see the "investis" entry above for why that ordering matters (Investis's
+own URL shape would otherwise satisfy the Notified heuristic). Notified's
 link-pattern signal, by contrast, is a deliberately broad heuristic (any
 multi-segment path under news-releases/press-releases/financial-releases --
 see scrape_notified.py's DETAIL_URL_RE) that can coincidentally match a Q4
-(or InvestorRoom) site's own links -- e.g. Netflix's Q4 news-details links
-nest under a "financial-releases" path segment, which also satisfies the
-Notified heuristic. To avoid misclassifying such sites as "notified", that
-heuristic is checked LAST, after InvestorRoom and Q4 have had a chance to
-claim the link via their own more specific patterns.
+(or InvestorRoom, or Investis) site's own links -- e.g. Netflix's Q4
+news-details links nest under a "financial-releases" path segment, which also
+satisfies the Notified heuristic. To avoid misclassifying such sites as
+"notified", that heuristic is checked LAST, after Investis, InvestorRoom, and
+Q4 have all had a chance to claim the link via their own more specific
+patterns.
 notified_gated overrides a "notified" result for slugs in GATED_SLUGS.
 
 unknown
@@ -196,6 +217,13 @@ NOTIFIED_DETAIL_RE = re.compile(
     r"/(?:news-releases|press-releases|financial-releases)/[^/#?]+/[^/#?]+",
     re.IGNORECASE,
 )
+
+# Investis Digital: every page carries a "Delivered by Investis Digital"
+# footer credit that links to investisdigital.com (confirmed on Home Depot's
+# IR site, ir.homedepot.com). No scraper for this platform exists yet (see
+# module docstring's "investis" entry), but detecting it is still important
+# so it isn't silently swallowed by Notified's broad link-pattern heuristic.
+INVESTIS_FOOTER_RE = re.compile(r"investis\s*digital", re.IGNORECASE)
 
 # Slugs known to be Notified/Drupal sites gated by bot mitigation strict
 # enough to need scrape_notified_gated.py's headed-browser step (see module
@@ -361,6 +389,32 @@ def _check_investorroom(soup: BeautifulSoup, html: str) -> bool:
     return False
 
 
+def _check_investis(html: str) -> bool:
+    """Investis Digital fingerprint: the platform's own "Delivered by
+    Investis Digital" footer credit (or a bare link/mention of
+    investisdigital.com) appears in the page source. This string is
+    Investis's own branding and isn't used by any other platform, so a
+    match here is treated as definitive -- same spirit as the Drupal
+    generator meta tag for Notified.
+
+    This must be checked BEFORE Notified's broad link-pattern heuristic
+    (_check_notified_links): Investis's press-release detail URLs look like
+    /news-releases/<year>/<mm-dd-yyyy>-<serial> (e.g. Home Depot's
+    .../news-releases/2026/07-15-2026-130113180), which has two path
+    segments after "news-releases" and so satisfies NOTIFIED_DETAIL_RE too.
+    Without this earlier, more specific check, every Investis site gets
+    misclassified as "notified".
+    """
+    lower_html = html.lower()
+    if INVESTIS_FOOTER_RE.search(lower_html):
+        logger.debug("Investis signal: 'Investis Digital' footer credit in source")
+        return True
+    if "investisdigital.com" in lower_html:
+        logger.debug("Investis signal: investisdigital.com in source")
+        return True
+    return False
+
+
 def _check_notified_meta(soup: BeautifulSoup) -> bool:
     """Definitive Notified/Drupal signal: <meta name="Generator" content="Drupal 10 ...">
     in <head>. No other platform produces this tag, so a match here is
@@ -414,20 +468,26 @@ def detect_platform_from_html(
 ) -> str:
     """Classify the IR platform from page HTML using documented fingerprints.
 
-    Priority: notified (definitive) > investorroom > q4 > notified (heuristic)
+    Priority: notified (definitive) > investis > investorroom > q4
+    > notified (heuristic)
 
     The Drupal generator meta tag is checked first and, if present, decides
-    the result immediately -- no other platform can produce it.
+    the result immediately -- no other platform can produce it. The Investis
+    footer credit is checked next for the same reason (unique branding, so
+    definitive on its own) -- see _check_investis().
 
-    Notified's *link-pattern* signal is checked LAST, after InvestorRoom and
-    Q4, rather than second as the platform-priority order might suggest.
-    That signal is a deliberately broad heuristic (see
+    Notified's *link-pattern* signal is checked LAST, after Investis,
+    InvestorRoom, and Q4, rather than second as the platform-priority order
+    might suggest. That signal is a deliberately broad heuristic (see
     _check_notified_links()) that can coincidentally match a Q4 (or
-    InvestorRoom) site's own links, e.g. Netflix's Q4 news-details links
-    nest under a "financial-releases" path segment that also satisfies the
-    Notified heuristic. Checking Q4/InvestorRoom's more specific link shapes
-    first, and only falling back to Notified's broad heuristic if neither
-    claims the link, avoids misclassifying those sites as "notified".
+    InvestorRoom, or Investis) site's own links, e.g. Netflix's Q4
+    news-details links nest under a "financial-releases" path segment that
+    also satisfies the Notified heuristic, and Investis's own
+    /news-releases/<year>/<mm-dd-yyyy>-<serial> detail URLs do too (see Home
+    Depot in the module docstring). Checking Investis/Q4/InvestorRoom's more
+    specific signals first, and only falling back to Notified's broad
+    heuristic if none of them claims the link, avoids misclassifying those
+    sites as "notified".
 
     *news_details_segment* and *news_path* customize the Q4 signal checks
     for sources whose Q4 theme deviates from the Costco/CDW default (see
@@ -437,6 +497,8 @@ def detect_platform_from_html(
 
     if _check_notified_meta(soup):
         return "notified"
+    if _check_investis(html):
+        return "investis"
     if _check_investorroom(soup, html):
         return "investorroom"
     if _check_q4(soup, html, news_details_segment=news_details_segment, news_path=news_path):
