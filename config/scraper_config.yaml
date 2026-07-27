@@ -71,3 +71,5 @@ q4_ir:
       args: [--show-browser]
     - slug: thermo-fisher
       args: [--show-browser]
+    - slug: workday
+      args: [--show-browser]

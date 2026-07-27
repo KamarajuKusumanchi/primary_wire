@@ -767,6 +767,7 @@ sources:
     name: Workday, Inc.
     ticker: WDAY
     ir_url: https://investor.workday.com/
+    news_path: news-and-events/press-releases/default.aspx
   - slug: yum-brands
     name: Yum! Brands, Inc.
     ticker: YUM
