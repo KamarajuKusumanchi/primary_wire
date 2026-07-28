@@ -101,6 +101,10 @@ sources:
     ir_url: https://ir.amd.com/
     news_releases_path: news-events/press-releases
     first_page_index: 1
+  - slug: ameriprise
+    name: Ameriprise Financial, Inc.
+    ticker: AMP
+    ir_url: https://ir.ameriprise.com/
   - slug: analog-devices
     name: Analog Devices, Inc.
     ticker: ADI
@@ -135,6 +139,10 @@ sources:
     name: Arista Networks, Inc.
     ticker: ANET
     ir_url: https://investors.arista.com/
+  - slug: atmos-energy
+    name: Atmos Energy Corporation
+    ticker: ATO
+    ir_url: https://www.investors.atmosenergy.com/
   - slug: autodesk
     name: Autodesk, Inc.
     ticker: ADSK
@@ -285,6 +293,10 @@ sources:
     name: Crown Castle Inc.
     ticker: CCI
     ir_url: https://investor.crowncastle.com/
+  - slug: cummins
+    name: Cummins Inc.
+    ticker: CMI
+    ir_url: https://investor.cummins.com/
   - slug: danaher
     name: Danaher Corporation
     ticker: DHR
@@ -327,6 +339,14 @@ sources:
     name: Dover Corporation
     ticker: DOV
     ir_url: https://www.dovercorporation.com/investors
+  - slug: ecolab
+    name: Ecolab Inc.
+    ticker: ECL
+    ir_url: https://investor.ecolab.com/
+  - slug: edison-international
+    name: Edison International
+    ticker: EIX
+    ir_url: https://www.edison.com/investors
   - slug: eli-lilly
     name: Eli Lilly and Company
     ticker: LLY
@@ -364,6 +384,10 @@ sources:
     ticker: FDXF
     ir_url: https://ir.fedexfreight.com/
     news_releases_path: news-events/press-releases
+  - slug: first-solar
+    name: First Solar, Inc.
+    ticker: FSLR
+    ir_url: https://investor.firstsolar.com/
   - slug: fis-global
     name: Fidelity National Information Services, Inc.
     ticker: FIS
@@ -388,6 +412,10 @@ sources:
     name: Franklin Resources, Inc.
     ticker: BEN
     ir_url: https://investors.franklinresources.com/
+  - slug: gartner
+    name: Gartner, Inc.
+    ticker: IT
+    ir_url: https://investor.gartner.com/
   - slug: ge-healthcare
     name: GE HealthCare Technologies Inc.
     ticker: GEHC
@@ -497,6 +525,10 @@ sources:
     name: J.B. Hunt Transport Services, Inc.
     ticker: JBHT
     ir_url: https://investor.jbhunt.com/
+  - slug: keycorp
+    name: KeyCorp
+    ticker: KEY
+    ir_url: https://investor.key.com/
   - slug: kimco-realty
     name: Kimco Realty Corporation
     ticker: KIM
@@ -605,6 +637,10 @@ sources:
     ticker: PSKY
     ir_url: https://ir.paramount.com/
     news_releases_path: press-releases
+  - slug: paypal
+    name: PayPal Holdings, Inc.
+    ticker: PYPL
+    ir_url: https://investor.pypl.com/
   - slug: pepsi
     name: PepsiCo, Inc.
     ticker: PEP
@@ -658,6 +694,10 @@ sources:
     name: ServiceNow, Inc.
     ticker: NOW
     ir_url: https://investor.servicenow.com/
+  - slug: sherwin-williams
+    name: The Sherwin-Williams Company
+    ticker: SHW
+    ir_url: https://investors.sherwin-williams.com/
   - slug: skyworks
     name: Skyworks Solutions, Inc.
     ticker: SWKS
