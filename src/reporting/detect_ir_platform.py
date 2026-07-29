@@ -304,13 +304,22 @@ NOTIFIED_DETAIL_RE = re.compile(
     re.IGNORECASE,
 )
 
-# Investis Digital: every page carries a "Delivered by Investis Digital"
-# footer credit that links to investisdigital.com (confirmed on Home Depot's
-# IR site, ir.homedepot.com; scraped by scrape_investis.py). Detecting it
-# here is still necessary even though a scraper exists, so it isn't
-# silently swallowed by Notified's broad link-pattern heuristic -- see the
-# module docstring's "investis" entry.
-INVESTIS_FOOTER_RE = re.compile(r"investis\s*digital", re.IGNORECASE)
+# Investis: --debug-dump-html captures of both investors.sysco.com (plain
+# "Investis" footer branding) and ir.homedepot.com ("Investis Digital"
+# footer branding) show an IDENTICAL HTML comment in <head> on both pages:
+#   <!-- Investis Sitecore common GTM -->
+#   ...
+#   <!-- End Investis Sitecore common GTM -->
+# This is Investis's own build tooling/template signature (their Sitecore
+# CMS's shared Google Tag Manager snippet), not user-editable marketing
+# copy -- so unlike a footer credit, it doesn't depend on which branding
+# tier ("Investis" vs "Investis Digital") a given client is on, and isn't
+# at risk of being reworded or dropped in a page redesign the way visible
+# footer text could be. Confirmed present on both known branding variants,
+# so this is the sole signal _check_investis() looks for.
+INVESTIS_SITECORE_COMMENT_RE = re.compile(
+    r"investis\s+sitecore\s+common\s+gtm", re.IGNORECASE
+)
 
 # Slugs known to be Notified/Drupal sites gated by bot mitigation strict
 # enough to need scrape_notified_gated.py's headed-browser step (see module
@@ -477,27 +486,25 @@ def _check_investorroom(soup: BeautifulSoup, html: str) -> bool:
 
 
 def _check_investis(html: str) -> bool:
-    """Investis Digital fingerprint: the platform's own "Delivered by
-    Investis Digital" footer credit (or a bare link/mention of
-    investisdigital.com) appears in the page source. This string is
-    Investis's own branding and isn't used by any other platform, so a
-    match here is treated as definitive -- same spirit as the Drupal
-    generator meta tag for Notified.
+    """Investis fingerprint: the "Investis Sitecore common GTM" HTML
+    comment (INVESTIS_SITECORE_COMMENT_RE) appears in the page's <head>.
+    Confirmed present, verbatim, on both the plain-"Investis"-branded
+    (Sysco) and "Investis Digital"-branded (Home Depot) footer variants --
+    see the constant's own comment above. Investis's own build tooling
+    generates this, so a match here is treated as definitive -- same
+    spirit as the Drupal generator meta tag for Notified.
 
     This must be checked BEFORE Notified's broad link-pattern heuristic
     (_check_notified_links): Investis's press-release detail URLs look like
     /news-releases/<year>/<mm-dd-yyyy>-<serial> (e.g. Home Depot's
-    .../news-releases/2026/07-15-2026-130113180), which has two path
+    .../news-releases/2026/07-15-2026-130113180, or Sysco's
+    .../news-releases/2026/07-14-2026-130519584), which has two path
     segments after "news-releases" and so satisfies NOTIFIED_DETAIL_RE too.
     Without this earlier, more specific check, every Investis site gets
     misclassified as "notified".
     """
-    lower_html = html.lower()
-    if INVESTIS_FOOTER_RE.search(lower_html):
-        logger.debug("Investis signal: 'Investis Digital' footer credit in source")
-        return True
-    if "investisdigital.com" in lower_html:
-        logger.debug("Investis signal: investisdigital.com in source")
+    if INVESTIS_SITECORE_COMMENT_RE.search(html.lower()):
+        logger.debug("Investis signal: 'Investis Sitecore common GTM' comment in <head>")
         return True
     return False
 

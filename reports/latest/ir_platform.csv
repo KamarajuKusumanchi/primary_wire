@@ -1,7 +1,7 @@
 slug,ticker,platform,scrape_url
 abbott,ABT,unknown,https://www.abbott.com/en-us/investors
 abbvie,ABBV,notified,https://investors.abbvie.com/news-releases
-accenture,ACN,investis,https://investor.accenture.com/news-releases
+accenture,ACN,unknown,https://investor.accenture.com/
 aflac,AFL,unknown,https://investors.aflac.com/
 akamai,AKAM,notified,https://www.ir.akamai.com/news-releases
 alexandria-real-estate-equities,ARE,q4,https://investor.are.com/news/default.aspx
@@ -168,7 +168,7 @@ stryker,SYK,unknown,https://investors.stryker.com/
 super-micro,SMCI,q4,https://ir.supermicro.com/news/default.aspx
 synchrony-financial,SYF,unknown,https://investors.synchrony.com/
 synopsys,SNPS,q4,https://investor.synopsys.com/news/default.aspx
-sysco,SYY,notified,https://investors.sysco.com/annual-reports-and-sec-filings/news-releases
+sysco,SYY,investis,https://investors.sysco.com/annual-reports-and-sec-filings/news-releases
 t-mobile,TMUS,q4,https://investor.t-mobile.com/news/default.aspx
 te-connectivity,TEL,notified,https://investors.te.com/news-releases
 teradyne,TER,notified,https://investors.teradyne.com/news-events/press-releases
@@ -197,4 +197,4 @@ weyerhaeuser,WY,investorroom,https://investor.weyerhaeuser.com/news-releases
 workday,WDAY,q4,https://investor.workday.com/news-and-events/press-releases/default.aspx
 yum-brands,YUM,unknown,https://investors.yum.com/
 zebra,ZBRA,q4,https://investors.zebra.com/news/default.aspx
-zimmer-biomet,ZBH,unknown,https://investor.zimmerbiomet.com/
+zimmer-biomet,ZBH,investis,https://investor.zimmerbiomet.com/news-releases
