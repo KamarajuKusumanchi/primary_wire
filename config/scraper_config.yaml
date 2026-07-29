@@ -56,6 +56,7 @@ investis:
   scraper: scrape_investis
   sources:
     - slug: home-depot
+    - slug: allegion
 
 q4_ir:
   scraper: scrape_q4_ir
