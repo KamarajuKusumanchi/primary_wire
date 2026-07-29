@@ -75,6 +75,8 @@ q4_ir:
       args: [--show-browser]
     - slug: corning
       args: [--show-browser]
+    - slug: garmin
+      args: [--show-browser]
 
 investis:
   scraper: scrape_investis

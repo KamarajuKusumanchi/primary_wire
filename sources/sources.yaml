@@ -430,6 +430,7 @@ sources:
     name: Garmin Ltd.
     ticker: GRMN
     ir_url: https://investors.garmin.com/
+    news_path: news-and-events/default.aspx
   - slug: gartner
     name: Gartner, Inc.
     ticker: IT
