@@ -9,8 +9,8 @@ writing any press-release data themselves.
 
   * ''missing_tickers.py'' -- S&P 500 tickers not yet in ''sources.yaml''
   * ''detect_ir_platform.py'' -- classify each source's IR platform
-    (q4 / investorroom / notified / notified_gated / unknown) from page
-    fingerprints
+    (q4 / investorroom / notified / notified_gated / investis / unknown)
+    from page fingerprints
   * ''check_scraper_coverage.py'' -- how many sources in ''sources.yaml''
     have an automated scraper configured, plus config-drift checks (typo'd
     slugs, a slug configured under two scraper groups at once)

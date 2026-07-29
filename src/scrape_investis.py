@@ -133,7 +133,12 @@ try:
 except ImportError:
     sys.exit("Missing dependency. Install with: pip install beautifulsoup4 lxml")
 
-from utils.sources_utils import join_url_path, resolve_field_precedence, resolve_source_identity
+from utils.sources_utils import (
+    INVESTIS_DEFAULT_NEWS_RELEASES_PATH,
+    join_url_path,
+    resolve_field_precedence,
+    resolve_source_identity,
+)
 from utils.scrape_utils import (
     NewsItem as _BaseNewsItem,
     add_common_args,
@@ -159,13 +164,14 @@ DEFAULT_SLUG = "home-depot"
 DEFAULT_TICKER = "HD"
 DEFAULT_BASE_URL = "https://ir.homedepot.com"
 
-# Only one Investis Digital site (Home Depot) is known to primary_wire so
-# far, so -- unlike DEFAULT_NEWS_RELEASES_PATH for the other platforms --
-# this constant lives here rather than in utils/sources_utils.py. If a
-# second Investis site turns up, move it there (see
-# NOTIFIED_DEFAULT_NEWS_RELEASES_PATH etc. for the pattern to follow) so
-# reporting scripts can resolve a listing URL for it too.
-DEFAULT_NEWS_RELEASES_PATH = "news-releases"
+# Imported from utils.sources_utils.PLATFORMS["investis"] rather than
+# defined here, so this scraper and reporting scripts (detect_ir_platform.py,
+# check_scraper_coverage.py) can never disagree about Investis's default
+# listing path -- see that registry's own comment for why it's the single
+# source of truth. Only one Investis Digital site (Home Depot) is known to
+# primary_wire so far; the registry entry is written generically enough to
+# cover a second one without needing to change.
+DEFAULT_NEWS_RELEASES_PATH = INVESTIS_DEFAULT_NEWS_RELEASES_PATH
 
 # Safety caps on pagination/full-history loops -- these stop the scraper
 # from looping forever if the site's markup changes in a way that breaks

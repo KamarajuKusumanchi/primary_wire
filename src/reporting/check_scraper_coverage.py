@@ -65,7 +65,7 @@ except ImportError:
     sys.exit("Missing dependency. Install with: pip install ruamel.yaml")
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-from utils.sources_utils import load_sources, resolve_listing_url  # noqa: E402
+from utils.sources_utils import load_sources, platform_names, resolve_listing_url  # noqa: E402
 
 REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 SOURCES_PATH = REPO_ROOT / "sources" / "sources.yaml"
@@ -222,14 +222,39 @@ def missing_coverage_csv(missing_df: pd.DataFrame) -> str:
 
 
 # scraper_config.yaml group names that don't match the platform name
-# detect_ir_platform.py's detect_platform() assigns for the same platform
-# (see that module's detect_platform() return values: "investorroom",
-# "notified", "notified_gated", "q4", "unknown"). Every group not listed
-# here is assumed to already match its platform name 1:1 (true today for
-# investorroom, notified, notified_gated).
+# detect_ir_platform.py's detect_platform() assigns for the same platform.
+# The canonical list of valid platform names is utils.sources_utils.
+# PLATFORMS (see that registry's own comment) -- not retyped here, so this
+# comment can't go stale the way a hand-copied list would. Every group not
+# listed here is assumed to already match its platform name 1:1 (true today
+# for investorroom, notified, notified_gated, investis).
 CONFIG_GROUP_TO_PLATFORM = {
     "q4_ir": "q4",
 }
+
+
+def _assert_config_group_mapping_valid() -> None:
+    """Fail fast if CONFIG_GROUP_TO_PLATFORM points at an unregistered platform.
+
+    Guards against the same class of drift detect_ir_platform.py's
+    _assert_platforms_registered() catches: someone renames or removes a
+    platform in utils.sources_utils.PLATFORMS but forgets this dict still
+    references its old name, and platform_breakdown()'s counts would then
+    silently misattribute a whole scraper_config.yaml group instead of
+    erroring. Called once at import time (see call just below).
+    """
+    known = set(platform_names())
+    bad = {v for v in CONFIG_GROUP_TO_PLATFORM.values() if v not in known}
+    if bad:
+        raise AssertionError(
+            f"CONFIG_GROUP_TO_PLATFORM maps a scraper_config.yaml group to "
+            f"platform(s) {sorted(bad)}, which utils.sources_utils.PLATFORMS "
+            "doesn't recognize. Fix the mapping, or add the platform to "
+            "PLATFORMS in src/utils/sources_utils.py if it's newly added."
+        )
+
+
+_assert_config_group_mapping_valid()
 
 # Platforms that detect_platform() can only ever assign via a curated,
 # manually-maintained override list rather than from an actual page
@@ -246,6 +271,13 @@ CONFIG_GROUP_TO_PLATFORM = {
 # 0 would claim "no missing sources need this", when the honest state is
 # "this pipeline can't tell you that".
 UNMEASURABLE_MISSING_PLATFORMS = {"notified_gated"}
+if UNMEASURABLE_MISSING_PLATFORMS - set(platform_names()):
+    raise AssertionError(
+        f"UNMEASURABLE_MISSING_PLATFORMS references unregistered platform(s) "
+        f"{sorted(UNMEASURABLE_MISSING_PLATFORMS - set(platform_names()))}. "
+        "Fix the set, or add the platform to PLATFORMS in "
+        "src/utils/sources_utils.py."
+    )
 
 
 def platform_breakdown(

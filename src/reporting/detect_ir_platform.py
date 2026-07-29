@@ -8,6 +8,15 @@ No hardcoded hostname lists — every classification is evidence-based.
 
 Supported platforms (and their fingerprints, as documented by each scraper)
 ---------------------------------------------------------------------------
+The canonical list of platform names and their scraper modules lives in
+utils.sources_utils.PLATFORMS, not here -- run
+`python src/reporting/detect_ir_platform.py --list-platforms` to print it.
+That list is enforced to match this module's own detection logic by
+_assert_platforms_registered(), which runs at import time (see
+DETECTOR_PLATFORMS above) -- so it cannot silently drift the way a
+hand-copied bullet list could. What's below is what the registry can't
+capture automatically: the actual page fingerprint each platform is
+detected by, and why they're checked in this particular order.
 
 q4  (scrape_q4_ir.py)
   * Links with href matching /<news_details_segment>/<year>/<slug>[/default.aspx],
@@ -31,7 +40,7 @@ notified  (scrape_notified.py)
   * <meta name="Generator" content="Drupal 10 ..."> in the page <head>
   * Links matching /news-releases/news-release-details/<slug>
 
-investis  (no scraper yet -- detection only)
+investis  (scrape_investis.py)
   * Footer attribution string "Delivered by Investis Digital" (or a link to
     investisdigital.com) appears in the page source. This is Investis
     Digital's own branding footer and is unique to that platform.
@@ -43,9 +52,7 @@ investis  (no scraper yet -- detection only)
     (NOTIFIED_DETAIL_RE) looks for -- so before this signal was added,
     every Investis site was silently misclassified as "notified" instead
     of getting its own bucket. See _check_investis() and the priority
-    note below for how this is now avoided. There is no scrape_investis.py
-    yet, so an "investis" result just tells you the site needs one --
-    future work, same spirit as notified_gated below.
+    note below for how this is now avoided.
 
 notified_gated  (scrape_notified_gated.py)
   * Same underlying markup/fingerprints as notified above -- these are
@@ -82,6 +89,9 @@ unknown
 
 Usage
 -----
+  # Print the registered platform names/scrapers/descriptions and exit
+  python src/reporting/detect_ir_platform.py --list-platforms
+
   # Single lookup
   python src/reporting/detect_ir_platform.py --slug costco
   python src/reporting/detect_ir_platform.py --ticker CMG
@@ -108,7 +118,8 @@ scrape_url is the full press-release *listing* URL for the detected
 platform -- the site root actually fetched for detection (news_url if
 set, else ir_url; see resolve_scrape_url()) plus that platform's listing
 path (sources.yaml's "news_path" for q4, "news_releases_path" for
-investorroom/notified/notified_gated; see resolve_listing_url()) -- so
+investorroom/notified/notified_gated/investis; see resolve_listing_url(),
+or run --list-platforms for the current field/default per platform) -- so
 it's directly pasteable into a browser to see the same page the platform
 was detected from, e.g. https://news.lockheedmartin.com/news-releases?category=788
 rather than just https://news.lockheedmartin.com/. For "unknown" rows,
@@ -149,7 +160,10 @@ from utils.q4_link_pattern import (  # noqa: E402
     strip_year_placeholder,
 )
 from utils.sources_utils import (  # noqa: E402
+    PLATFORMS,
+    describe_platforms,
     join_url_path,
+    platform_names,
     resolve_listing_url,
     resolve_scrape_url,
 )
@@ -178,6 +192,78 @@ logger = logging.getLogger("detect_ir_platform")
 
 REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 DEFAULT_SOURCES_YAML = REPO_ROOT / "sources" / "sources.yaml"
+
+# ---------------------------------------------------------------------------
+# Platform names this module's own fingerprint checks can produce
+# ---------------------------------------------------------------------------
+#
+# Named constants instead of bare string literals scattered through
+# detect_platform_from_html()/detect_platform() below, for two reasons:
+#   1. A typo in a literal ("investsi") would silently create a brand new,
+#      wrong platform value instead of erroring; a typo in a constant name
+#      is a NameError.
+#   2. DETECTOR_PLATFORMS -- the tuple of every value _check_*() /
+#      detect_platform() can actually return (other than PLATFORM_UNKNOWN)
+#      -- gives _assert_platforms_registered() below something concrete to
+#      check against utils.sources_utils.PLATFORMS. Add a new _check_<x>()
+#      function and a new PLATFORM_<X> constant here, but forget to add a
+#      matching entry to PLATFORMS in utils/sources_utils.py, and the
+#      assertion at the bottom of this block fails at import time --
+#      instead of the mismatch just quietly sitting there until someone
+#      notices resolve_listing_url() doing the wrong thing for it.
+PLATFORM_Q4 = "q4"
+PLATFORM_INVESTORROOM = "investorroom"
+PLATFORM_NOTIFIED = "notified"
+PLATFORM_NOTIFIED_GATED = "notified_gated"
+PLATFORM_INVESTIS = "investis"
+PLATFORM_UNKNOWN = "unknown"
+
+DETECTOR_PLATFORMS = (
+    PLATFORM_Q4,
+    PLATFORM_INVESTORROOM,
+    PLATFORM_NOTIFIED,
+    PLATFORM_NOTIFIED_GATED,
+    PLATFORM_INVESTIS,
+)
+
+
+def _assert_platforms_registered() -> None:
+    """Fail fast if DETECTOR_PLATFORMS and utils.sources_utils.PLATFORMS
+    disagree about which platforms exist.
+
+    This is the actual enforcement behind the "single source of truth"
+    claim in utils/sources_utils.py's PLATFORMS comment: without it, adding
+    a new _check_<platform>() here and forgetting to register it there (or
+    vice versa) would be a silent gap, discovered only whenever someone
+    happens to notice resolve_listing_url() or check_scraper_coverage.py
+    behaving oddly for that platform -- possibly much later, by a different
+    person, with no clear link back to the missing registration. Called
+    once at import time (see bottom of this block) rather than left as a
+    test someone has to remember to run.
+    """
+    known = set(platform_names())
+    detected = set(DETECTOR_PLATFORMS)
+    missing_from_registry = detected - known
+    missing_from_detector = known - detected
+    if missing_from_registry:
+        raise AssertionError(
+            f"detect_ir_platform.py can return platform(s) {sorted(missing_from_registry)} "
+            "that utils.sources_utils.PLATFORMS doesn't know about. Add a matching "
+            "entry to PLATFORMS in src/utils/sources_utils.py."
+        )
+    if missing_from_detector:
+        raise AssertionError(
+            f"utils.sources_utils.PLATFORMS registers platform(s) "
+            f"{sorted(missing_from_detector)} that detect_ir_platform.py has no "
+            "_check_<platform>() for and never returns. Either add detection "
+            "support here, or remove the registry entry if it's not a real, "
+            "independently-fingerprintable platform (e.g. notified_gated, which "
+            "IS real and IS in DETECTOR_PLATFORMS -- see GATED_SLUGS below for why "
+            "it doesn't get its own _check_*() function)."
+        )
+
+
+_assert_platforms_registered()
 
 # ---------------------------------------------------------------------------
 # Fingerprint regexes
@@ -220,9 +306,10 @@ NOTIFIED_DETAIL_RE = re.compile(
 
 # Investis Digital: every page carries a "Delivered by Investis Digital"
 # footer credit that links to investisdigital.com (confirmed on Home Depot's
-# IR site, ir.homedepot.com). No scraper for this platform exists yet (see
-# module docstring's "investis" entry), but detecting it is still important
-# so it isn't silently swallowed by Notified's broad link-pattern heuristic.
+# IR site, ir.homedepot.com; scraped by scrape_investis.py). Detecting it
+# here is still necessary even though a scraper exists, so it isn't
+# silently swallowed by Notified's broad link-pattern heuristic -- see the
+# module docstring's "investis" entry.
 INVESTIS_FOOTER_RE = re.compile(r"investis\s*digital", re.IGNORECASE)
 
 # Slugs known to be Notified/Drupal sites gated by bot mitigation strict
@@ -496,16 +583,16 @@ def detect_platform_from_html(
     soup = BeautifulSoup(html, "lxml")
 
     if _check_notified_meta(soup):
-        return "notified"
+        return PLATFORM_NOTIFIED
     if _check_investis(html):
-        return "investis"
+        return PLATFORM_INVESTIS
     if _check_investorroom(soup, html):
-        return "investorroom"
+        return PLATFORM_INVESTORROOM
     if _check_q4(soup, html, news_details_segment=news_details_segment, news_path=news_path):
-        return "q4"
+        return PLATFORM_Q4
     if _check_notified_links(soup):
-        return "notified"
-    return "unknown"
+        return PLATFORM_NOTIFIED
+    return PLATFORM_UNKNOWN
 
 
 def detect_platform(
@@ -539,7 +626,7 @@ def detect_platform(
     can determine from the page alone).
     """
     if not ir_url:
-        return "unknown"
+        return PLATFORM_UNKNOWN
     fetch_url = _join_news_path(ir_url, news_path)
     try:
         final_url, html = fetch_html(fetch_url, timeout=timeout)
@@ -550,11 +637,11 @@ def detect_platform(
         )
     except Exception as exc:
         logger.warning("fetch failed for %s: %s", fetch_url, exc)
-        return "unknown"
+        return PLATFORM_UNKNOWN
 
-    if platform == "notified" and slug.strip().lower() in GATED_SLUGS:
+    if platform == PLATFORM_NOTIFIED and slug.strip().lower() in GATED_SLUGS:
         logger.debug("Gated-slug override: %s → notified_gated", slug)
-        return "notified_gated"
+        return PLATFORM_NOTIFIED_GATED
     return platform
 
 # ---------------------------------------------------------------------------
@@ -763,6 +850,15 @@ def build_arg_parser() -> argparse.ArgumentParser:
         "-v", "--verbose", action="store_true",
         help="Enable DEBUG logging (shows which signals fired).",
     )
+    parser.add_argument(
+        "--list-platforms", action="store_true",
+        help="Print the registered platform names, their scraper module "
+             "(if any), and a one-line description, then exit. This is "
+             "utils.sources_utils.PLATFORMS -- the single source of truth "
+             "for platform names -- not something hand-maintained in this "
+             "script's --help text, so it can't go stale the way a "
+             "hardcoded list here could.",
+    )
 
     return parser
 
@@ -775,6 +871,10 @@ def main(argv: Optional[list[str]] = None) -> int:
         level=logging.DEBUG if args.verbose else logging.WARNING,
         format="%(levelname)s: %(message)s",
     )
+
+    if args.list_platforms:
+        print(describe_platforms())
+        return 0
 
     if not any([args.slug, args.ticker, args.url, args.all]):
         # No target specified — default to scanning every entry in sources.

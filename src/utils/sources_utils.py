@@ -6,7 +6,13 @@ Shared utilities for reading sources/sources.yaml.
 
 Imported by get_source.py, update_source.py, scrape_q4_ir.py,
 scrape_investorroom.py, scrape_notified.py, scrape_notified_gated.py,
-src/reporting/detect_ir_platform.py, and src/reporting/check_scraper_coverage.py.
+scrape_investis.py, src/reporting/detect_ir_platform.py, and
+src/reporting/check_scraper_coverage.py.
+
+This module also owns PLATFORMS, the single source of truth for which IR
+platforms primary_wire knows about (name, implementing scraper module,
+sources.yaml listing-path field/default). See PLATFORMS' own comment for
+what adding a new platform should (and should not) require touching.
 
 ruamel.yaml is only imported lazily, inside load_sources() (the one
 function that actually needs it), rather than at module level -- so a
@@ -19,6 +25,7 @@ from __future__ import annotations
 
 import logging
 import sys
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
 from urllib.parse import parse_qsl, urlparse, urlunparse
@@ -152,34 +159,147 @@ def resolve_scrape_url(record: dict) -> str:
     return record.get("news_url") or record.get("ir_url", "")
 
 
-# Platform-specific listing-path field name and fallback default. The
-# field name mirrors what each scraper's resolve_source() reads from a
-# sources.yaml record; the default value is the same constant each scraper
-# falls back to when that field isn't set -- see the DEFAULT_NEWS_PATH /
-# DEFAULT_NEWS_RELEASES_PATH constants  immediately below, which are the
-# actual single source of truth (scrape_investorroom.py, scrape_notified.py,
-# and scrape_notified_gated.py import theirs from here instead of each
-# defining their own, the same way scrape_q4_ir.py already imports
-# DEFAULT_NEWS_PATH from utils/q4_link_pattern.py). Retyping the same value
-# in more than one place is exactly how this table and each scraper's own
-# constant could silently drift apart; importing one shared name everywhere
-# is what prevents that.
+# ---------------------------------------------------------------------------
+# Platform registry -- THE single source of truth for "what IR platforms
+# does primary_wire know about".
+# ---------------------------------------------------------------------------
 #
+# Every other module that needs to enumerate, validate, or look up
+# platform-specific details (detect_ir_platform.py's fingerprint checks,
+# check_scraper_coverage.py's config-group mapping, each scraper's own
+# news_releases_path default) reads PLATFORMS below rather than keeping its
+# own hardcoded copy of the platform list. That's the actual fix for doc
+# drift: there is exactly one place a new platform's name/scraper/listing
+# default is *declared*, and every place that previously duplicated that
+# list now either imports from here or has a runtime check (see
+# detect_ir_platform.py's _assert_platforms_registered() and
+# check_scraper_coverage.py's _assert_config_group_mapping_valid()) that
+# fails loudly at import time if this registry and that module's own
+# hardcoded platform-name literals fall out of sync.
+#
+# Adding platform #6 should only ever require:
+#   1. One new entry below.
+#   2. A new scrape_<platform>.py, importing its listing-path default and
+#      field name from the entry you just added (see DEFAULT_NEWS_RELEASES_PATH
+#      pattern in e.g. scrape_investis.py) instead of redefining them.
+#   3. A new _check_<platform>() in detect_ir_platform.py, plus adding that
+#      platform's name to its DETECTOR_PLATFORMS tuple -- forgetting this
+#      step is exactly what _assert_platforms_registered() catches.
+#   4. A new prose section in docs/scrapers.txt (this part genuinely can't
+#      be generated -- it's the one place that documents *how* the platform
+#      is scraped, not just its name).
+# Nothing else in this codebase should need a matching edit; if you find a
+# spot that does, it's a candidate to be pointed at PLATFORMS instead.
+#
+# Fields:
+#   listing_field         sources.yaml field holding a per-source override
+#                         of the listing path (mirrors what each scraper's
+#                         resolve_source() reads).
+#   default_listing_path  fallback when listing_field isn't set on a given
+#                         record. This is the actual single source of truth
+#                         for that default -- scraper modules import it from
+#                         here (as DEFAULT_NEWS_RELEASES_PATH / equivalent)
+#                         instead of each redefining their own copy, which is
+#                         exactly the kind of duplication that let this value
+#                         and a per-scraper constant silently drift apart
+#                         before this registry existed.
+#   scraper_module        module name (under src/) that implements scraping
+#                         for this platform, or None if detection-only (no
+#                         scraper exists yet).
+#   description           one-line human summary, used by
+#                         detect_ir_platform.py's --list-platforms output
+#                         and safe to quote in docs instead of retyping.
+@dataclass(frozen=True)
+class Platform:
+    listing_field: str
+    default_listing_path: str
+    scraper_module: Optional[str]
+    description: str
+
+
 # notified_gated's default is tuned for TJX; in practice every currently
 # known gated slug sets its own news_releases_path in sources.yaml, so this
-# default rarely applies.
-INVESTORROOM_DEFAULT_NEWS_RELEASES_PATH = "news-releases"
-NOTIFIED_DEFAULT_NEWS_RELEASES_PATH = "news-releases"
-NOTIFIED_GATED_DEFAULT_NEWS_RELEASES_PATH = "investors/press-releases"
+# default rarely applies. Q4 is the only platform whose listing-path field
+# is "news_path" rather than "news_releases_path"; see resolve_listing_url()'s
+# "{year}" handling below for the other Q4-specific wrinkle.
+PLATFORMS: dict[str, Platform] = {
+    "q4": Platform(
+        listing_field="news_path",
+        default_listing_path=DEFAULT_NEWS_PATH,
+        scraper_module="scrape_q4_ir",
+        description="Q4 IR sites (news-details link pattern)",
+    ),
+    "investorroom": Platform(
+        listing_field="news_releases_path",
+        default_listing_path="news-releases",
+        scraper_module="scrape_investorroom",
+        description="InvestorRoom sites (filecache.investorroom.com assets)",
+    ),
+    "notified": Platform(
+        listing_field="news_releases_path",
+        default_listing_path="news-releases",
+        scraper_module="scrape_notified",
+        description="Notified/Drupal sites (Drupal 10 generator meta tag)",
+    ),
+    "notified_gated": Platform(
+        listing_field="news_releases_path",
+        default_listing_path="investors/press-releases",
+        scraper_module="scrape_notified_gated",
+        description=(
+            "Notified/Drupal sites also behind bot mitigation strict enough "
+            "to need a headed-browser scrape; same platform as notified, "
+            "just a different way of getting past the gate"
+        ),
+    ),
+    "investis": Platform(
+        listing_field="news_releases_path",
+        default_listing_path="news-releases",
+        scraper_module="scrape_investis",
+        description="Investis Digital sites (\"Delivered by Investis Digital\" footer)",
+    ),
+}
 
-# Q4 is the only platform whose listing-path field is "news_path" rather
-# than "news_releases_path"; see resolve_listing_url()'s "{year}" handling
-# below for the other Q4-specific wrinkle.
+
+def platform_names() -> tuple[str, ...]:
+    """Return all registered platform names, sorted.
+
+    Use this instead of hardcoding a platform list anywhere new -- e.g. for
+    an argparse ``choices=`` list or a validation check. "unknown" is
+    deliberately not included: it isn't a real platform, just what
+    detect_ir_platform.py returns when nothing matched.
+    """
+    return tuple(sorted(PLATFORMS))
+
+
+def describe_platforms() -> str:
+    """Return a human-readable table of the platform registry, one line each.
+
+    Used by detect_ir_platform.py's ``--list-platforms`` flag. Intended as
+    the thing to run (or point to) instead of hand-copying platform names
+    into a doc -- the output always matches PLATFORMS exactly, so it can't
+    drift the way retyped prose can.
+    """
+    lines = []
+    for name in platform_names():
+        p = PLATFORMS[name]
+        scraper = p.scraper_module + ".py" if p.scraper_module else "(no scraper -- detection only)"
+        lines.append(f"{name:15} {scraper:28} {p.description}")
+    return "\n".join(lines)
+
+
+# Back-compat aliases: a few scrapers historically imported their listing-
+# path default directly by name (e.g. `from utils.sources_utils import
+# NOTIFIED_DEFAULT_NEWS_RELEASES_PATH`). These now just point at the
+# registry entries above rather than being independently maintained, so
+# there is still only one real value per platform -- PLATFORMS[...] --
+# even though it's reachable under either name.
+INVESTORROOM_DEFAULT_NEWS_RELEASES_PATH = PLATFORMS["investorroom"].default_listing_path
+NOTIFIED_DEFAULT_NEWS_RELEASES_PATH = PLATFORMS["notified"].default_listing_path
+NOTIFIED_GATED_DEFAULT_NEWS_RELEASES_PATH = PLATFORMS["notified_gated"].default_listing_path
+INVESTIS_DEFAULT_NEWS_RELEASES_PATH = PLATFORMS["investis"].default_listing_path
+
 _LISTING_PATH_DEFAULTS: dict[str, tuple[str, str]] = {
-    "q4": ("news_path", DEFAULT_NEWS_PATH),
-    "investorroom": ("news_releases_path", INVESTORROOM_DEFAULT_NEWS_RELEASES_PATH),
-    "notified": ("news_releases_path", NOTIFIED_DEFAULT_NEWS_RELEASES_PATH),
-    "notified_gated": ("news_releases_path", NOTIFIED_GATED_DEFAULT_NEWS_RELEASES_PATH),
+    name: (p.listing_field, p.default_listing_path) for name, p in PLATFORMS.items()
 }
 
 
@@ -194,10 +314,11 @@ def resolve_listing_url(record: dict, platform: str) -> str:
     path onto the site root, so reports can show a URL that's directly
     pasteable into a browser and matches what the scraper actually parses.
 
-    *platform* (one of "q4", "investorroom", "notified", "notified_gated",
-    or "unknown"/anything else) selects which sources.yaml field holds the
-    listing path and what its platform-specific default is -- see
-    _LISTING_PATH_DEFAULTS. This mirrors each scraper's own
+    *platform* is one of PLATFORMS' keys (see platform_names()) -- currently
+    "q4", "investorroom", "notified", "notified_gated", "investis" -- or
+    "unknown"/anything else not in that registry. It selects which
+    sources.yaml field holds the listing path and what its platform-specific
+    default is. This mirrors each scraper's own
     resolve_source()/resolve_field_precedence() field lookup, minus the
     CLI-override layer (reports have no CLI flags of their own to override
     with).
@@ -207,10 +328,10 @@ def resolve_listing_url(record: dict, platform: str) -> str:
     detect_ir_platform.py's own detection fetch, this just needs *a*
     browsable listing URL, not one pinned to a specific year.
 
-    For "unknown" (or any platform not in _LISTING_PATH_DEFAULTS), there's
-    no reliable field to join -- we don't know what shape this site's
-    listing path takes -- so the site root from resolve_scrape_url() is
-    returned unchanged.
+    For "unknown" (or any platform not in PLATFORMS), there's no reliable
+    field to join -- we don't know what shape this site's listing path
+    takes -- so the site root from resolve_scrape_url() is returned
+    unchanged.
     """
     base_url = resolve_scrape_url(record)
     if not base_url:

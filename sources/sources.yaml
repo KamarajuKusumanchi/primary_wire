@@ -87,6 +87,7 @@ sources:
     name: Allegion plc
     ticker: ALLE
     ir_url: https://investor.allegion.com/
+    news_releases_path: news-and-events/news-releases
   - slug: allstate
     name: The Allstate Corporation
     ticker: ALL

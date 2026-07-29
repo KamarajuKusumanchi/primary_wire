@@ -81,8 +81,8 @@ is not financial advice.
   - Automated link collection is welcome, provided contributors follow the
     guidelines below. Links are verified before merging.
   - As of now, ''config/scraper_config.yaml'' drives automated scraping for
-    ~20 of these sources, across three IR platforms (Q4, InvestorRoom,
-    Notified). The rest are still added by hand.
+    ~30 of these sources, across four IR platforms (Q4, InvestorRoom,
+    Notified, Investis Digital). The rest are still added by hand.
 
 ===== Scrapers =====
 
@@ -97,6 +97,7 @@ platform share the same page structure:
   * ''scrape_notified_gated.py'' -- Notified/Drupal sites that are also
     behind bot mitigation such as Akamai (e.g. TJX); same platform as
     scrape_notified.py, just a different way of getting past the gate
+  * ''scrape_investis.py'' -- Investis Digital sites (e.g. Home Depot)
 
 See [[docs/scrapers.txt]] for what each scraper does, its usage examples,
 and its dependencies -- worth reading before running one of these or adding
@@ -147,6 +148,7 @@ functional but not yet complete, and more tooling is planned.
       scrape_investorroom.py  Scrape any InvestorRoom-powered IR site
       scrape_notified.py       Scrape any Notified/Drupal IR site
       scrape_notified_gated.py  Scrape Notified/Drupal IR sites behind Akamai-style bot mitigation
+      scrape_investis.py  Scrape any Investis Digital-powered IR site
       update_source.py    Interactively add or update an entry in sources.yaml
       update_release.py   Interactively add a press release to a daily CSV file
       reporting/          Read-only diagnostic scripts (see docs/reporting.txt)

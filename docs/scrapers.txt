@@ -1,7 +1,8 @@
 ====== primary_wire: Scrapers ======
 
-''config/scraper_config.yaml'' drives automated scraping for ~20 sources,
-across three IR platforms (Q4, InvestorRoom, Notified). This file documents
+''config/scraper_config.yaml'' drives automated scraping for ~30 sources,
+across four IR platforms (Q4, InvestorRoom, Notified, Investis Digital).
+This file documents
 each scraper script under ''src/'' in detail. See README.txt for the
 high-level picture; this is the one to read before running a scraper, adding
 a new source to an existing platform, or debugging one that broke.
@@ -213,6 +214,55 @@ Because the token-reading step needs a real display, this scraper is not yet
 expected to run unattended on a headless CI box -- see the module docstring
 for the known limitation.
 
+===== scrape_investis.py =====
+
+Collects press release links from any IR site powered by the Investis
+Digital platform. Home Depot is the first confirmed site ("Delivered by
+Investis Digital" in the page footer). Unlike Notified/InvestorRoom, where
+one paginated feed spans the whole history, Investis puts each calendar
+year at its own address (''/news-releases/<YYYY>''), paginated within the
+year by a 1-based ''?page=N''. That means there's no year filter to
+reverse-engineer -- the scraper just requests the exact year(s) it wants
+directly -- but also no single feed to page through for a full-history
+scan; instead, with no ''--year''/''--start-year'' given, the scraper walks
+backward one calendar year at a time from the current year and stops the
+first time a year comes back empty (the page shell renders with
+"Information will appear here in due course." for out-of-range years),
+capped by ''MAX_YEARS_BACK'' as a safety net.
+
+Investis pages are server-side rendered, like InvestorRoom and unlike Q4,
+so no Playwright is needed -- a plain GET on ''?page=N'' returns the same
+HTML the "Load More News Releases" button fetches in a browser. Dates come
+from the listing table's own Date column ("Mon DD, YYYY" text); if that's
+unparseable, the detail-page URL's embedded ''MM-DD-YYYY'' segment is a
+fallback, and ''--fetch-detail-pages'' is available as a last resort.
+
+Usage:
+
+  # Home Depot, full history, dry-run
+  python src/scrape_investis.py --dry-run
+
+  # Any Investis Digital site by URL, slug, or ticker
+  python src/scrape_investis.py --url https://ir.homedepot.com --dry-run
+  python src/scrape_investis.py --slug home-depot --dry-run
+  python src/scrape_investis.py --ticker HD --dry-run
+
+  # Restrict to a year or range (skips the full-history scan)
+  python src/scrape_investis.py --year 2025 --dry-run
+  python src/scrape_investis.py --start-year 2023 --end-year 2025 --dry-run
+
+  # Fetch detail pages to resolve any dates the listing page couldn't parse
+  python src/scrape_investis.py --fetch-detail-pages --dry-run
+
+Requires:
+
+  pip install curl_cffi beautifulsoup4 lxml ruamel.yaml
+
+curl_cffi is used here as a precaution (the site sits behind Cloudflare)
+rather than a confirmed requirement the way it is for scrape_notified.py's
+AbbVie default -- see the module docstring if plain ''requests'' turns out
+to work fine and this needs revisiting.
+
 ===== Guidelines for automated contributions =====
 
 See README.txt's "Guidelines for automated contributions" section -- every
@@ -230,8 +280,30 @@ platform automatically -- see [[reporting.txt]]. Adding such a source is
 usually just a new ''sources.yaml'' entry plus a ''config/scraper_config.yaml''
 entry, not a new script.
 
-A genuinely new platform gets its own ''scrape_<platform>.py'' script,
-following the pattern of the existing ones: share argparse/date/output
-plumbing via ''utils/scrape_utils.py'', share ''sources.yaml'' lookups via
-''utils/sources_utils.py'', and add a one-line bullet plus a full section to
-this file (not README.txt).
+A genuinely new platform:
+
+  1. Add one entry to PLATFORMS in ''src/utils/sources_utils.py'' -- name,
+     listing-path field/default, scraper module name, one-line description.
+     This is now the single source of truth for the platform's name; see
+     that dict's own comment.
+  2. Write ''scrape_<platform>.py'', following the pattern of the existing
+     ones: share argparse/date/output plumbing via ''utils/scrape_utils.py'',
+     share ''sources.yaml'' lookups via ''utils/sources_utils.py'', and import
+     its listing-path default from the PLATFORMS entry you just added
+     (e.g. ''INVESTIS_DEFAULT_NEWS_RELEASES_PATH'') instead of redefining it.
+  3. Add a ''_check_<platform>()'' fingerprint test and a matching
+     ''PLATFORM_<X>'' constant (added to ''DETECTOR_PLATFORMS'') in
+     ''src/reporting/detect_ir_platform.py''. If you forget this step (or
+     step 1), that module's ''_assert_platforms_registered()'' raises at
+     import time rather than letting the two lists silently disagree --
+     run any command in that script, or just ''python -c "import
+     reporting.detect_ir_platform"'', and a mismatch will fail loudly.
+  4. Add a one-line bullet plus a full section to this file (not
+     README.txt) documenting how the scraper actually works -- this part
+     genuinely can't be generated from the registry, since it's the "how",
+     not just the "what".
+
+''python src/reporting/detect_ir_platform.py --list-platforms'' always
+prints the current, live PLATFORMS registry, so it's the thing to check
+(not this file's prose) if you're unsure whether a platform is registered
+yet.
