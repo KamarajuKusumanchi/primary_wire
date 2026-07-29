@@ -784,6 +784,7 @@ sources:
     name: Sysco Corporation
     ticker: SYY
     ir_url: https://investors.sysco.com/
+    news_releases_path: annual-reports-and-sec-filings/news-releases
   - slug: t-mobile
     name: T-Mobile US, Inc.
     ticker: TMUS
