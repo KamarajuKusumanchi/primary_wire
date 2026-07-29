@@ -75,6 +75,10 @@ sources:
     name: Accenture plc
     ticker: ACN
     ir_url: https://investor.accenture.com/
+  - slug: aflac
+    name: AFLAC Incorporated
+    ticker: AFL
+    ir_url: https://investors.aflac.com/
   - slug: akamai
     name: Akamai Technologies, Inc.
     ticker: AKAM
@@ -337,6 +341,10 @@ sources:
     name: Digital Realty Trust, Inc.
     ticker: DLR
     ir_url: https://investor.digitalrealty.com/
+  - slug: dollar-tree
+    name: Dollar Tree, Inc.
+    ticker: DLTR
+    ir_url: https://corporate.dollartree.com/investors
   - slug: doordash
     name: DoorDash, Inc.
     ticker: DASH
@@ -418,6 +426,10 @@ sources:
     name: Franklin Resources, Inc.
     ticker: BEN
     ir_url: https://investors.franklinresources.com/
+  - slug: garmin
+    name: Garmin Ltd.
+    ticker: GRMN
+    ir_url: https://investors.garmin.com/
   - slug: gartner
     name: Gartner, Inc.
     ticker: IT
@@ -523,6 +535,10 @@ sources:
     name: International Paper Company
     ticker: IP
     ir_url: https://www.internationalpaper.com/investors
+  - slug: intuit
+    name: Intuit Inc.
+    ticker: INTU
+    ir_url: https://investors.intuit.com/
   - slug: intuitive-surgical
     name: Intuitive Surgical, Inc.
     ticker: ISRG
@@ -531,6 +547,10 @@ sources:
     name: IQVIA Holdings Inc.
     ticker: IQV
     ir_url: https://ir.iqvia.com/
+  - slug: j-m-smucker
+    name: The J. M. Smucker Company
+    ticker: SJM
+    ir_url: https://investors.jmsmucker.com/
   - slug: jb-hunt
     name: J.B. Hunt Transport Services, Inc.
     ticker: JBHT
@@ -555,6 +575,10 @@ sources:
     name: Lam Research Corporation
     ticker: LRCX
     ir_url: https://investor.lamresearch.com/
+  - slug: lennox
+    name: Lennox International Inc.
+    ticker: LII
+    ir_url: https://investor.lennox.com/
   - slug: lockheed-martin
     name: Lockheed Martin Corporation
     ticker: LMT
@@ -572,10 +596,18 @@ sources:
     name: Lumentum Holdings Inc.
     ticker: LITE
     ir_url: https://investor.lumentum.com/
+  - slug: martin-marietta
+    name: Martin Marietta Materials, Inc.
+    ticker: MLM
+    ir_url: https://www.martinmarietta.com/investor-relations
   - slug: marvell
     name: Marvell Technology, Inc.
     ticker: MRVL
     ir_url: https://investor.marvell.com/
+  - slug: masco
+    name: Masco Corporation
+    ticker: MAS
+    ir_url: https://investor.masco.com/
   - slug: meta
     name: Meta Platforms, Inc.
     ticker: META
@@ -732,6 +764,10 @@ sources:
     name: Space Exploration Technologies Corp.
     ticker: SPCX
     ir_url: https://ir.spacex.com/
+  - slug: stryker
+    name: Stryker Corporation
+    ticker: SYK
+    ir_url: https://investors.stryker.com/
   - slug: super-micro
     name: Super Micro Computer, Inc.
     ticker: SMCI
@@ -867,3 +903,7 @@ sources:
     name: Zebra Technologies Corporation
     ticker: ZBRA
     ir_url: https://investors.zebra.com/
+  - slug: zimmer-biomet
+    name: Zimmer Biomet Holdings, Inc.
+    ticker: ZBH
+    ir_url: https://investor.zimmerbiomet.com/
