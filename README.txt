@@ -1,11 +1,12 @@
 ====== primary_wire ======
 
 **Work in progress.** This project is at an early stage. Coverage is sparse —
-sources.yaml currently has entries for ~160 companies out of the ~500 in the
-S&P 500. Press release links are added manually on an ad hoc basis, with a
-small and growing set of sources covered by automated scrapers (see
+Coverage relative to the S&P 500 is incomplete — see
+''reports/latest/missing_tickers.txt'' for the current count of covered vs.
+missing tickers. Press release links are added manually on an ad hoc basis,
+with a small and growing set of sources covered by automated scrapers (see
 ''Scrapers'' below). If you are interested in helping expand coverage,
-contributions are welcome. (This count includes only current S&P 500
+contributions are welcome. (That report counts only current S&P 500
 tickers — see [[docs/sources.txt]] for why it doesn't match a raw count of
 ''sources.yaml'' entries.)
 
@@ -80,9 +81,11 @@ is not financial advice.
   - Contributions are made via GitHub pull requests
   - Automated link collection is welcome, provided contributors follow the
     guidelines below. Links are verified before merging.
-  - As of now, ''config/scraper_config.yaml'' drives automated scraping for
-    ~30 of these sources, across four IR platforms (Q4, InvestorRoom,
-    Notified, Investis Digital). The rest are still added by hand.
+  - ''config/scraper_config.yaml'' drives automated scraping for a subset
+    of these sources, across four IR platforms (Q4, InvestorRoom,
+    Notified, Investis Digital) — see
+    ''reports/latest/scraper_coverage_summary.txt'' for the current count
+    and per-platform breakdown. The rest are still added by hand.
 
 ===== Scrapers =====
 
