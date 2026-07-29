@@ -203,6 +203,10 @@ sources:
     name: Cadence Design Systems, Inc.
     ticker: CDNS
     ir_url: https://investor.cadence.com/
+  - slug: carrier
+    name: Carrier Global Corporation
+    ticker: CARR
+    ir_url: https://ir.carrier.com/
   - slug: caseys
     name: Casey's General Stores, Inc.
     ticker: CASY
@@ -497,6 +501,10 @@ sources:
       "Arvind Krishna's Letter to IBM Investors" published on 2026-07-14 which
       tanked IBM's stock by 25.21%. On the other hand,
       https://newsroom.ibm.com/announcements contains all the press releases.
+  - slug: incyte
+    name: Incyte Corporation
+    ticker: INCY
+    ir_url: https://investor.incyte.com/
   - slug: ingersoll-rand
     name: Ingersoll Rand Inc.
     ticker: IR
@@ -853,3 +861,7 @@ sources:
     name: Yum! Brands, Inc.
     ticker: YUM
     ir_url: https://investors.yum.com/
+  - slug: zebra
+    name: Zebra Technologies Corporation
+    ticker: ZBRA
+    ir_url: https://investors.zebra.com/
