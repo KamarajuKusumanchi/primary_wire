@@ -1,7 +1,7 @@
 
 S&P 500 companies:  503
-Covered in sources: 182
-Missing:            321
+Covered in sources: 185
+Missing:            318
 
 Missing tickers:
   A
@@ -49,7 +49,6 @@ Missing tickers:
   BXP
   C
   CAH
-  CARR
   CAT
   CB
   CBOE
@@ -151,7 +150,6 @@ Missing tickers:
   IDXX
   IEX
   IFF
-  INCY
   INTU
   INVH
   IRM
@@ -323,5 +321,4 @@ Missing tickers:
   XYL
   XYZ
   ZBH
-  ZBRA
   ZTS
