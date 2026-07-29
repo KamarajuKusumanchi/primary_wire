@@ -1,6 +1,7 @@
 slug,ticker,platform,scrape_url
 abbott,ABT,unknown,https://www.abbott.com/en-us/investors
 accenture,ACN,investis,https://investor.accenture.com/news-releases
+aflac,AFL,unknown,https://investors.aflac.com/
 akamai,AKAM,notified,https://www.ir.akamai.com/news-releases
 alexandria-real-estate-equities,ARE,q4,https://investor.are.com/news/default.aspx
 allstate,ALL,notified,https://www.allstateinvestors.com/news-releases
@@ -50,6 +51,7 @@ deere,DE,unknown,https://investor.deere.com/
 dell,DELL,notified,https://investors.delltechnologies.com/news-releases
 dexcom,DXCM,q4,https://investors.dexcom.com/news/default.aspx
 digital-realty-trust,DLR,notified,https://investor.digitalrealty.com/news-releases
+dollar-tree,DLTR,notified,https://corporate.dollartree.com/investors/news-releases
 doordash,DASH,q4,https://ir.doordash.com/news/default.aspx
 dover,DOV,unknown,https://www.dovercorporation.com/investors
 ecolab,ECL,q4,https://investor.ecolab.com/news/default.aspx
@@ -69,6 +71,7 @@ ford,F,q4,https://shareholder.ford.com/news/default.aspx
 fortinet,FTNT,notified,https://investor.fortinet.com/news-releases
 fox,FOXA,unknown,https://investor.foxcorporation.com/
 franklin-resources,BEN,unknown,https://investors.franklinresources.com/
+garmin,GRMN,unknown,https://investors.garmin.com/
 gartner,IT,notified,https://investor.gartner.com/news-releases
 ge-healthcare,GEHC,notified,https://investor.gehealthcare.com/news-releases
 gen-digital,GEN,q4,https://investor.gendigital.com/news/default.aspx
@@ -87,16 +90,21 @@ ingersoll-rand,IR,q4,https://investors.irco.com/news/default.aspx
 intel,INTC,notified,https://www.intc.com/news-releases
 intercontinental-exchange,ICE,unknown,https://ir.theice.com/
 international-paper,IP,notified,https://www.internationalpaper.com/investors/news-releases
+intuit,INTU,notified,https://investors.intuit.com/news-releases
 intuitive-surgical,ISRG,notified,https://isrg.intuitive.com/news-releases
 iqvia,IQV,unknown,https://ir.iqvia.com/
+j-m-smucker,SJM,q4,https://investors.jmsmucker.com/news/default.aspx
 jb-hunt,JBHT,investis,https://investor.jbhunt.com/news-releases
 keycorp,KEY,unknown,https://investor.key.com/
 kimco-realty,KIM,unknown,https://investors.kimcorealty.com/
 kkr,KKR,unknown,https://ir.kkr.com/
 kla,KLAC,notified,https://ir.kla.com/news-releases
 lam-research,LRCX,investorroom,https://investor.lamresearch.com/news-releases
+lennox,LII,notified,https://investor.lennox.com/news-releases
 lumentum,LITE,q4,https://investor.lumentum.com/news/default.aspx
+martin-marietta,MLM,unknown,https://www.martinmarietta.com/investor-relations
 marvell,MRVL,notified,https://investor.marvell.com/news-releases
+masco,MAS,unknown,https://investor.masco.com/
 meta,META,q4,https://investor.atmeta.com/home/default.aspx/news/default.aspx
 micron,MU,notified,https://investors.micron.com/news-releases
 moderna,MRNA,unknown,https://investors.modernatx.com/
@@ -130,6 +138,7 @@ smurfit-westrock,SW,q4,http://investors.smurfitwestrock.com/news/default.aspx
 solventum,SOLV,notified,https://investors.solventum.com/news-releases
 southern-company,SO,unknown,https://investor.southerncompany.com/
 spacex,SPCX,unknown,https://ir.spacex.com/
+stryker,SYK,unknown,https://investors.stryker.com/
 synchrony-financial,SYF,unknown,https://investors.synchrony.com/
 synopsys,SNPS,q4,https://investor.synopsys.com/news/default.aspx
 sysco,SYY,notified,https://investors.sysco.com/news-releases
@@ -156,3 +165,4 @@ western-digital,WDC,notified,https://investor.wdc.com/news-releases
 weyerhaeuser,WY,investorroom,https://investor.weyerhaeuser.com/news-releases
 yum-brands,YUM,unknown,https://investors.yum.com/
 zebra,ZBRA,q4,https://investors.zebra.com/news/default.aspx
+zimmer-biomet,ZBH,unknown,https://investor.zimmerbiomet.com/
