@@ -299,6 +299,7 @@ sources:
     name: CrowdStrike Holdings, Inc.
     ticker: CRWD
     ir_url: https://ir.crowdstrike.com/
+    news_releases_path: press-releases
   - slug: crown-castle
     name: Crown Castle Inc.
     ticker: CCI
