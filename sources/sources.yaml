@@ -617,6 +617,11 @@ sources:
     name: Micron Technology, Inc.
     ticker: MU
     ir_url: https://investors.micron.com/
+  - slug: microsoft
+    name: Microsoft Corporation
+    ticker: MSFT
+    ir_url: https://www.microsoft.com/en-us/investor/default
+    news_url: https://news.microsoft.com/source/tag/investor-relations/
   - slug: moderna
     name: Moderna, Inc.
     ticker: MRNA
