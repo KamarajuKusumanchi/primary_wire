@@ -1019,7 +1019,27 @@ def build_arg_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def main(argv: Optional[list[str]] = None) -> int:
+def scrape_and_filter(
+    argv: Optional[list[str]] = None, *, write: bool = True
+) -> tuple[int, list[NewsItem]]:
+    """Parse args, scrape, filter/preview, and (by default) write out results.
+
+    This is the actual work behind main() below, split out so a caller other
+    than the command line -- namely scrape_all.py -- can invoke it directly
+    and get the scraped items back as a normal return value, instead of
+    going through main()'s argparse/CLI-only surface and an int exit code.
+
+    write=True (the default, used by main() for standalone invocation)
+    merges the filtered items into data/'s daily CSVs immediately, same as
+    before this split. write=False skips that merge and leaves the items in
+    the returned list for the caller to merge itself -- see
+    finalize_and_output()'s docstring for why scrape_all.py needs that.
+
+    Returns (return_code, filtered_items). return_code follows the same
+    convention main() always has: 0 on success, 1 if no news URL could be
+    resolved. filtered_items is [] whenever return_code is 1, since nothing
+    was scraped in that case.
+    """
     parser = build_arg_parser()
     args = parser.parse_args(argv)
 
@@ -1033,7 +1053,7 @@ def main(argv: Optional[list[str]] = None) -> int:
     )
     if not url:
         logger.error("Could not determine a news URL. Pass --url, --slug, or --ticker.")
-        return 1
+        return 1, []
     logger.info(
         "slug=%s  ticker=%s  url=%s  fetch_detail_pages=%s", slug, ticker, url, fetch_detail_pages
     )
@@ -1070,7 +1090,8 @@ def main(argv: Optional[list[str]] = None) -> int:
     # above), and writes CSV/JSON per --format; see finalize_and_output()'s
     # docstring for the three behaviors this standardizes across
     # scrape_q4_ir.py/scrape_investorroom.py/scrape_notified.py
-    # (preview-always, --format both, --output default path).
+    # (preview-always, --format both, --output default path), and for what
+    # write= does.
     filtered = finalize_and_output(
         all_items,
         years=years, since=args.since, until=args.until, limit=args.limit,
@@ -1078,11 +1099,23 @@ def main(argv: Optional[list[str]] = None) -> int:
         data_dir=args.data_dir,
         default_json_path=REPO_ROOT / "q4_ir_news.json",
         preview_fn=print_preview,
+        write=write,
     )
     if not filtered:
         logger.warning("No items matched the requested filters.")
 
-    return 0
+    return 0, filtered
+
+
+def main(argv: Optional[list[str]] = None) -> int:
+    """CLI entry point for standalone invocation (``python src/scrape_q4_ir.py ...``).
+
+    Thin wrapper around scrape_and_filter(); see that function's docstring
+    for the write= behavior scrape_all.py relies on when calling it directly
+    instead of going through this main().
+    """
+    return_code, _items = scrape_and_filter(argv)
+    return return_code
 
 
 if __name__ == "__main__":

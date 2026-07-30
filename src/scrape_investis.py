@@ -651,9 +651,22 @@ def build_arg_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def main(argv: Optional[list[str]] = None) -> int:
-    # See scrape_notified.py's main() for why this reconfigure exists (avoids
-    # a UnicodeEncodeError crash on Windows' legacy console codepage).
+def scrape_and_filter(
+    argv: Optional[list[str]] = None, *, write: bool = True
+) -> tuple[int, list[NewsItem]]:
+    """Parse args, scrape, filter/preview, and (by default) write out results.
+
+    Split out from main() so a caller other than the command line --
+    scrape_all.py -- can invoke it directly and get the scraped items back
+    as a normal return value. write=False skips merging into data/'s daily
+    CSVs and leaves that to the caller instead; see finalize_and_output()'s
+    docstring for why. Returns (return_code, filtered_items); return_code is
+    always 0 here (this scraper has no early-exit failure path today).
+    """
+    # See scrape_notified.py's scrape_and_filter() for why this reconfigure
+    # exists (avoids a UnicodeEncodeError crash on Windows' legacy console
+    # codepage). Kept here (rather than in main() below) so it still applies
+    # when scrape_all.py calls this function directly, bypassing main().
     for _stream in (sys.stdout, sys.stderr):
         if hasattr(_stream, "reconfigure"):
             try:
@@ -701,16 +714,28 @@ def main(argv: Optional[list[str]] = None) -> int:
     # finalize_and_output()'s docstring for the three behaviors this
     # standardizes across scrape_notified.py/scrape_investorroom.py/
     # scrape_q4_ir.py/scrape_investis.py (preview-always, --format both,
-    # --output default path).
-    finalize_and_output(
+    # --output default path), and for what write= does.
+    filtered = finalize_and_output(
         all_items,
         years=years, since=args.since, until=args.until, limit=None,
         format=args.format, output=args.output, dry_run=args.dry_run,
         data_dir=args.data_dir,
         default_json_path=REPO_ROOT / "investis_news.json",
+        write=write,
     )
 
-    return 0
+    return 0, filtered
+
+
+def main(argv: Optional[list[str]] = None) -> int:
+    """CLI entry point for standalone invocation (``python src/scrape_investis.py ...``).
+
+    Thin wrapper around scrape_and_filter(); see that function's docstring
+    for the write= behavior scrape_all.py relies on when calling it directly
+    instead of going through this main().
+    """
+    return_code, _items = scrape_and_filter(argv)
+    return return_code
 
 
 if __name__ == "__main__":

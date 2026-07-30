@@ -765,7 +765,18 @@ def build_arg_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def main(argv: Optional[list[str]] = None) -> int:
+def scrape_and_filter(
+    argv: Optional[list[str]] = None, *, write: bool = True
+) -> tuple[int, list[NewsItem]]:
+    """Parse args, scrape, filter/preview, and (by default) write out results.
+
+    Split out from main() so a caller other than the command line --
+    scrape_all.py -- can invoke it directly and get the scraped items back
+    as a normal return value. write=False skips merging into data/'s daily
+    CSVs and leaves that to the caller instead; see finalize_and_output()'s
+    docstring for why. Returns (return_code, filtered_items); return_code is
+    always 0 here (this scraper has no early-exit failure path today).
+    """
     parser = build_arg_parser()
     args = parser.parse_args(argv)
 
@@ -791,7 +802,7 @@ def main(argv: Optional[list[str]] = None) -> int:
     )
     logger.info("Scraped %d item(s) total (before filtering).", len(all_items))
 
-    finalize_and_output(
+    filtered = finalize_and_output(
         all_items,
         years=years,
         since=args.since,
@@ -802,9 +813,21 @@ def main(argv: Optional[list[str]] = None) -> int:
         dry_run=args.dry_run,
         data_dir=args.data_dir,
         default_json_path=REPO_ROOT / "notified_gated_news.json",
+        write=write,
     )
 
-    return 0
+    return 0, filtered
+
+
+def main(argv: Optional[list[str]] = None) -> int:
+    """CLI entry point for standalone invocation (``python src/scrape_notified_gated.py ...``).
+
+    Thin wrapper around scrape_and_filter(); see that function's docstring
+    for the write= behavior scrape_all.py relies on when calling it directly
+    instead of going through this main().
+    """
+    return_code, _items = scrape_and_filter(argv)
+    return return_code
 
 
 if __name__ == "__main__":

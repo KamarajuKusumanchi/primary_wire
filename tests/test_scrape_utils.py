@@ -160,3 +160,57 @@ def test_finalize_and_output_always_previews_even_without_dry_run(tmp_path, caps
     out = capsys.readouterr().out
     assert "A" in out
     assert "https://e.com/a" in out
+
+
+def test_finalize_and_output_write_false_skips_daily_csv_merge(tmp_path):
+    # write=False is what scrape_all.py uses so it can collect every
+    # source's items first and merge them in a single batched pass
+    # afterward, instead of each source writing to data/ as it finishes
+    # (see finalize_and_output()'s docstring for why). Nothing should be
+    # written to data_dir in this mode, even though dry_run=False.
+    items = [_item("A", "https://e.com/a", date(2026, 1, 1))]
+    data_dir = tmp_path / "data"
+
+    filtered = finalize_and_output(
+        items,
+        years=None, since=None, until=None, limit=None,
+        format="csv", output=None, dry_run=False, data_dir=data_dir,
+        write=False,
+    )
+
+    assert not data_dir.exists()
+    assert [i.title for i in filtered] == ["A"]
+
+
+def test_finalize_and_output_write_false_still_writes_json(tmp_path):
+    # write= only governs the daily-CSV merge branch; JSON output (a
+    # distinct, single-file output the batched-merge race doesn't apply to)
+    # still happens regardless.
+    items = [_item("A", "https://e.com/a", date(2026, 1, 1))]
+    json_out = tmp_path / "out.json"
+
+    finalize_and_output(
+        items,
+        years=None, since=None, until=None, limit=None,
+        format="json", output=json_out, dry_run=False, data_dir=tmp_path / "data",
+        write=False,
+    )
+
+    assert json_out.exists()
+    assert len(json.loads(json_out.read_text())) == 1
+
+
+def test_finalize_and_output_write_true_is_the_default(tmp_path):
+    # Standalone CLI usage (each scraper's own main()) doesn't pass write=
+    # explicitly, so the default must still merge into data/'s daily CSVs,
+    # matching behavior before write= was introduced.
+    items = [_item("A", "https://e.com/a", date(2026, 1, 1))]
+    data_dir = tmp_path / "data"
+
+    finalize_and_output(
+        items,
+        years=None, since=None, until=None, limit=None,
+        format="csv", output=None, dry_run=False, data_dir=data_dir,
+    )
+
+    assert (data_dir / "2026" / "2026-01-01.csv").exists()

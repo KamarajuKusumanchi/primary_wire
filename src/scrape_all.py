@@ -23,6 +23,16 @@ Usage:
 args, durable source facts) signature instead of every configured source --
 see pick_smoke_test_selection() and group_sources_by_signature() below for
 why that's the right unit of "category" rather than the YAML group name.
+
+Every configured source is scraped in-process via run_scraper() (see its
+docstring), and every source's items are merged into data/'s daily CSVs
+in a single batched pass at the end (merge_scraped_items()) rather than
+one write per source as it finishes -- see finalize_and_output()'s
+docstring in utils/scrape_utils.py for why. The scrape loop below still
+runs sources one at a time; the batched merge is what will let a future
+ThreadPoolExecutor-based version of that loop parallelize scraping across
+sources without needing to lock data/'s daily CSVs against concurrent
+writes.
 """
 
 from __future__ import annotations
@@ -60,9 +70,8 @@ from reporting.check_press_release_counts import (  # noqa: E402
     check_release_counts,
 )
 from utils.scrape_utils import (  # noqa: E402
+    NewsItem,
     count_items_by_year_slug_ticker,
-    get_last_run_items,
-    reset_last_run_items,
 )
 
 logger = logging.getLogger("scrape_all")
@@ -117,17 +126,52 @@ def build_argv(
     return argv
 
 
-def run_scraper(module_name: str, argv: list[str]) -> int:
-    """Import the scraper module and call its main() directly — no subprocess."""
+def run_scraper(
+    module_name: str, argv: list[str], *, write: bool = True
+) -> tuple[int, list[NewsItem]]:
+    """Import the scraper module and call its scrape_and_filter() directly —
+    no subprocess, and no main()/argparse involved either.
+
+    Returns (return_code, filtered_items) as a plain return value, not via
+    any shared/global state -- each call's result is self-contained and
+    can't leak into or be clobbered by another call, which matters once
+    sources are scraped concurrently (a future ThreadPoolExecutor-based
+    version of main()'s scrape loop below).
+
+    write=True merges the returned items into data/'s daily CSVs immediately,
+    inside this call -- the same thing each scraper does when run standalone
+    from the command line. write=False (what main()'s scrape loop uses)
+    skips that merge and leaves the items in the returned list instead, so
+    every configured source's items can be collected first and merged in a
+    single batched pass afterward, via merge_scraped_items() below -- see
+    finalize_and_output()'s docstring for why that avoids needing to lock
+    data/'s daily CSVs against concurrent writes from different sources.
+    """
     if str(SRC_DIR) not in sys.path:
         sys.path.insert(0, str(SRC_DIR))
-    reset_last_run_items()
     try:
         mod = importlib.import_module(module_name)
     except ImportError as e:
         logger.error("Could not import %s: %s", module_name, e)
-        return 1
-    return mod.main(argv)
+        return 1, []
+    return mod.scrape_and_filter(argv, write=write)
+
+
+def merge_scraped_items(items: list[NewsItem], data_dir: Path, dry_run: bool) -> None:
+    """Merge every source's collected items into data/'s daily CSVs in a
+    single batched pass, once every configured source has finished
+    scraping -- see run_scraper()'s docstring for why this replaces each
+    source merging its own items as it goes.
+
+    A side effect worth knowing about: because this runs once at the end
+    instead of once per source, you no longer see a "Wrote N new + M
+    updated row(s) ..." line interleaved after each source while a run is
+    in progress -- only this one combined summary at the very end.
+    """
+    from utils.csv_utils import merge_items_into_daily_csvs, print_merge_summary
+
+    summary = merge_items_into_daily_csvs(items, data_dir, dry_run)
+    print_merge_summary(summary, dry_run, items, data_dir=data_dir)
 
 
 def iter_selected_sources(config: dict, platform: str | None, slug: str | None):
@@ -280,10 +324,11 @@ def check_scraped_release_counts(
         that's the definitive per-(year, slug, ticker) tally.
       - --dry-run: data/ is untouched, so there's nothing there to read
         back. Instead this uses *found_counts*, which main()'s scrape
-        loop tallies from each scraper's in-memory results as it goes
-        (see get_last_run_items()/count_items_by_year_slug_ticker() in
-        utils/scrape_utils.py) -- the only count available under
-        --dry-run. found_counts is keyed by (year, slug, ticker) using
+        loop tallies from each scraper's own returned items as it goes
+        (see run_scraper()'s return value and
+        count_items_by_year_slug_ticker() in utils/scrape_utils.py) --
+        the only count available under --dry-run. found_counts is keyed
+        by (year, slug, ticker) using
         each item's own ticker, so it lines up with check_release_counts()'s
         disk-based key exactly -- no separate slug->ticker lookup is
         needed (or used) here.
@@ -398,6 +443,7 @@ def main(argv: list[str] | None = None) -> int:
     sources_lookup = load_sources_lookup()
     failures: list[str] = []
     found_counts: dict[tuple[int, str, str], int] = {}
+    all_items: list[NewsItem] = []
     ran = 0
 
     if args.smoke_test:
@@ -420,13 +466,14 @@ def main(argv: list[str] | None = None) -> int:
         if ran > 0:
             time.sleep(args.between_delay)
 
-        rc = run_scraper(module_name, scraper_argv)
+        rc, items = run_scraper(module_name, scraper_argv, write=False)
         ran += 1
         if rc != 0:
             logger.error("%s: scraper exited with code %d", slug, rc)
             failures.append(slug)
 
-        for key, count in count_items_by_year_slug_ticker(get_last_run_items()).items():
+        all_items.extend(items)
+        for key, count in count_items_by_year_slug_ticker(items).items():
             found_counts[key] = found_counts.get(key, 0) + count
 
     if ran == 0:
@@ -444,6 +491,10 @@ def main(argv: list[str] | None = None) -> int:
                 args.platform, args.slug,
             )
         return 1
+
+    # One batched merge across every source's items, rather than each source
+    # writing to data/ as it finishes -- see run_scraper()'s docstring.
+    merge_scraped_items(all_items, args.data_dir, args.dry_run)
 
     check_scraped_release_counts(sources, year, args, found_counts)
 

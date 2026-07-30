@@ -23,9 +23,10 @@ print_preview(...)
 add_common_args(parser)                       -- attach shared CLI args to an ArgumentParser
 add_network_and_debug_args(parser, ...)       -- attach --polite-delay/--timeout/--debug-dump-html/-v
 configure_logging(verbose)                    -- shared logging.basicConfig() for HTTP scrapers
-finalize_and_output(...)                      -- shared main() tail: filter, preview, write CSV/JSON
-get_last_run_items()  -> list[NewsItem]        -- items from the most recent finalize_and_output() call
-reset_last_run_items()                        -- clear that state before a new scraper invocation
+finalize_and_output(...)                      -- shared main() tail: filter, preview, write CSV/JSON;
+                                                  returns the filtered items so callers (e.g.
+                                                  scrape_all.py) don't need any shared/global state
+                                                  to find out what a scraper just collected
 count_items_by_year_slug_ticker(items) -> dict[tuple[int, str, str], int]
                                                -- group items by (publish_date.year, slug, ticker)
 """
@@ -504,6 +505,7 @@ def finalize_and_output(
     data_dir: Path,
     default_json_path: Optional[Path] = None,
     preview_fn=print_preview,
+    write: bool = True,
 ) -> list[NewsItem]:
     """Filter, preview, and write out a scraper's collected items.
 
@@ -540,8 +542,33 @@ def finalize_and_output(
     *preview_fn* defaults to this module's print_preview(); scrape_q4_ir.py
     passes its own wrapper (show_category=True) to keep the category column.
 
-    Returns the filtered list, in case a caller wants it afterward (e.g. to
-    decide an exit code).
+    *write* controls only the daily-CSV merge step (the ``format in ("csv",
+    "both")`` branch below), not JSON output or previewing -- both of those
+    still happen unconditionally, since neither touches the shared
+    data/YYYY/YYYY-MM-DD.csv files that motivate this flag. Pass
+    ``write=False`` to filter/preview/write-JSON as normal but skip the
+    merge into data/'s daily CSVs, and get the filtered items back instead
+    so the *caller* can merge them.
+
+    This exists for scrape_all.py: with write=True (the default, used for a
+    scraper run standalone from the command line), each source merges its
+    own items into data/ as soon as it finishes. But when scrape_all.py
+    scrapes many sources back-to-back, several sources can resolve to the
+    *same* daily CSV (most commonly today's file), and if that merge ever
+    happens concurrently across sources -- which is the point of
+    eventually parallelizing scrape_all.py's scrape loop -- two sources
+    each doing their own read-modify-write of the same file is a race:
+    whichever write lands last silently wins, discarding the other. Rather
+    than add a lock to make concurrent writes to the same file merely
+    *safe*, write=False lets scrape_all.py collect every source's items
+    first (via this function's return value -- no shared state involved)
+    and perform a single, single-threaded batched merge afterward, once
+    every source has finished. That way nothing ever writes to data/
+    concurrently in the first place, whether the sources it collected from
+    were scraped serially or in parallel.
+
+    Returns the filtered list either way, so a caller can inspect it (e.g.
+    to decide an exit code, or to batch it into a later merge).
     """
     filtered = filter_items(items, years=years, since=since, until=until, limit=limit)
     logger.info("%d item(s) after filtering.", len(filtered))
@@ -557,53 +584,19 @@ def finalize_and_output(
             )
         write_json(filtered, json_path, dry_run)
 
-    if format in ("csv", "both"):
+    if write and format in ("csv", "both"):
         from utils.csv_utils import merge_items_into_daily_csvs, print_merge_summary
 
         summary = merge_items_into_daily_csvs(filtered, data_dir, dry_run)
         print_merge_summary(summary, dry_run, filtered, data_dir=data_dir)
-
-    global _last_run_items
-    _last_run_items = list(filtered)
+    elif not write and format in ("csv", "both"):
+        logger.debug(
+            "write=False: skipping merge into data/'s daily CSVs -- the caller "
+            "is responsible for merging the %d returned item(s) itself.",
+            len(filtered),
+        )
 
     return filtered
-
-
-# ---------------------------------------------------------------------------
-# Last-run item tracking (for scrape_all.py's --dry-run release-count check)
-# ---------------------------------------------------------------------------
-
-# Populated by finalize_and_output() on every call, with that call's final
-# filtered item list. scrape_all.py runs each configured source's scraper
-# synchronously and in-process (see scrape_all.run_scraper()), and every
-# scraper module imports this same utils.scrape_utils module instance, so
-# reading this immediately after one scraper's main() returns reflects
-# exactly what that one invocation found -- the only count available under
-# --dry-run, since --dry-run never writes anything to data/ for a
-# disk-based check to read back afterward.
-_last_run_items: list[NewsItem] = []
-
-
-def get_last_run_items() -> list[NewsItem]:
-    """Return the filtered item list from the most recent finalize_and_output() call.
-
-    See the module note above _last_run_items for why this exists and the
-    in-process, one-scraper-at-a-time assumption it relies on.
-    """
-    return list(_last_run_items)
-
-
-def reset_last_run_items() -> None:
-    """Clear the last-run item list.
-
-    Callers that invoke a scraper's main() and then check get_last_run_items()
-    afterward (i.e. scrape_all.py) should call this first, so that a scraper
-    which errors out *before* ever reaching finalize_and_output() is
-    correctly seen as "found nothing this call" rather than silently
-    reusing whatever the previous source's invocation left behind.
-    """
-    global _last_run_items
-    _last_run_items = []
 
 
 def count_items_by_year_slug_ticker(items: Iterable[NewsItem]) -> dict[tuple[int, str, str], int]:

@@ -44,7 +44,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
 from reporting.check_press_release_counts import check_found_release_counts  # noqa: E402
 from scrape_all import build_argv, iter_selected_sources, load_scraper_config, run_scraper  # noqa: E402
-from utils.scrape_utils import count_items_by_year_slug_ticker, get_last_run_items  # noqa: E402
+from utils.scrape_utils import count_items_by_year_slug_ticker  # noqa: E402
 
 pytestmark = pytest.mark.regression
 
@@ -68,12 +68,12 @@ def test_release_counts_match_baseline_in_memory():
         extra_args = list(entry.get("args", []))
         argv = build_argv(slug, year, extra_args, dry_run=True)
 
-        rc = run_scraper(module_name, argv)
+        rc, items = run_scraper(module_name, argv)
         if rc != 0:
             scraper_failures.append(f"{slug} ({module_name}) exited with code {rc}")
             continue
 
-        for key, count in count_items_by_year_slug_ticker(get_last_run_items()).items():
+        for key, count in count_items_by_year_slug_ticker(items).items():
             found_counts[key] = found_counts.get(key, 0) + count
 
     assert not scraper_failures, (

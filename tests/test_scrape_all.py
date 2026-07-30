@@ -34,6 +34,7 @@ import scrape_all  # noqa: E402
 from scrape_all import (  # noqa: E402
     check_scraped_release_counts,
     group_sources_by_signature,
+    merge_scraped_items,
     pick_smoke_test_selection,
 )
 
@@ -348,37 +349,110 @@ def test_check_scraped_release_counts_skipped_when_flag_set(tmp_path, caplog):
     assert caplog.text == ""
 
 
-# --- last-run item tracking wired into main()'s scrape loop ------------------
+# --- run_scraper()'s (rc, items) return value ------------------------------
 
-def test_run_scraper_resets_last_run_items_before_each_call(monkeypatch):
-    # A module whose main() never calls finalize_and_output() (e.g. it
-    # errors out early) must not leave the previous source's items sitting
-    # around for count_items_by_year_slug_ticker(get_last_run_items()) to pick up.
-    from utils import scrape_utils
-
+def test_run_scraper_returns_each_calls_own_items_independently(monkeypatch):
+    # Regression guard for the removed _last_run_items global: each call's
+    # items now come back as a plain return value, so one call's results
+    # can't leak into or be clobbered by the next call -- the exact failure
+    # mode the old global-state design was vulnerable to (e.g. a source that
+    # errors out before scraping anything previously risked being credited
+    # with the previous source's items, unless reset_last_run_items() was
+    # called first).
     calls = []
 
     class _FakeModule:
         @staticmethod
-        def main(argv):
-            calls.append(argv)
+        def scrape_and_filter(argv, *, write=True):
+            calls.append((argv, write))
             if len(calls) == 1:
-                scrape_utils._last_run_items = [
+                return 0, [
                     _fake_item("abbvie", "2026-01-05"),
                     _fake_item("abbvie", "2026-01-06"),
                 ]
-                return 0
-            # second call: this scraper errors out before reaching
-            # finalize_and_output() at all, so nothing should be recorded.
-            return 1
+            # second call: this source errors out before finding anything.
+            return 1, []
+
+    monkeypatch.setattr(scrape_all.importlib, "import_module", lambda name: _FakeModule)
+
+    rc, items = scrape_all.run_scraper("scrape_investorroom", ["--slug", "abbvie"], write=False)
+    assert rc == 0
+    assert len(items) == 2
+
+    rc, items = scrape_all.run_scraper("scrape_investorroom", ["--slug", "nike"], write=False)
+    assert rc == 1
+    assert items == []
+
+    # write= is forwarded to scrape_and_filter(), not silently dropped.
+    assert [w for _, w in calls] == [False, False]
+
+
+def test_run_scraper_defaults_to_write_true(monkeypatch):
+    # write=True is the default -- a caller that doesn't pass it (e.g. a
+    # standalone script calling run_scraper() directly) still gets each
+    # source's items merged into data/ immediately, matching each scraper's
+    # own standalone CLI behavior.
+    received = {}
+
+    class _FakeModule:
+        @staticmethod
+        def scrape_and_filter(argv, *, write=True):
+            received["write"] = write
+            return 0, []
 
     monkeypatch.setattr(scrape_all.importlib, "import_module", lambda name: _FakeModule)
 
     scrape_all.run_scraper("scrape_investorroom", ["--slug", "abbvie"])
-    assert len(scrape_utils.get_last_run_items()) == 2
+    assert received["write"] is True
 
-    scrape_all.run_scraper("scrape_investorroom", ["--slug", "nike"])
-    assert scrape_utils.get_last_run_items() == []
+
+def test_run_scraper_returns_empty_on_import_failure(monkeypatch):
+    monkeypatch.setattr(
+        scrape_all.importlib, "import_module",
+        lambda name: (_ for _ in ()).throw(ImportError("no such module")),
+    )
+
+    rc, items = scrape_all.run_scraper("scrape_does_not_exist", ["--slug", "abbvie"])
+    assert rc == 1
+    assert items == []
+
+
+# --- merge_scraped_items(): the batched merge after every source has run ----
+
+def test_merge_scraped_items_merges_items_from_multiple_sources_into_one_file(tmp_path):
+    # The whole point of the batched-merge design: items from different
+    # sources that happen to land on the same date all end up in that
+    # date's CSV from a single merge call, not one write per source.
+    items = [
+        _fake_item("abbvie", "2026-01-05"),
+        _fake_item("nike", "2026-01-05"),
+    ]
+    data_dir = tmp_path / "data"
+
+    merge_scraped_items(items, data_dir, dry_run=False)
+
+    csv_path = data_dir / "2026" / "2026-01-05.csv"
+    assert csv_path.exists()
+    rows = csv_path.read_text().strip().splitlines()
+    assert len(rows) == 3  # header + 2 rows, one per source
+
+
+def test_merge_scraped_items_dry_run_writes_nothing(tmp_path):
+    items = [_fake_item("abbvie", "2026-01-05")]
+    data_dir = tmp_path / "data"
+
+    merge_scraped_items(items, data_dir, dry_run=True)
+
+    assert not data_dir.exists()
+
+
+def test_merge_scraped_items_handles_empty_list(tmp_path):
+    # No sources found anything this run -- should be a no-op, not an error.
+    data_dir = tmp_path / "data"
+
+    merge_scraped_items([], data_dir, dry_run=False)
+
+    assert not data_dir.exists()
 
 
 def _fake_item(slug: str, publish_date: str):
@@ -386,4 +460,7 @@ def _fake_item(slug: str, publish_date: str):
     from utils.scrape_utils import NewsItem
 
     y, m, d = (int(p) for p in publish_date.split("-"))
-    return NewsItem(slug=slug, ticker="", title="t", url="u", publish_date=_date(y, m, d))
+    return NewsItem(
+        slug=slug, ticker="", title="t", url=f"https://example.com/{slug}/{publish_date}",
+        publish_date=_date(y, m, d),
+    )

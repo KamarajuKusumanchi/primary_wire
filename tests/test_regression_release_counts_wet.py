@@ -73,7 +73,7 @@ def test_release_counts_match_baseline_on_disk(tmp_path):
         # the throwaway dir -- see the module docstring above.
         argv = build_argv(slug, year, extra_args, dry_run=False, data_dir=data_dir)
 
-        rc = run_scraper(module_name, argv)
+        rc, _items = run_scraper(module_name, argv)
         if rc != 0:
             scraper_failures.append(f"{slug} ({module_name}) exited with code {rc}")
 
