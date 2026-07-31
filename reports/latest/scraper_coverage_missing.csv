@@ -1,6 +1,6 @@
 slug,ticker,platform,scrape_url
 abbott,ABT,unknown,https://www.abbott.com/en-us/investors
-accenture,ACN,unknown,https://investor.accenture.com/
+accenture,ACN,investis,https://investor.accenture.com/news-releases
 aflac,AFL,unknown,https://investors.aflac.com/
 akamai,AKAM,notified,https://www.ir.akamai.com/news-releases
 alexandria-real-estate-equities,ARE,q4,https://investor.are.com/news/default.aspx

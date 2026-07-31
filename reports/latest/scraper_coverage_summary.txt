@@ -6,9 +6,9 @@ Coverage by platform:
 
   platform           total  configured   missing  percentage_done
   notified              76           9        67            11.8%
-  unknown               53           0        53             0.0%
+  unknown               52           0        52             0.0%
   q4                    56          12        44            21.4%
   investorroom          12           7         5            58.3%
-  investis               5           3         2            60.0%
+  investis               6           3         3            50.0%
   notified_gated         3           3                     100.0%
   TOTAL                205          34       171            16.6%

@@ -41,9 +41,15 @@ notified  (scrape_notified.py)
   * Links matching /news-releases/news-release-details/<slug>
 
 investis  (scrape_investis.py)
-  * Footer attribution string "Delivered by Investis Digital" (or a link to
-    investisdigital.com) appears in the page source. This is Investis
-    Digital's own branding footer and is unique to that platform.
+  * EITHER of two independent signals, both unique to this platform:
+    (a) the "Investis Sitecore common GTM" HTML comment in <head>
+        (Investis's own build-tooling signature), or
+    (b) the footer attribution string "Delivered by Investis" / "Delivered
+        by Investis Digital", or a link to investis.com / investisdigital.com.
+    Checked as an OR of both rather than either alone, after each was in
+    turn found to independently vanish from a real page in a redesign
+    (see INVESTIS_SITECORE_COMMENT_RE / INVESTIS_FOOTER_RE / _check_investis()
+    for the full history).
   * IMPORTANT: Investis's press-release detail URLs look like
     /news-releases/<year>/<mm-dd-yyyy>-<serial>, e.g. Home Depot's
     https://ir.homedepot.com/news-releases/2026/07-15-2026-130113180.
@@ -304,21 +310,43 @@ NOTIFIED_DETAIL_RE = re.compile(
     re.IGNORECASE,
 )
 
-# Investis: --debug-dump-html captures of both investors.sysco.com (plain
-# "Investis" footer branding) and ir.homedepot.com ("Investis Digital"
-# footer branding) show an IDENTICAL HTML comment in <head> on both pages:
-#   <!-- Investis Sitecore common GTM -->
-#   ...
-#   <!-- End Investis Sitecore common GTM -->
-# This is Investis's own build tooling/template signature (their Sitecore
-# CMS's shared Google Tag Manager snippet), not user-editable marketing
-# copy -- so unlike a footer credit, it doesn't depend on which branding
-# tier ("Investis" vs "Investis Digital") a given client is on, and isn't
-# at risk of being reworded or dropped in a page redesign the way visible
-# footer text could be. Confirmed present on both known branding variants,
-# so this is the sole signal _check_investis() looks for.
+# Investis: two INDEPENDENT signals, either of which is treated as
+# definitive on its own. Relying on only one has bitten us twice now:
+#
+# 1. INVESTIS_SITECORE_COMMENT_RE -- the "Investis Sitecore common GTM"
+#    HTML comment in <head>, seen on both investors.sysco.com (plain
+#    "Investis" footer branding) and ir.homedepot.com ("Investis Digital"
+#    footer branding) captures at the time this was written. This is
+#    Investis's own build tooling/template signature (their Sitecore CMS's
+#    shared GTM snippet), not user-editable marketing copy.
+#
+# 2. INVESTIS_FOOTER_RE -- the visible page-footer branding credit and/or
+#    its outbound link: "Delivered by Investis" (Sysco's plain variant) or
+#    "Delivered by Investis Digital" (Home Depot's variant), linking to
+#    investis.com or investisdigital.com respectively.
+#
+# History: the ORIGINAL _check_investis() only looked at #2, and only in
+# its "Digital"/investisdigital.com form -- so it missed Sysco's plain
+# "Investis" (no "Digital") footer entirely and fell through to Notified's
+# heuristic. That was fixed by switching to #1 (the Sitecore comment),
+# which covered both branding variants with one identical signature.
+# But relying on ONLY #1 turned out to be just as fragile in the other
+# direction: a later Sysco IR-site redesign apparently dropped the Sitecore
+# GTM comment from <head> while keeping the "Delivered by Investis" footer
+# credit verbatim -- reproducing the exact same misclassification
+# ("notified") via the exact same failure mode (a single fingerprint that
+# can silently vanish in a page redesign), just with the two signals'
+# fragility reversed. Checking BOTH signals (OR'd together) means either
+# one disappearing on its own is no longer enough to cause a
+# misclassification -- only losing both at once would.
 INVESTIS_SITECORE_COMMENT_RE = re.compile(
     r"investis\s+sitecore\s+common\s+gtm", re.IGNORECASE
+)
+INVESTIS_FOOTER_RE = re.compile(
+    r"delivered\s+by\s+investis"                 # visible footer credit text
+    r"|investisdigital\.com"                     # "Digital" branding's link target
+    r"|(?:https?:)?//(?:www\.)?investis\.com\b",  # plain branding's link target
+    re.IGNORECASE,
 )
 
 # Slugs known to be Notified/Drupal sites gated by bot mitigation strict
@@ -502,13 +530,21 @@ def _check_investorroom(soup: BeautifulSoup, html: str) -> bool:
 
 
 def _check_investis(html: str) -> bool:
-    """Investis fingerprint: the "Investis Sitecore common GTM" HTML
-    comment (INVESTIS_SITECORE_COMMENT_RE) appears in the page's <head>.
-    Confirmed present, verbatim, on both the plain-"Investis"-branded
-    (Sysco) and "Investis Digital"-branded (Home Depot) footer variants --
-    see the constant's own comment above. Investis's own build tooling
-    generates this, so a match here is treated as definitive -- same
-    spirit as the Drupal generator meta tag for Notified.
+    """Investis fingerprint: EITHER of two independent signals appearing
+    anywhere in the page source --
+
+      1. The "Investis Sitecore common GTM" HTML comment
+         (INVESTIS_SITECORE_COMMENT_RE), normally in <head>.
+      2. The visible footer branding credit/link (INVESTIS_FOOTER_RE):
+         "Delivered by Investis[ Digital]", or a link to investis.com /
+         investisdigital.com.
+
+    Both have been independently confirmed, on their own, to disappear
+    from a real site after a redesign (see the constants' comments above
+    for the history) -- so neither is checked alone. A match on either is
+    treated as definitive, same spirit as the Drupal generator meta tag
+    for Notified: only losing BOTH signals at once (an actual platform
+    migration, not a cosmetic redesign) would cause a false negative here.
 
     This must be checked BEFORE Notified's broad link-pattern heuristic
     (_check_notified_links): Investis's press-release detail URLs look like
@@ -519,8 +555,12 @@ def _check_investis(html: str) -> bool:
     Without this earlier, more specific check, every Investis site gets
     misclassified as "notified".
     """
-    if INVESTIS_SITECORE_COMMENT_RE.search(html.lower()):
+    lower_html = html.lower()
+    if INVESTIS_SITECORE_COMMENT_RE.search(lower_html):
         logger.debug("Investis signal: 'Investis Sitecore common GTM' comment in <head>")
+        return True
+    if INVESTIS_FOOTER_RE.search(lower_html):
+        logger.debug("Investis signal: footer branding credit/link in page source")
         return True
     return False
 
