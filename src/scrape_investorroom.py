@@ -125,6 +125,7 @@ Run at most once per day. Requests are spaced by --polite-delay (default 15 s).
 from __future__ import annotations
 
 import argparse
+import functools
 import logging
 import re
 import sys
@@ -249,28 +250,38 @@ def date_from_url(url: str) -> Optional[date]:
 # HTTP helpers
 # ---------------------------------------------------------------------------
 
-_SESSION: Optional[requests.Session] = None
+def new_session() -> requests.Session:
+    """Build and return a fresh Session with our standard headers.
+
+    Deliberately NOT cached behind a module-level singleton: scrape_all.py
+    runs sources concurrently in a thread pool (one worker per source), and
+    a cached session would be silently shared, unsynchronized, across every
+    thread scraping any InvestorRoom source at once -- requests.Session is
+    documented as not safe to share across threads. Call this once per
+    source scrape (see scrape_and_filter()) and thread the result through
+    explicitly as the ``session`` argument below, rather than reaching for
+    a global or a threading.local().
+    """
+    session = requests.Session()
+    session.headers.update({
+        "User-Agent": (
+            "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
+            "AppleWebKit/537.36 (KHTML, like Gecko) "
+            "Chrome/124.0.0.0 Safari/537.36"
+        ),
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+        "Accept-Language": "en-US,en;q=0.9",
+    })
+    return session
 
 
-def get_session() -> requests.Session:
-    global _SESSION
-    if _SESSION is None:
-        _SESSION = requests.Session()
-        _SESSION.headers.update({
-            "User-Agent": (
-                "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
-                "AppleWebKit/537.36 (KHTML, like Gecko) "
-                "Chrome/124.0.0.0 Safari/537.36"
-            ),
-            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-            "Accept-Language": "en-US,en;q=0.9",
-        })
-    return _SESSION
+def fetch_html(url: str, session: requests.Session, timeout: int = 30) -> str:
+    """Fetch a URL and return its HTML. Raises on HTTP errors.
 
-
-def fetch_html(url: str, timeout: int = 30) -> str:
-    """Fetch a URL and return its HTML. Raises on HTTP errors."""
-    resp = get_session().get(url, timeout=timeout)
+    ``session`` is always the caller's own (built by new_session()), never a
+    shared/global one -- see new_session()'s docstring for why.
+    """
+    resp = session.get(url, timeout=timeout)
     resp.raise_for_status()
     return resp.text
 
@@ -686,14 +697,16 @@ def parse_listing_page(
 # Detail-page date fallback
 # ---------------------------------------------------------------------------
 
-def fetch_date_from_detail_page(url: str, timeout: int = 30) -> tuple[Optional[date], str]:
+def fetch_date_from_detail_page(
+    url: str, session: requests.Session, timeout: int = 30
+) -> tuple[Optional[date], str]:
     """Fetch a detail page and extract its publish date.
 
     Parsing heuristics live in scrape_utils.extract_date_from_detail_html(),
     shared with scrape_notified.py; this function owns only the fetch.
     """
     try:
-        html = fetch_html(url, timeout=timeout)
+        html = fetch_html(url, session, timeout=timeout)
     except Exception as exc:
         logger.warning("Failed to fetch detail page %s: %s", url, exc)
         return None, ""
@@ -711,6 +724,7 @@ def scrape_one_pass(
     start_url: str,
     polite_delay: float,
     timeout: int,
+    session: requests.Session,
     debug_dump_html: Optional[Path] = None,
 ) -> list[NewsItem]:
     """Fetch all listing pages starting from ``start_url``, following Next links.
@@ -726,7 +740,7 @@ def scrape_one_pass(
         logger.info("Fetching listing page %d: %s", page_num, url)
 
         try:
-            html = fetch_html(url, timeout=timeout)
+            html = fetch_html(url, session, timeout=timeout)
         except Exception as exc:
             logger.error("Failed to fetch listing page %s: %s", url, exc)
             break
@@ -775,6 +789,7 @@ def scrape(
     timeout: int,
     page_limit: int,
     debug_dump_html: Optional[Path],
+    session: requests.Session,
     news_releases_path: str = DEFAULT_NEWS_RELEASES_PATH,
     extra_params: Optional[dict[str, str]] = None,
 ) -> list[NewsItem]:
@@ -817,6 +832,7 @@ def scrape(
             start_url=start_url,
             polite_delay=polite_delay,
             timeout=timeout,
+            session=session,
             debug_dump_html=dump_path,
         )
         all_items.extend(items)
@@ -955,24 +971,33 @@ def scrape_and_filter(
 
     years = parse_year_args(args)
 
-    all_items = scrape(
-        base_url=base_url,
-        slug=slug,
-        ticker=ticker,
-        years=years,
-        polite_delay=args.polite_delay,
-        timeout=args.timeout,
-        page_limit=args.page_limit,
-        debug_dump_html=args.debug_dump_html,
-        news_releases_path=news_releases_path,
-        extra_params=extra_query_params,
-    )
-    logger.info("Scraped %d item(s) total (before filtering).", len(all_items))
-
-    if args.fetch_detail_pages:
-        fetch_missing_dates_via_http(
-            all_items, fetch_date_from_detail_page, args.polite_delay, args.timeout
+    # One session per call, scoped to this source's own scrape and closed
+    # when it's done -- see new_session()'s docstring for why this isn't a
+    # module-level cached singleton (scrape_all.py runs sources concurrently
+    # in a thread pool, and Session objects aren't safe to share across
+    # threads).
+    with new_session() as session:
+        all_items = scrape(
+            base_url=base_url,
+            slug=slug,
+            ticker=ticker,
+            years=years,
+            polite_delay=args.polite_delay,
+            timeout=args.timeout,
+            page_limit=args.page_limit,
+            debug_dump_html=args.debug_dump_html,
+            session=session,
+            news_releases_path=news_releases_path,
+            extra_params=extra_query_params,
         )
+        logger.info("Scraped %d item(s) total (before filtering).", len(all_items))
+
+        if args.fetch_detail_pages:
+            fetch_missing_dates_via_http(
+                all_items,
+                functools.partial(fetch_date_from_detail_page, session=session),
+                args.polite_delay, args.timeout,
+            )
 
     # Filters, always previews, and writes CSV/JSON per --format; see
     # finalize_and_output()'s docstring for the three behaviors this

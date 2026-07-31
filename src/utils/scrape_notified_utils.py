@@ -85,27 +85,44 @@ def parse_short_date(text: str) -> tuple[Optional[date], str]:
 # HTTP session (curl_cffi, Chrome TLS/JA3 impersonation)
 # ---------------------------------------------------------------------------
 
-_SESSION = None
-
-
-def get_session():
-    """Return a persistent HTTP session.
+def new_session():
+    """Build and return a fresh HTTP session.
 
     Uses curl_cffi to impersonate Chrome's TLS fingerprint (JA3/JA4), which
     is required for Notified/Drupal IR sites that reject the standard
     Python requests/TLS stack.
+
+    Deliberately NOT cached behind a module-level singleton. This module is
+    shared by scrape_notified.py and scrape_notified_gated.py, and
+    scrape_all.py runs sources concurrently in a thread pool (one worker per
+    source -- see its module docstring) -- a cached ``_SESSION`` would then
+    be silently shared, unsynchronized, across every thread scraping any
+    Notified/Drupal source at once. curl_cffi's Session wraps a single
+    libcurl handle and is not safe to use from more than one thread at a
+    time, and plain requests.Session is documented as thread-unsafe too, so
+    "share one session across threads" was never a safe option here even
+    before parallelization made it a live one.
+
+    Call this once per source scrape (see each caller's scrape_and_filter())
+    and thread the result through explicitly as the ``session`` argument
+    below, rather than reaching for a global or a threading.local() -- a
+    plain function argument is simpler, is impossible to accidentally share
+    across an unrelated call, and needs no cleanup bookkeeping beyond the
+    caller's own ``with new_session() as session:`` block.
     """
-    global _SESSION
-    if _SESSION is None:
-        # impersonate="chrome124" sets the TLS fingerprint + HTTP/2 SETTINGS
-        # to match a real Chrome 124 client, bypassing TLS-fingerprint blocks.
-        _SESSION = requests.Session(impersonate="chrome124")
-    return _SESSION
+    # impersonate="chrome124" sets the TLS fingerprint + HTTP/2 SETTINGS
+    # to match a real Chrome 124 client, bypassing TLS-fingerprint blocks.
+    return requests.Session(impersonate="chrome124")
 
 
-def fetch_html(url: str, timeout: int = 30) -> str:
-    """Fetch a URL and return its HTML. Raises on HTTP errors."""
-    resp = get_session().get(url, timeout=timeout)
+def fetch_html(url: str, session, timeout: int = 30) -> str:
+    """Fetch a URL and return its HTML. Raises on HTTP errors.
+
+    ``session`` is a session built by new_session() above (or an equivalent
+    requests/curl_cffi Session) -- always required, and always the caller's
+    own, never a shared/global one. See new_session()'s docstring for why.
+    """
+    resp = session.get(url, timeout=timeout)
     resp.raise_for_status()
     return resp.text
 

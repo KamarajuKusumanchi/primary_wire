@@ -101,7 +101,7 @@ Requires
   scrape_notified.py). That has NOT been independently confirmed for
   ir.homedepot.com specifically -- unlike scrape_notified.py's AbbVie
   default, this is a defensive choice, not a verified requirement. If it
-  turns out plain ``requests`` works fine here too, get_session() below is
+  turns out plain ``requests`` works fine here too, new_session() below is
   the only place that would need to change.
 
 Run at most once per day. Requests are spaced by --polite-delay (default 15 s).
@@ -110,6 +110,7 @@ Run at most once per day. Requests are spaced by --polite-delay (default 15 s).
 from __future__ import annotations
 
 import argparse
+import functools
 import logging
 import re
 import sys
@@ -223,24 +224,31 @@ class NewsItem(_BaseNewsItem):
 # HTTP session
 # ---------------------------------------------------------------------------
 
-_SESSION = None
-
-
-def get_session():
-    """Return a persistent HTTP session impersonating Chrome's TLS fingerprint.
+def new_session():
+    """Build and return a fresh HTTP session impersonating Chrome's TLS fingerprint.
 
     See the module docstring's "Requires" section for why curl_cffi is used
     defensively here rather than plain ``requests``.
+
+    Deliberately NOT cached behind a module-level singleton: scrape_all.py
+    runs sources concurrently in a thread pool (one worker per source), and
+    curl_cffi's Session wraps a single libcurl handle that is not safe to
+    use from more than one thread at a time -- a cached session would be
+    silently shared, unsynchronized, across every thread using this module
+    at once. Call this once per source scrape (see scrape_and_filter()) and
+    thread the result through explicitly as the ``session`` argument below,
+    rather than reaching for a global or a threading.local().
     """
-    global _SESSION
-    if _SESSION is None:
-        _SESSION = requests.Session(impersonate="chrome124")
-    return _SESSION
+    return requests.Session(impersonate="chrome124")
 
 
-def fetch_html(url: str, timeout: int = 30) -> str:
-    """Fetch a URL and return its HTML. Raises on HTTP errors."""
-    resp = get_session().get(url, timeout=timeout)
+def fetch_html(url: str, session, timeout: int = 30) -> str:
+    """Fetch a URL and return its HTML. Raises on HTTP errors.
+
+    ``session`` is always the caller's own (built by new_session()), never a
+    shared/global one -- see new_session()'s docstring for why.
+    """
+    resp = session.get(url, timeout=timeout)
     resp.raise_for_status()
     return resp.text
 
@@ -401,7 +409,9 @@ def parse_listing_page(html: str, base_url: str, slug: str, ticker: str) -> list
 # Detail-page date fallback
 # ---------------------------------------------------------------------------
 
-def fetch_date_from_detail_page(url: str, timeout: int = 30) -> tuple[Optional[date], str]:
+def fetch_date_from_detail_page(
+    url: str, session, timeout: int = 30
+) -> tuple[Optional[date], str]:
     """Fetch a detail page and extract its publish date.
 
     Shares the same cross-platform heuristics as scrape_investorroom.py and
@@ -410,7 +420,7 @@ def fetch_date_from_detail_page(url: str, timeout: int = 30) -> tuple[Optional[d
     date fallback come up empty (rare -- see parse_listing_page()).
     """
     try:
-        html = fetch_html(url, timeout=timeout)
+        html = fetch_html(url, session, timeout=timeout)
     except Exception as exc:
         logger.warning("Failed to fetch detail page %s: %s", url, exc)
         return None, ""
@@ -428,6 +438,7 @@ def scrape_year(
     ticker: str,
     polite_delay: float,
     timeout: int,
+    session,
     news_releases_path: str = DEFAULT_NEWS_RELEASES_PATH,
     debug_dump_html: Optional[Path] = None,
 ) -> list[NewsItem]:
@@ -449,7 +460,7 @@ def scrape_year(
         logger.info("Fetching %d news releases, page %d: %s", year, page, url)
 
         try:
-            html = fetch_html(url, timeout=timeout)
+            html = fetch_html(url, session, timeout=timeout)
         except Exception as exc:
             logger.error("Failed to fetch %s: %s", url, exc)
             break
@@ -505,6 +516,7 @@ def scrape(
     polite_delay: float,
     timeout: int,
     debug_dump_html: Optional[Path],
+    session,
     news_releases_path: str = DEFAULT_NEWS_RELEASES_PATH,
 ) -> list[NewsItem]:
     """Scrape either a specific set of years or the site's entire history.
@@ -534,7 +546,7 @@ def scrape(
         target_years = sorted(years, reverse=True)
         for i, year in enumerate(target_years):
             year_items = scrape_year(
-                base_url, year, slug, ticker, polite_delay, timeout,
+                base_url, year, slug, ticker, polite_delay, timeout, session,
                 news_releases_path=news_releases_path,
                 debug_dump_html=debug_dump_html if i == 0 else None,
             )
@@ -547,7 +559,7 @@ def scrape(
         first_fetch = True
         while current_year - year <= MAX_YEARS_BACK:
             year_items = scrape_year(
-                base_url, year, slug, ticker, polite_delay, timeout,
+                base_url, year, slug, ticker, polite_delay, timeout, session,
                 news_releases_path=news_releases_path,
                 debug_dump_html=debug_dump_html if first_fetch else None,
             )
@@ -693,22 +705,31 @@ def scrape_and_filter(
     else:
         logger.info("No --year filter given; scraping full history.")
 
-    all_items = scrape(
-        base_url=base_url,
-        slug=slug,
-        ticker=ticker,
-        years=years,
-        polite_delay=args.polite_delay,
-        timeout=args.timeout,
-        debug_dump_html=args.debug_dump_html,
-        news_releases_path=news_releases_path,
-    )
-    logger.info("Scraped %d item(s) total (before filtering).", len(all_items))
-
-    if args.fetch_detail_pages:
-        fetch_missing_dates_via_http(
-            all_items, fetch_date_from_detail_page, args.polite_delay, args.timeout
+    # One session per call, scoped to this source's own scrape and closed
+    # when it's done -- see new_session()'s docstring for why this isn't a
+    # module-level cached singleton (scrape_all.py runs sources concurrently
+    # in a thread pool, and curl_cffi Sessions aren't safe to share across
+    # threads).
+    with new_session() as session:
+        all_items = scrape(
+            base_url=base_url,
+            slug=slug,
+            ticker=ticker,
+            years=years,
+            polite_delay=args.polite_delay,
+            timeout=args.timeout,
+            debug_dump_html=args.debug_dump_html,
+            session=session,
+            news_releases_path=news_releases_path,
         )
+        logger.info("Scraped %d item(s) total (before filtering).", len(all_items))
+
+        if args.fetch_detail_pages:
+            fetch_missing_dates_via_http(
+                all_items,
+                functools.partial(fetch_date_from_detail_page, session=session),
+                args.polite_delay, args.timeout,
+            )
 
     # Filters, always previews, and writes CSV/JSON per --format; see
     # finalize_and_output()'s docstring for the three behaviors this

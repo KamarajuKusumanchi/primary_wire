@@ -158,6 +158,7 @@ from utils.scrape_notified_utils import (
     extract_date_and_time_from_row as _shared_extract_date_and_time_from_row,
     fetch_html as fetch_listing_html,
     find_last_page,
+    new_session,
     parse_listing_page as _shared_parse_listing_page,
     parse_short_date,
 )
@@ -185,10 +186,17 @@ FORM_ID = "widget_form_base"
 
 DEFAULT_TIMEOUT_MS = 45_000  # per-navigation timeout for the browser step
 
-DEBUG_HTML_PATH = "notified_gated_debug_page.html"
-# Where the live-DOM debug dump goes if the year-filter form's tokens can't
-# be found (see get_form_tokens()). Separate from --debug-dump-html, which
-# dumps the *fetched listing* HTML instead.
+def _debug_html_path(slug: str) -> str:
+    """Where the live-DOM debug dump goes if the year-filter form's tokens
+    can't be found (see get_form_tokens()). Separate from --debug-dump-html,
+    which dumps the *fetched listing* HTML instead.
+
+    Filename includes ``slug`` (rather than being one fixed name) so that
+    two gated sources failing at the same moment -- plausible once
+    scrape_all.py runs sources concurrently in a thread pool -- don't
+    clobber each other's diagnostic dump.
+    """
+    return f"notified_gated_debug_page_{slug}.html"
 
 # Detail-page links, e.g. /news-releases/news-release-details/<slug>.
 # Same shape as scrape_notified.py's DETAIL_URL_RE, but anchored to a single
@@ -226,10 +234,11 @@ class FormTokens:
 # Step 1: get the year-filtered URL (Playwright, one-time, headed browser)
 # ---------------------------------------------------------------------------
 
-def _dump_debug_html(page) -> None:
+def _dump_debug_html(page, slug: str) -> None:
     """Write the current page's full HTML (all frames) to disk for inspection."""
+    path = _debug_html_path(slug)
     try:
-        with open(DEBUG_HTML_PATH, "w", encoding="utf-8") as f:
+        with open(path, "w", encoding="utf-8") as f:
             for frame in page.frames:
                 f.write(f"<!-- ===== FRAME: {frame.url} ===== -->\n")
                 f.write(frame.content())
@@ -238,7 +247,7 @@ def _dump_debug_html(page) -> None:
         print(f"(couldn't write debug HTML: {exc})", file=sys.stderr)
 
 
-def get_form_tokens(page) -> FormTokens:
+def get_form_tokens(page, slug: str) -> FormTokens:
     """
     Pull the current widget hash and form_build_id out of the year
     filter's hidden form fields. Searches the main frame *and* any
@@ -261,7 +270,7 @@ def get_form_tokens(page) -> FormTokens:
             break
 
     if widget_input is None or build_id_input is None:
-        _dump_debug_html(page)
+        _dump_debug_html(page, slug)
         missing = []
         if widget_input is None:
             missing.append("widget_id field")
@@ -270,7 +279,7 @@ def get_form_tokens(page) -> FormTokens:
         raise RuntimeError(
             f"Could not locate: {', '.join(missing)}. Searched {len(searched_frames)} "
             f"frame(s): {searched_frames}. Full page HTML dumped to "
-            f"{DEBUG_HTML_PATH} for inspection -- open it and search for "
+            f"{_debug_html_path(slug)} for inspection -- open it and search for "
             f"'widget_id' or 'form_build_id' to see the actual field names/"
             f"structure. If this is a new site (not TJX), its exposed-filter "
             f"widget may use different field names -- this function will need "
@@ -281,19 +290,19 @@ def get_form_tokens(page) -> FormTokens:
     match = re.match(r"^([0-9a-f]{40,})_widget_id$", name_attr)
     widget_hash = match.group(1) if match else widget_input.get_attribute("value")
     if not widget_hash:
-        _dump_debug_html(page)
+        _dump_debug_html(page, slug)
         raise RuntimeError(
             f"Found the widget_id field (name='{name_attr}') but couldn't "
             f"read a usable hash from it. Full page HTML dumped to "
-            f"{DEBUG_HTML_PATH}."
+            f"{_debug_html_path(slug)}."
         )
 
     form_build_id = build_id_input.get_attribute("value")
     if not form_build_id:
-        _dump_debug_html(page)
+        _dump_debug_html(page, slug)
         raise RuntimeError(
             f"Found form_build_id field but its value was empty. Full page "
-            f"HTML dumped to {DEBUG_HTML_PATH}."
+            f"HTML dumped to {_debug_html_path(slug)}."
         )
 
     return FormTokens(widget_hash=widget_hash, form_build_id=form_build_id)
@@ -347,7 +356,7 @@ def build_year_url(
     return f"{base_no_query}?{query}#widget-form-base"
 
 
-def get_year_url(base_url: str, year: int, timeout_ms: int = DEFAULT_TIMEOUT_MS,
+def get_year_url(base_url: str, year: int, slug: str, timeout_ms: int = DEFAULT_TIMEOUT_MS,
                   form_id: str = FORM_ID,
                   extra_params: Optional[dict[str, str]] = None) -> str:
     """Return the year-filtered press-releases URL for *year*.
@@ -393,7 +402,7 @@ def get_year_url(base_url: str, year: int, timeout_ms: int = DEFAULT_TIMEOUT_MS,
                 page = browser.new_page()
                 page.set_default_timeout(timeout_ms)
                 page.goto(nav_url, wait_until="networkidle")
-                tokens = get_form_tokens(page)
+                tokens = get_form_tokens(page, slug)
                 return build_year_url(base_url, year, tokens, form_id=form_id, extra_params=extra_params)
             finally:
                 browser.close()
@@ -538,7 +547,7 @@ def parse_listing_page(html: str, base_url: str, slug: str, ticker: str) -> list
 # Putting it together
 # ---------------------------------------------------------------------------
 
-def scrape_year(base_url: str, year: int, slug: str, ticker: str, timeout: int = 30,
+def scrape_year(base_url: str, year: int, slug: str, ticker: str, session, timeout: int = 30,
                  timeout_ms: int = DEFAULT_TIMEOUT_MS, form_id: str = FORM_ID,
                  debug_dump_html: Optional[Path] = None,
                  polite_delay: float = 15.0,
@@ -567,7 +576,7 @@ def scrape_year(base_url: str, year: int, slug: str, ticker: str, timeout: int =
     query param except "page".
     """
     year_url = get_year_url(
-        base_url, year, timeout_ms=timeout_ms, form_id=form_id, extra_params=extra_params
+        base_url, year, slug, timeout_ms=timeout_ms, form_id=form_id, extra_params=extra_params
     )
     logger.info("Year-filtered URL for %d: %s", year, year_url)
 
@@ -580,7 +589,7 @@ def scrape_year(base_url: str, year: int, slug: str, ticker: str, timeout: int =
         url = year_url if page_idx == 0 else add_page_param(year_url, page_idx)
 
         logger.info("Fetching listing page %d (page=%d): %s", page_num_offset + 1, page_idx, url)
-        html = fetch_listing_html(url, timeout=timeout)
+        html = fetch_listing_html(url, session, timeout=timeout)
 
         if debug_dump_html and page_num_offset == 0:
             debug_dump_html.write_text(html, encoding="utf-8")
@@ -629,7 +638,7 @@ def scrape_year(base_url: str, year: int, slug: str, ticker: str, timeout: int =
     return dedupe_by_url(all_items)
 
 
-def scrape(base_url: str, slug: str, ticker: str, years: Optional[set[int]],
+def scrape(base_url: str, slug: str, ticker: str, years: Optional[set[int]], session,
            timeout: int = 30, timeout_ms: int = DEFAULT_TIMEOUT_MS, form_id: str = FORM_ID,
            debug_dump_html: Optional[Path] = None, polite_delay: float = 15.0,
            extra_params: Optional[dict[str, str]] = None) -> list[NewsItem]:
@@ -646,7 +655,7 @@ def scrape(base_url: str, slug: str, ticker: str, years: Optional[set[int]],
         logger.info("Scraping %s press releases for %d from %s", slug, year, base_url)
         try:
             items = scrape_year(
-                base_url, year, slug, ticker,
+                base_url, year, slug, ticker, session,
                 timeout=timeout, timeout_ms=timeout_ms, form_id=form_id,
                 debug_dump_html=debug_dump_html, polite_delay=polite_delay,
                 extra_params=extra_params,
@@ -789,18 +798,28 @@ def scrape_and_filter(
 
     years = parse_year_args(args)
 
-    all_items = scrape(
-        base_url,
-        slug=slug,
-        ticker=ticker,
-        years=years,
-        timeout=args.timeout,
-        timeout_ms=args.browser_timeout * 1000,
-        debug_dump_html=args.debug_dump_html,
-        polite_delay=args.polite_delay,
-        extra_params=extra_query_params,
-    )
-    logger.info("Scraped %d item(s) total (before filtering).", len(all_items))
+    # One session per call, scoped to this source's own scrape and closed
+    # when it's done -- see new_session()'s docstring (in
+    # utils/scrape_notified_utils.py) for why this isn't a module-level
+    # cached singleton (scrape_all.py runs sources concurrently in a thread
+    # pool, and curl_cffi Sessions aren't safe to share across threads).
+    # Only the listing fetch uses this session -- the year-filter-token step
+    # (get_year_url(), below) is a separate, one-off Playwright browser,
+    # unrelated to HTTP session reuse.
+    with new_session() as session:
+        all_items = scrape(
+            base_url,
+            slug=slug,
+            ticker=ticker,
+            years=years,
+            session=session,
+            timeout=args.timeout,
+            timeout_ms=args.browser_timeout * 1000,
+            debug_dump_html=args.debug_dump_html,
+            polite_delay=args.polite_delay,
+            extra_params=extra_query_params,
+        )
+        logger.info("Scraped %d item(s) total (before filtering).", len(all_items))
 
     filtered = finalize_and_output(
         all_items,

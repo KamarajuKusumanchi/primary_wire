@@ -349,7 +349,7 @@ def _join_news_path(ir_url: str, news_path: str) -> str:
     """Join *ir_url* with sources.yaml's "news_path" field, if any.
 
     Thin wrapper around utils.sources_utils.join_url_path() that also drops
-    a "{year}" placeholder (used by year-specific listing URLs, e.g.
+9    a "{year}" placeholder (used by year-specific listing URLs, e.g.
     Netflix's) via strip_year_placeholder() first -- detection only needs
     *some* listing page to check for platform fingerprints, not a
     particular year, mirroring scrape_q4_ir.py's _resolve_year_url() when
@@ -363,11 +363,8 @@ def _join_news_path(ir_url: str, news_path: str) -> str:
 # HTTP fetch
 # ---------------------------------------------------------------------------
 
-_SESSION = None
-
-
-def get_session():
-    """Return a shared HTTP session.
+def new_session():
+    """Build and return a fresh HTTP session.
 
     Uses curl_cffi with Chrome impersonation when available — required for
     IR sites (particularly Notified/Drupal) that enforce TLS fingerprinting
@@ -375,41 +372,60 @@ def get_session():
     scrape_notified.py documents this requirement explicitly.
     Falls back to a plain requests.Session if curl_cffi is not installed,
     which works for sites without TLS fingerprint checks.
+
+    Deliberately NOT cached behind a module-level singleton.
+    detect_platforms_parallel() below fetches every source concurrently via
+    ThreadPoolExecutor -- a cached ``_SESSION`` would then be silently shared,
+    unsynchronized, across every worker thread at once. curl_cffi's Session
+    wraps a single libcurl handle and is not safe to use from more than one
+    thread at a time, and plain requests.Session is documented as
+    thread-unsafe too, so "share one session across threads" was never
+    actually safe here, even though the lightweight one-GET-per-source
+    workload made that easy to not notice.
+
+    Call this once per detection (see detect_one() inside
+    detect_platforms_parallel(), and the single-target path in main()) and
+    thread the result through explicitly as the ``session`` argument below,
+    rather than reaching for a global or a threading.local() -- a plain
+    function argument is simpler, is impossible to accidentally share across
+    an unrelated call, and needs no cleanup bookkeeping beyond the caller's
+    own ``with new_session() as session:`` block.
     """
-    global _SESSION
-    if _SESSION is None:
-        if _HTTP_BACKEND == "curl_cffi":
-            # impersonate="chrome124" sets JA3/JA4 + HTTP/2 SETTINGS to match
-            # a real Chrome 124 client, bypassing TLS-fingerprint blocks.
-            _SESSION = requests.Session(impersonate="chrome124")
-            logger.debug("HTTP backend: curl_cffi (Chrome impersonation)")
-        else:
-            logger.warning(
-                "curl_cffi not installed — falling back to plain requests. "
-                "Sites with TLS fingerprinting (e.g. AbbVie/Notified) may "
-                "timeout or be misclassified. Install with: pip install curl_cffi"
-            )
-            _SESSION = requests.Session()
-            _SESSION.headers.update({
-                "User-Agent": (
-                    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
-                    "AppleWebKit/537.36 (KHTML, like Gecko) "
-                    "Chrome/124.0.0.0 Safari/537.36"
-                ),
-                "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-                "Accept-Language": "en-US,en;q=0.9",
-            })
-    return _SESSION
+    if _HTTP_BACKEND == "curl_cffi":
+        # impersonate="chrome124" sets JA3/JA4 + HTTP/2 SETTINGS to match
+        # a real Chrome 124 client, bypassing TLS-fingerprint blocks.
+        logger.debug("HTTP backend: curl_cffi (Chrome impersonation)")
+        return requests.Session(impersonate="chrome124")
+
+    logger.warning(
+        "curl_cffi not installed — falling back to plain requests. "
+        "Sites with TLS fingerprinting (e.g. AbbVie/Notified) may "
+        "timeout or be misclassified. Install with: pip install curl_cffi"
+    )
+    session = requests.Session()
+    session.headers.update({
+        "User-Agent": (
+            "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
+            "AppleWebKit/537.36 (KHTML, like Gecko) "
+            "Chrome/124.0.0.0 Safari/537.36"
+        ),
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+        "Accept-Language": "en-US,en;q=0.9",
+    })
+    return session
 
 
-def fetch_html(url: str, timeout: int) -> tuple[str, str]:
+def fetch_html(url: str, session, timeout: int) -> tuple[str, str]:
     """GET *url* and return (final_url, html).
 
     Follows redirects. Returns the final URL after redirects alongside the
     page HTML so callers can log where the request actually landed.
     Raises on HTTP errors.
+
+    ``session`` is always the caller's own (built by new_session()), never a
+    shared/global one -- see new_session()'s docstring for why.
     """
-    resp = get_session().get(url, timeout=timeout, allow_redirects=True)
+    resp = session.get(url, timeout=timeout, allow_redirects=True)
     resp.raise_for_status()
     return resp.url, resp.text
 
@@ -603,7 +619,7 @@ def detect_platform_from_html(
 
 
 def detect_platform(
-    ir_url: str, timeout: int, slug: str = "",
+    ir_url: str, session, timeout: int, slug: str = "",
     news_path: str = "", news_details_segment: str = "",
 ) -> str:
     """Fetch *ir_url* (or its news_path sub-page, if given) and return the
@@ -611,6 +627,10 @@ def detect_platform(
 
     Returns 'unknown' on any network or HTTP error so callers always get a
     string rather than an exception.
+
+    ``session`` is a session built by new_session() -- always required, and
+    always the caller's own, never a shared/global one. See new_session()'s
+    docstring for why.
 
     *news_path*, if given (from sources.yaml's "news_path" field -- the same
     field scrape_q4_ir.py reads to build the listing URL it scrapes), is
@@ -636,7 +656,7 @@ def detect_platform(
         return PLATFORM_UNKNOWN
     fetch_url = _join_news_path(ir_url, news_path)
     try:
-        final_url, html = fetch_html(fetch_url, timeout=timeout)
+        final_url, html = fetch_html(fetch_url, session, timeout=timeout)
         if final_url != fetch_url:
             logger.debug("Redirected: %s → %s", fetch_url, final_url)
         platform = detect_platform_from_html(
@@ -778,11 +798,18 @@ def detect_platforms_parallel(df: pd.DataFrame, workers: int, timeout: int) -> p
 
     def detect_one(idx_row: tuple[int, dict]) -> tuple[int, str]:
         idx, row = idx_row
-        platform = detect_platform(
-            resolve_scrape_url(row), timeout=timeout, slug=row.get("slug", ""),
-            news_path=row.get("news_path", ""),
-            news_details_segment=row.get("news_details_segment", ""),
-        )
+        # One session per row, opened and closed right here -- see
+        # new_session()'s docstring for why this can't be a session shared
+        # across the pool's worker threads (or cached anywhere above this
+        # function). Cheap to do per-row: each detection is a single GET,
+        # not a paginated scrape, so there's no keep-alive benefit being
+        # given up by not caching it.
+        with new_session() as session:
+            platform = detect_platform(
+                resolve_scrape_url(row), session, timeout=timeout, slug=row.get("slug", ""),
+                news_path=row.get("news_path", ""),
+                news_details_segment=row.get("news_details_segment", ""),
+            )
         return idx, platform
 
     with concurrent.futures.ThreadPoolExecutor(max_workers=workers) as pool:
@@ -926,10 +953,11 @@ def main(argv: Optional[list[str]] = None) -> int:
         print(f"error: no sources.yaml record found for '{query}'", file=sys.stderr)
         return 1
 
-    platform = detect_platform(
-        scrape_url, timeout=args.timeout, slug=slug,
-        news_path=news_path, news_details_segment=news_details_segment,
-    )
+    with new_session() as session:
+        platform = detect_platform(
+            scrape_url, session, timeout=args.timeout, slug=slug,
+            news_path=news_path, news_details_segment=news_details_segment,
+        )
     # Report the full listing URL now that the platform is known -- e.g.
     # https://news.lockheedmartin.com/news-releases?category=788 rather
     # than just https://news.lockheedmartin.com/ -- see

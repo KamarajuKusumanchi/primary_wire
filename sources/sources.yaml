@@ -96,6 +96,10 @@ sources:
     name: The Allstate Corporation
     ticker: ALL
     ir_url: https://www.allstateinvestors.com/
+  - slug: altria
+    name: Altria Group, Inc.
+    ticker: MO
+    ir_url: https://www.altria.com/Investors/
   - slug: amcor
     name: Amcor plc
     ticker: AMCR
@@ -366,6 +370,10 @@ sources:
     name: Eli Lilly and Company
     ticker: LLY
     ir_url: https://investor.lilly.com/
+  - slug: emcor
+    name: EMCOR Group, Inc.
+    ticker: EME
+    ir_url: https://emcorgroup.com/investor-relations
   - slug: eqt
     name: EQT Corporation
     ticker: EQT
@@ -399,6 +407,10 @@ sources:
     ticker: FDXF
     ir_url: https://ir.fedexfreight.com/
     news_releases_path: news-events/press-releases
+  - slug: fico
+    name: Fair Isaac Corporation
+    ticker: FICO
+    ir_url: https://investors.fico.com/
   - slug: first-solar
     name: First Solar, Inc.
     ticker: FSLR
@@ -573,6 +585,10 @@ sources:
     name: KLA Corporation
     ticker: KLAC
     ir_url: https://ir.kla.com/
+  - slug: l3harris
+    name: L3Harris Technologies, Inc.
+    ticker: LHX
+    ir_url: https://investors.l3harris.com/
   - slug: lam-research
     name: Lam Research Corporation
     ticker: LRCX
@@ -702,6 +718,10 @@ sources:
     name: QUALCOMM Incorporated
     ticker: QCOM
     ir_url: https://investor.qualcomm.com/
+  - slug: quanta-services
+    name: Quanta Services, Inc.
+    ticker: PWR
+    ir_url: https://investors.quantaservices.com/
   - slug: quest-diagnostics
     name: Quest Diagnostics Incorporated
     ticker: DGX

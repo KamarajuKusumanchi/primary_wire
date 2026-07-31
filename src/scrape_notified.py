@@ -102,6 +102,7 @@ Run at most once per day. Requests are spaced by --polite-delay (default 15 s).
 from __future__ import annotations
 
 import argparse
+import functools
 import logging
 import re
 import sys
@@ -136,6 +137,7 @@ from utils.scrape_notified_utils import (
     extract_date_and_time_from_row,
     fetch_html,
     find_last_page,
+    new_session,
     parse_listing_page as _shared_parse_listing_page,
 )
 
@@ -327,7 +329,9 @@ def parse_listing_page(
 # Detail-page date fallback
 # ---------------------------------------------------------------------------
 
-def fetch_date_from_detail_page(url: str, timeout: int = 30) -> tuple[Optional[date], str, str]:
+def fetch_date_from_detail_page(
+    url: str, session, timeout: int = 30
+) -> tuple[Optional[date], str, str]:
     """Fetch a detail page and extract its publish date and time.
 
     Date-parsing heuristics live in scrape_utils.extract_date_from_detail_html(),
@@ -340,7 +344,7 @@ def fetch_date_from_detail_page(url: str, timeout: int = 30) -> tuple[Optional[d
     publish one).
     """
     try:
-        html = fetch_html(url, timeout=timeout)
+        html = fetch_html(url, session, timeout=timeout)
     except Exception as exc:
         logger.warning("Failed to fetch detail page %s: %s", url, exc)
         return None, "", ""
@@ -361,6 +365,7 @@ def page_year_range(
     slug: str,
     ticker: str,
     timeout: int,
+    session,
     news_releases_path: str = DEFAULT_NEWS_RELEASES_PATH,
     extra_params: Optional[dict[str, str]] = None,
 ) -> tuple[Optional[int], Optional[int]]:
@@ -372,7 +377,7 @@ def page_year_range(
         base_url, page=page, news_releases_path=news_releases_path, extra_params=extra_params
     )
     try:
-        html = fetch_html(url, timeout=timeout)
+        html = fetch_html(url, session, timeout=timeout)
     except Exception as exc:
         logger.debug("Failed to probe page %d: %s", page, exc)
         return None, None
@@ -390,6 +395,7 @@ def find_start_page(
     last_page: int,
     target_years: set[int],
     timeout: int,
+    session,
     news_releases_path: str = DEFAULT_NEWS_RELEASES_PATH,
     first_page_index: int = DEFAULT_FIRST_PAGE_INDEX,
     extra_params: Optional[dict[str, str]] = None,
@@ -412,7 +418,7 @@ def find_start_page(
     # Quick sanity probe: if the first page already only has items older
     # than max_target, there is nothing to fetch at all.
     min_yr, max_yr = page_year_range(
-        base_url, first_page_index, slug, ticker, timeout,
+        base_url, first_page_index, slug, ticker, timeout, session,
         news_releases_path=news_releases_path, extra_params=extra_params,
     )
     if max_yr is not None and max_yr < min_target:
@@ -425,7 +431,7 @@ def find_start_page(
     while lo < hi:
         mid = (lo + hi) // 2
         min_yr, max_yr = page_year_range(
-            base_url, mid, slug, ticker, timeout,
+            base_url, mid, slug, ticker, timeout, session,
             news_releases_path=news_releases_path, extra_params=extra_params,
         )
         logger.debug(
@@ -465,6 +471,7 @@ def scrape_one_pass(
     start_page: int,
     polite_delay: float,
     timeout: int,
+    session,
     debug_dump_html: Optional[Path] = None,
     end_page: Optional[int] = None,
     target_years: Optional[set[int]] = None,
@@ -504,7 +511,7 @@ def scrape_one_pass(
         logger.info("Fetching listing page %d (page=%d): %s", page_num_offset + 1, page_idx, url)
 
         try:
-            html = fetch_html(url, timeout=timeout)
+            html = fetch_html(url, session, timeout=timeout)
         except Exception as exc:
             logger.error("Failed to fetch listing page %s: %s", url, exc)
             break
@@ -579,6 +586,7 @@ def scrape(
     polite_delay: float,
     timeout: int,
     debug_dump_html: Optional[Path],
+    session,
     news_releases_path: str = DEFAULT_NEWS_RELEASES_PATH,
     first_page_index: int = DEFAULT_FIRST_PAGE_INDEX,
     extra_params: Optional[dict[str, str]] = None,
@@ -610,7 +618,7 @@ def scrape(
         )
         logger.info("Fetching first page (page=%d) to determine pagination: %s", first_page_index, url0)
         try:
-            html0 = fetch_html(url0, timeout=timeout)
+            html0 = fetch_html(url0, session, timeout=timeout)
         except Exception as exc:
             logger.error("Failed to fetch first page: %s", exc)
             return []
@@ -642,6 +650,7 @@ def scrape(
                 last_page=last_page,
                 target_years=years,
                 timeout=timeout,
+                session=session,
                 news_releases_path=news_releases_path,
                 first_page_index=first_page_index,
                 extra_params=extra_params,
@@ -661,6 +670,7 @@ def scrape(
                 start_page=start_page,
                 polite_delay=polite_delay,
                 timeout=timeout,
+                session=session,
                 debug_dump_html=None,  # already dumped above
                 end_page=last_page,
                 target_years=years,
@@ -678,6 +688,7 @@ def scrape(
         start_page=first_page_index,
         polite_delay=polite_delay,
         timeout=timeout,
+        session=session,
         debug_dump_html=debug_dump_html,
         news_releases_path=news_releases_path,
     )
@@ -855,24 +866,33 @@ def scrape_and_filter(
 
     years = parse_year_args(args)
 
-    all_items = scrape(
-        base_url=base_url,
-        slug=slug,
-        ticker=ticker,
-        years=years,
-        polite_delay=args.polite_delay,
-        timeout=args.timeout,
-        debug_dump_html=args.debug_dump_html,
-        news_releases_path=news_releases_path,
-        first_page_index=first_page_index,
-        extra_params=extra_query_params,
-    )
-    logger.info("Scraped %d item(s) total (before filtering).", len(all_items))
-
-    if args.fetch_detail_pages:
-        fetch_missing_dates_via_http(
-            all_items, fetch_date_from_detail_page, args.polite_delay, args.timeout
+    # One session per call, scoped to this source's own scrape and closed
+    # when it's done -- see new_session()'s docstring (in
+    # utils/scrape_notified_utils.py) for why this isn't a module-level
+    # cached singleton (scrape_all.py runs sources concurrently in a thread
+    # pool, and curl_cffi Sessions aren't safe to share across threads).
+    with new_session() as session:
+        all_items = scrape(
+            base_url=base_url,
+            slug=slug,
+            ticker=ticker,
+            years=years,
+            polite_delay=args.polite_delay,
+            timeout=args.timeout,
+            debug_dump_html=args.debug_dump_html,
+            session=session,
+            news_releases_path=news_releases_path,
+            first_page_index=first_page_index,
+            extra_params=extra_query_params,
         )
+        logger.info("Scraped %d item(s) total (before filtering).", len(all_items))
+
+        if args.fetch_detail_pages:
+            fetch_missing_dates_via_http(
+                all_items,
+                functools.partial(fetch_date_from_detail_page, session=session),
+                args.polite_delay, args.timeout,
+            )
 
     # Filters, always previews, and writes CSV/JSON per --format; see
     # finalize_and_output()'s docstring for the three behaviors this
