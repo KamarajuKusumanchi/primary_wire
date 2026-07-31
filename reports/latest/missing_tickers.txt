@@ -1,7 +1,7 @@
 
 S&P 500 companies:  503
-Covered in sources: 196
-Missing:            307
+Covered in sources: 201
+Missing:            302
 
 Missing tickers:
   A
@@ -96,7 +96,6 @@ Missing tickers:
   EG
   EL
   ELV
-  EME
   EMR
   EOG
   EQIX
@@ -116,7 +115,6 @@ Missing tickers:
   FCX
   FE
   FFIV
-  FICO
   FISV
   FITB
   FIX
@@ -168,7 +166,6 @@ Missing tickers:
   LDOS
   LEN
   LH
-  LHX
   LIN
   LNT
   LOW
@@ -191,7 +188,6 @@ Missing tickers:
   MKC
   MMM
   MNST
-  MO
   MOS
   MPC
   MPWR
@@ -242,7 +238,6 @@ Missing tickers:
   PRU
   PSA
   PSX
-  PWR
   Q
   REG
   REGN

@@ -771,6 +771,7 @@ sources:
     name: Skyworks Solutions, Inc.
     ticker: SWKS
     ir_url: https://www.skyworksinc.com/investors
+    news_releases_path: press-releases
   - slug: slb
     name: SLB N.V.
     ticker: SLB
