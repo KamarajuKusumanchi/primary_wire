@@ -1,0 +1,43 @@
+2026-08-01 1:54 am
+
+Prompt:
+Please review https://github.com/KamarajuKusumanchi/primary_wire/archive/refs/heads/master.zip and tell me what you think? What are the next steps? What are some things that can be done to make the code more scalable and extendable? How to improve the design and the underlying code? Is there anything worth refactoring? Any comments that are not inline with the code? Ignore files in src/playground , src/prototypes from your review.
+
+Response:
+Good, I've got a solid picture. Here's my honest take.
+
+## Overall impression
+
+This is a well-run early-stage project. The code quality is genuinely above average for something at this stage — dataclasses for records, consistent CLI conventions across scrapers, real dedup/upsert logic in the CSV merge path, a `--dry-run` everywhere, a `--smoke-test` mode that samples one representative source per code-path instead of hammering every live site. That's more engineering discipline than most side projects at 200 sources ever get. The core bottleneck right now isn't code quality, it's **coverage**: 211/503 S&P 500 tickers have any source at all, and only 34 of 215 tracked sources (15.8%) have an automated scraper — the rest is manual link-adding. That's the real state of the project, and it's worth being blunt about it before talking about architecture.
+
+## What's actually good
+
+- **`utils/scrape_utils.py`, `csv_utils.py`, `sources_utils.py`** are a legitimate shared layer, not just a junk drawer — `NewsItem`, `filter_items`, `dedupe_by_url`, `merge_items_into_daily_csvs` are used consistently by all four scrapers.
+- **The CSV merge is correct**, not just "works": it diffs by URL, counts new vs. updated vs. unchanged, and only rewrites files that actually changed. Small thing, easy to get wrong, done right.
+- **The docstrings are unusually good** — they explain *why*, with concrete examples of real bugs found against real sites (Seagate's double-date headline, Robinhood's `Jan.`-with-period dateline). That's valuable institutional memory, not fluff.
+
+## Where it's not lined up with the code
+
+You asked specifically about comments that don't match the code — the clearest offender is **`pyproject.toml`**. It has multi-paragraph dated journal entries baked into a build config file: "today | 2026-06-23, migrating from requirements.txt", "today | 2026-07-06, lower minimum Python from 3.14 to 3.12" complete with full command transcripts and troubleshooting logs. That's dev-diary content, not config documentation, and it'll only keep growing. It belongs in `docs/` (you already have `docs/setup.txt`) or a `CHANGELOG.md`, not in the file `uv` parses on every sync.
+
+More generally, several docstrings (`scrape_notified_gated.py`'s module docstring especially) read like a lab notebook — "CONFIRMED against a live `--debug-dump-html` fetch of TJX (2025-07-10)" — which is great as commit-message material but is a lot to load before you get to the actual function signatures. Not wrong, just a maintenance cost: every one of these becomes stale the day the site's markup changes again, and nothing forces someone to update the prose when they fix the regex.
+
+## Worth refactoring
+
+**`scrape_notified.py` vs `scrape_notified_gated.py`** is the standout case. `resolve_source`, `is_detail_url`, `build_arg_parser`, `scrape_and_filter`, and `main` are near-duplicates between the two files (I diffed them — same shape, different constants/precedence details). The module docstring for the gated version even says explicitly it's "not a different platform... the only difference is how the year-filtered listing URL is obtained." That's a strong signal these two should share one `resolve_source`/`scrape_and_filter` in `scrape_notified_utils.py`, with the gated variant only overriding `get_year_url`/`build_year_url`. Right now a bug fix in one (there's already a comment referencing "the same bug fixed for scrape_investorroom.py and scrape_notified.py") has to be manually ported to the other by hand, and it shows — the two `resolve_source` docstrings are already drifting relative to each other.
+
+## Gaps for scalability/extensibility
+
+1. **No CI.** No `.github/workflows` at all, despite having a real pytest suite with markers and a `--smoke-test` mode built exactly for this. This is the single highest-leverage thing to add — a GitHub Actions job running `pytest` (and maybe `invoke smoke-test` on a schedule) on every PR would catch scraper regressions before they land, which matters a lot given how brittle scraping code inherently is.
+2. **No linting/type-checking config.** No `ruff`, `mypy`, or `black` in `pyproject.toml`. The code already uses `from __future__ import annotations` and full type hints consistently, so `mypy --strict` would probably pass with light effort and catch real bugs (e.g. the `Optional` vs default mismatches that tend to creep into argparse-heavy code).
+3. **Missing tests for real surface area**: `scrape_investis.py` (762 lines) has no test file at all. Neither does `csv_utils.py` or `scrape_notified_utils.py`, despite being the most shared/load-bearing modules. `update_source.py`/`update_release.py` (the interactive scripts contributors actually run) are also untested.
+4. **55 "unknown platform" sources** per `scraper_coverage_summary.txt` — no automated scraper category exists for them yet. As coverage grows past S&P 500 (which the README says is in scope), you'll keep hitting new platforms; the "one scraper module per platform + shared utils" pattern scales fine, but `detect_ir_platform.py` classifying more platforms automatically (rather than a human eyeballing each new IR site) is the real leverage point for getting past 15.8%.
+5. **Data layout**: one CSV per calendar day is simple and diff-friendly now (147 files, 600K), but at S&P 500 + government-agency scale over years this will be thousands of small files in one flat `data/YYYY/` directory. Worth deciding now whether that's fine forever (git handles it) or whether monthly/quarterly files reduce file-count sprawl before it's painful to migrate.
+
+## Concrete next steps, in priority order
+
+1. Add a CI workflow (pytest + smoke-test) — cheap, protects everything else you build.
+2. Merge `scrape_notified_gated.py`'s duplicated scaffolding back into `scrape_notified_utils.py`.
+3. Add tests for `scrape_investis.py` and `csv_utils.py`.
+4. Move the pyproject.toml dev-log comments into `docs/` or a changelog.
+5. Then, the actual mission-critical work: grow automated-scraper coverage past 15.8%, since that's what determines whether this project achieves its stated goal, not code architecture.
