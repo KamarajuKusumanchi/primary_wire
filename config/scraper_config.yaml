@@ -78,6 +78,8 @@ q4_ir:
       args: [--show-browser]
     - slug: garmin
       args: [--show-browser]
+    - slug: molson-coors
+      args: [--show-browser]
 
 investis:
   scraper: scrape_investis
