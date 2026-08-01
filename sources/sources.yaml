@@ -621,6 +621,8 @@ sources:
     name: Lam Research Corporation
     ticker: LRCX
     ir_url: https://investor.lamresearch.com/
+    news_url: https://newsroom.lamresearch.com/
+    news_releases_path: press-releases
   - slug: lennox
     name: Lennox International Inc.
     ticker: LII
