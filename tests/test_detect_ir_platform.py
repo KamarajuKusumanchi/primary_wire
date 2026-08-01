@@ -1,40 +1,24 @@
 """
 tests/test_detect_ir_platform.py
 
-Regression tests for TWO separate bugs, both found on investors.sysco.com,
-both ending in the same misclassification ("notified" instead of
-"investis"), via the same underlying mistake: _check_investis() relying on
-a single fingerprint that turned out to not be permanent.
+Tests for Investis detection in detect_ir_platform.py.
 
-Bug #1 (original): _check_investis() only recognized the "Investis
-Digital" footer branding (investisdigital.com), which Home Depot's IR site
-uses. Sysco's IR site used the plain "Investis" branding instead
-("Delivered by Investis", linking to investis.com, no "Digital" anywhere).
-That variant matched neither regex, so _check_investis() returned False and
-detection fell through to Notified's broad link-pattern heuristic, which
-matches Investis's own /news-releases/<year>/<mm-dd-yyyy>-<serial> URL
-shape just as well as an actual Notified site's.
+_check_investis() recognizes an Investis-powered IR site via either of two
+independent signals, each sufficient on its own:
 
-Fix #1: switched _check_investis() to check for the "Investis Sitecore
-common GTM" HTML comment instead -- a vendor-generated build-tool
-signature confirmed present in <head> on both the Sysco (plain) and Home
-Depot ("Digital") captures, regardless of footer branding.
+  1. The "Investis Sitecore common GTM" HTML comment in <head>.
+  2. The visible footer branding credit/link: "Delivered by Investis"
+     (plain branding) or "Delivered by Investis Digital" (Digital branding),
+     linking to investis.com or investisdigital.com respectively.
 
-Bug #2 (this one): a later Sysco IR-site redesign dropped the Sitecore GTM
-comment from <head> entirely (confirmed via a fresh
---debug-dump-html capture), while leaving the "Delivered by Investis"
-footer credit and its investis.com link untouched. Since Fix #1 had made
-the Sitecore comment the ONLY signal _check_investis() looked at, losing
-it reproduced the exact same "notified" misclassification via the exact
-same failure mode as Bug #1 -- just with the fragile single fingerprint
-swapped for a different fragile single fingerprint.
+This must be detected before Notified's broad link-pattern heuristic
+(_check_notified_links / NOTIFIED_DETAIL_RE) runs, because Investis's own
+press-release detail URLs -- /news-releases/<year>/<mm-dd-yyyy>-<serial>,
+e.g. https://ir.homedepot.com/news-releases/2026/07-15-2026-130113180 --
+also match that heuristic's shape.
 
-Fix #2: _check_investis() now checks BOTH signals (Sitecore comment OR
-footer credit/link), so either one going away in isolation is no longer
-enough to cause a misclassification. The tests below cover all four
-combinations that matter: comment-only (old Sysco-style capture, still
-must work), footer-only (new Sysco-style capture, the actual regression),
-both together (Home Depot), and neither (must NOT be classified investis).
+The tests below cover each signal in isolation, both together, and neither,
+plus the end-to-end priority against Notified.
 
 Run with:
     uv run pytest
@@ -55,7 +39,8 @@ from reporting.detect_ir_platform import (  # noqa: E402
 )
 
 # ---------------------------------------------------------------------------
-# Trimmed down from real `--debug-dump-html` captures:
+# Fixtures below are trimmed-down versions of real `--debug-dump-html`
+# captures, e.g.:
 #   python src/scrape_investis.py --dry-run --year 2026 --slug sysco \
 #       --debug-dump-html sysco.html
 #   python src/scrape_investis.py --dry-run --year 2026 --slug home-depot \
@@ -88,7 +73,7 @@ HOME_DEPOT_NEWS_LINK = (
     "Some Home Depot release</a>"
 )
 
-# Bug #1's original shape: Sitecore comment present, no footer markup at all.
+# Sitecore comment present, no footer markup.
 SYSCO_PAGE_COMMENT_ONLY = f"""
 <html><head>
 {SITECORE_GTM_COMMENT}
@@ -97,10 +82,7 @@ SYSCO_PAGE_COMMENT_ONLY = f"""
 </body></html>
 """
 
-# Bug #2's shape (this fix): redesigned page, Sitecore comment gone from
-# <head>, but the footer branding credit/link survived the redesign.
-# Mirrors the real sysco.html --debug-dump-html capture that reproduced
-# this bug.
+# Footer branding credit/link present, no Sitecore comment in <head>.
 SYSCO_PAGE_FOOTER_ONLY = f"""
 <html><head>
 </head><body>
@@ -111,7 +93,7 @@ SYSCO_PAGE_FOOTER_ONLY = f"""
 </body></html>
 """
 
-# Home Depot capture: has both signals together, as originally observed.
+# Both signals present together.
 HOME_DEPOT_PAGE = f"""
 <html><head>
 {SITECORE_GTM_COMMENT}
@@ -123,12 +105,8 @@ HOME_DEPOT_PAGE = f"""
 </body></html>
 """
 
-# Neither signal present -- a genuine Notified site's page, for contrast.
-# Same link shape as Sysco/Home Depot's news-releases URLs would NOT even
-# need to appear here for this to look like Notified; it's the *absence*
-# of both Investis signals that must correctly leave this unclassified as
-# investis (detect_platform_from_html falls through to its own signals
-# elsewhere in the pipeline -- not this module's concern for this test).
+# Neither Investis signal present -- a genuine Notified site's page, for
+# contrast.
 PAGE_WITH_NEITHER_SIGNAL = """
 <html><head></head><body>
 <a href="https://example.com/news-releases/news-release-details/some-slug">
@@ -138,25 +116,23 @@ Some unrelated release</a>
 
 
 def test_sysco_comment_only_page_is_recognized_as_investis():
-    """Bug #1's shape must still work: Sitecore comment alone is enough."""
+    """Sitecore comment alone is sufficient."""
     assert _check_investis(SYSCO_PAGE_COMMENT_ONLY)
 
 
 def test_sysco_footer_only_page_is_recognized_as_investis():
-    """Bug #2 (this fix): footer credit/link alone, with no Sitecore
-    comment in <head>, must still be recognized as Investis."""
+    """Footer credit/link alone, with no Sitecore comment in <head>, is
+    sufficient."""
     assert _check_investis(SYSCO_PAGE_FOOTER_ONLY)
 
 
 def test_home_depot_page_is_recognized_as_investis():
-    """Regression guard: fixing Sysco's cases must not break Home Depot's
-    (both signals present) detection."""
+    """Both signals present together is also recognized."""
     assert _check_investis(HOME_DEPOT_PAGE)
 
 
 def test_page_with_neither_signal_is_not_recognized_as_investis():
-    """Sanity check: a page with neither fingerprint isn't just always
-    treated as Investis regardless of content."""
+    """A page with neither fingerprint is not classified as Investis."""
     assert not _check_investis(PAGE_WITH_NEITHER_SIGNAL)
 
 
@@ -170,9 +146,8 @@ def test_sysco_comment_only_page_is_not_misclassified_as_notified():
 
 
 def test_sysco_footer_only_page_is_not_misclassified_as_notified():
-    """The actual bug being fixed here, end to end: with the Sitecore
-    comment gone (as on the redesigned page), the footer signal must still
-    win over Notified's broad link-pattern heuristic."""
+    """Same as above, but with only the footer signal present (no Sitecore
+    comment)."""
     assert detect_platform_from_html(SYSCO_PAGE_FOOTER_ONLY) == PLATFORM_INVESTIS
     assert detect_platform_from_html(SYSCO_PAGE_FOOTER_ONLY) != PLATFORM_NOTIFIED
 

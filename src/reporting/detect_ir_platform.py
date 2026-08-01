@@ -46,19 +46,14 @@ investis  (scrape_investis.py)
         (Investis's own build-tooling signature), or
     (b) the footer attribution string "Delivered by Investis" / "Delivered
         by Investis Digital", or a link to investis.com / investisdigital.com.
-    Checked as an OR of both rather than either alone, after each was in
-    turn found to independently vanish from a real page in a redesign
-    (see INVESTIS_SITECORE_COMMENT_RE / INVESTIS_FOOTER_RE / _check_investis()
-    for the full history).
   * IMPORTANT: Investis's press-release detail URLs look like
     /news-releases/<year>/<mm-dd-yyyy>-<serial>, e.g. Home Depot's
     https://ir.homedepot.com/news-releases/2026/07-15-2026-130113180.
     That shape has two path segments after "news-releases", which is
     exactly what Notified's broad link-pattern heuristic
-    (NOTIFIED_DETAIL_RE) looks for -- so before this signal was added,
-    every Investis site was silently misclassified as "notified" instead
-    of getting its own bucket. See _check_investis() and the priority
-    note below for how this is now avoided.
+    (NOTIFIED_DETAIL_RE) looks for -- so this signal must be checked BEFORE
+    that heuristic, or every Investis site would be misclassified as
+    "notified" instead. See _check_investis() and the priority note below.
 
 notified_gated  (scrape_notified_gated.py)
   * Same underlying markup/fingerprints as notified above -- these are
@@ -310,35 +305,18 @@ NOTIFIED_DETAIL_RE = re.compile(
     re.IGNORECASE,
 )
 
-# Investis: two INDEPENDENT signals, either of which is treated as
-# definitive on its own. Relying on only one has bitten us twice now:
+# Investis: two independent signals, either of which is treated as
+# definitive on its own (see _check_investis() below):
 #
 # 1. INVESTIS_SITECORE_COMMENT_RE -- the "Investis Sitecore common GTM"
-#    HTML comment in <head>, seen on both investors.sysco.com (plain
-#    "Investis" footer branding) and ir.homedepot.com ("Investis Digital"
-#    footer branding) captures at the time this was written. This is
-#    Investis's own build tooling/template signature (their Sitecore CMS's
-#    shared GTM snippet), not user-editable marketing copy.
+#    HTML comment in <head>. This is Investis's own build tooling/template
+#    signature (their Sitecore CMS's shared GTM snippet), not user-editable
+#    marketing copy.
 #
 # 2. INVESTIS_FOOTER_RE -- the visible page-footer branding credit and/or
-#    its outbound link: "Delivered by Investis" (Sysco's plain variant) or
-#    "Delivered by Investis Digital" (Home Depot's variant), linking to
+#    its outbound link: "Delivered by Investis" (plain branding) or
+#    "Delivered by Investis Digital" (Digital branding), linking to
 #    investis.com or investisdigital.com respectively.
-#
-# History: the ORIGINAL _check_investis() only looked at #2, and only in
-# its "Digital"/investisdigital.com form -- so it missed Sysco's plain
-# "Investis" (no "Digital") footer entirely and fell through to Notified's
-# heuristic. That was fixed by switching to #1 (the Sitecore comment),
-# which covered both branding variants with one identical signature.
-# But relying on ONLY #1 turned out to be just as fragile in the other
-# direction: a later Sysco IR-site redesign apparently dropped the Sitecore
-# GTM comment from <head> while keeping the "Delivered by Investis" footer
-# credit verbatim -- reproducing the exact same misclassification
-# ("notified") via the exact same failure mode (a single fingerprint that
-# can silently vanish in a page redesign), just with the two signals'
-# fragility reversed. Checking BOTH signals (OR'd together) means either
-# one disappearing on its own is no longer enough to cause a
-# misclassification -- only losing both at once would.
 INVESTIS_SITECORE_COMMENT_RE = re.compile(
     r"investis\s+sitecore\s+common\s+gtm", re.IGNORECASE
 )
@@ -539,12 +517,8 @@ def _check_investis(html: str) -> bool:
          "Delivered by Investis[ Digital]", or a link to investis.com /
          investisdigital.com.
 
-    Both have been independently confirmed, on their own, to disappear
-    from a real site after a redesign (see the constants' comments above
-    for the history) -- so neither is checked alone. A match on either is
-    treated as definitive, same spirit as the Drupal generator meta tag
-    for Notified: only losing BOTH signals at once (an actual platform
-    migration, not a cosmetic redesign) would cause a false negative here.
+    A match on either is treated as definitive, same spirit as the Drupal
+    generator meta tag for Notified.
 
     This must be checked BEFORE Notified's broad link-pattern heuristic
     (_check_notified_links): Investis's press-release detail URLs look like
