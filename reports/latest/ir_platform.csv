@@ -8,6 +8,7 @@ alexandria-real-estate-equities,ARE,q4,https://investor.are.com/news/default.asp
 allegion,ALLE,investis,https://investor.allegion.com/news-and-events/news-releases
 allstate,ALL,notified,https://www.allstateinvestors.com/news-releases
 altria,MO,notified,https://www.altria.com/Investors/news-releases
+amazon,AMZN,unknown,https://ir.aboutamazon.com/
 amcor,AMCR,unknown,https://www.amcor.com/investors
 amd,AMD,notified,https://ir.amd.com/news-events/press-releases
 ameriprise,AMP,q4,https://ir.ameriprise.com/news/default.aspx
@@ -19,6 +20,7 @@ applied-materials,AMAT,notified,https://ir.appliedmaterials.com/news-releases
 archer-daniels-midland,ADM,q4,https://www.investors.adm.com/news/default.aspx
 ares,ARES,unknown,https://ir.ares.com/
 arista-networks,ANET,unknown,https://investors.arista.com/
+arthur-j-gallagher,AJG,q4,https://investor.ajg.com/news/default.aspx
 atmos-energy,ATO,q4,https://www.investors.atmosenergy.com/news/default.aspx
 autodesk,ADSK,notified,https://investors.autodesk.com/news-releases
 autozone,AZO,notified,https://about.autozone.com/investor-overview/news-releases
@@ -53,6 +55,7 @@ coke,KO,notified,https://investors.coca-colacompany.com/news-releases
 conagra,CAG,unknown,https://www.conagrabrands.com/investor-relations
 constellation-brands,STZ,notified,https://ir.cbrands.com/news-releases
 corning,GLW,q4,https://investor.corning.com/news-and-events/news/default.aspx
+corteva,CTVA,notified,https://investors.corteva.com/news-releases
 costco,COST,q4,https://investor.costco.com/news/default.aspx
 criver,CRL,notified,https://ir.criver.com/news-releases
 crowdstrike,CRWD,notified,https://ir.crowdstrike.com/press-releases
@@ -69,15 +72,18 @@ digital-realty-trust,DLR,notified,https://investor.digitalrealty.com/news-releas
 dollar-tree,DLTR,notified,https://corporate.dollartree.com/investors/news-releases
 doordash,DASH,q4,https://ir.doordash.com/news/default.aspx
 dover,DOV,unknown,https://www.dovercorporation.com/investors
+eaton,ETN,notified,https://www.eaton.com/us/en-us/company/investor-relations.html/news-releases
 ecolab,ECL,q4,https://investor.ecolab.com/news/default.aspx
 edison-international,EIX,unknown,https://www.edison.com/investors
 eli-lilly,LLY,notified,https://investor.lilly.com/news-releases
 emcor,EME,unknown,https://emcorgroup.com/investor-relations
+emerson,EMR,notified,https://ir.emerson.com/news-releases
 eqt,EQT,q4,https://ir.eqt.com/news/default.aspx
 equifax,EFX,notified,https://investor.equifax.com/news-releases
 erie-indemnity,ERIE,unknown,https://www.erieinsurance.com/investors
 expedia,EXPE,q4,https://ir.expediagroup.com/news/default.aspx
 exxonmobil,XOM,notified,https://investor.exxonmobil.com/news-releases
+f5,FFIV,q4,https://investors.f5.com/news/default.aspx
 factset,FDS,notified,https://investor.factset.com/news-releases
 fedex,FDX,q4,https://investors.fedex.com/news/default.aspx
 fedex-freight,FDXF,notified,https://ir.fedexfreight.com/news-events/press-releases
@@ -108,6 +114,7 @@ honeywell-international,HON,notified,https://investor.honeywell.com/investor-rel
 hp,HPE,q4,https://investor.hp.com/news/default.aspx
 hubbell,HUBB,unknown,https://investor.hubbell.com/
 ibm,IBM,investorroom,https://newsroom.ibm.com/announcements
+illinois-tool-works,ITW,q4,https://investor.itw.com/news/default.aspx
 incyte,INCY,notified,https://investor.incyte.com/news-releases
 ingersoll-rand,IR,q4,https://investors.irco.com/news/default.aspx
 intel,INTC,notified,https://www.intc.com/news-releases
@@ -125,8 +132,10 @@ kla,KLAC,notified,https://ir.kla.com/news-releases
 l3harris,LHX,unknown,https://investors.l3harris.com/
 lam-research,LRCX,investorroom,https://investor.lamresearch.com/news-releases
 lennox,LII,notified,https://investor.lennox.com/news-releases
+linde,LIN,unknown,https://www.linde.com/investors
 lockheed-martin,LMT,investorroom,https://news.lockheedmartin.com/news-releases?category=788
 lumentum,LITE,q4,https://investor.lumentum.com/news/default.aspx
+lyondell-basell,LYB,q4,https://investors.lyondellbasell.com/news/default.aspx
 martin-marietta,MLM,unknown,https://www.martinmarietta.com/investor-relations
 marvell,MRVL,notified,https://investor.marvell.com/news-releases
 masco,MAS,unknown,https://investor.masco.com/
@@ -135,6 +144,7 @@ micron,MU,notified,https://investors.micron.com/news-releases
 microsoft,MSFT,unknown,https://news.microsoft.com/source/tag/investor-relations/
 moderna,MRNA,unknown,https://investors.modernatx.com/
 molson-coors,TAP,q4,https://ir.molsoncoors.com/news/default.aspx
+monolithic-power,MPWR,unknown,https://www.monolithicpower.com/en/about-mps/investor-relations.html
 morgan-stanley,MS,unknown,https://www.morganstanley.com/about-us-ir
 msci,MSCI,notified,https://ir.msci.com/news-releases
 netapp,NTAP,q4,https://investors.netapp.com/news/default.aspx
