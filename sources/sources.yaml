@@ -152,6 +152,10 @@ sources:
     name: Arista Networks, Inc.
     ticker: ANET
     ir_url: https://investors.arista.com/
+  - slug: arthur-j-gallagher
+    name: Arthur J. Gallagher & Co.
+    ticker: AJG
+    ir_url: https://investor.ajg.com/
   - slug: atmos-energy
     name: Atmos Energy Corporation
     ticker: ATO
@@ -386,6 +390,10 @@ sources:
     name: EMCOR Group, Inc.
     ticker: EME
     ir_url: https://emcorgroup.com/investor-relations
+  - slug: emerson
+    name: Emerson Electric Co.
+    ticker: EMR
+    ir_url: https://ir.emerson.com/
   - slug: eqt
     name: EQT Corporation
     ticker: EQT
@@ -406,6 +414,10 @@ sources:
     name: ExxonMobil Holdings Corporation
     ticker: XOM
     ir_url: https://investor.exxonmobil.com/
+  - slug: f5
+    name: F5, Inc.
+    ticker: FFIV
+    ir_url: https://investors.f5.com/
   - slug: factset
     name: FactSet Research Systems Inc.
     ticker: FDS
