@@ -1,0 +1,38 @@
+2026-08-01 1:06 am
+
+Prompt:
+Read src/playground/claude_sessions/2026-07-27_review.txt from https://github.com/KamarajuKusumanchi/primary_wire/archive/refs/heads/master.zip . One of the things it mentions is
+
+```
+`scrape_all.py` runs every configured source **serially, in-process** (`run_scraper()` calls each module's `main()` one at a time). Given each source is a different company's domain, running them one after another gains you nothing from a politeness standpoint — the 10-30s "per-domain" spacing rule only matters *within* a single site's pagination, not *across* sites. Notably, the codebase already has the pattern for this: `detect_ir_platform.py` uses `concurrent.futures.ThreadPoolExecutor` to fetch ~167 sources in parallel. That same pattern hasn't been applied to `scrape_all.py`, where it would matter more, since Q4 sources launch a full Playwright browser each (real wall-clock cost). Parallelizing scrape_all.py across sources (thread pool, one source per worker, keeping the polite delay only inside each source's own loop) is probably the single biggest speed win available, and the codebase already proves the team knows how to do it.
+```
+
+Can you read the scrapers src/scrape_all.py, src/scrape_investis.py, src/scrape_investorroom.py, src/scrape_notified.py, src/scrape_notified_gated.py, src/scrape_q4_ir.py and any utility functions and tell me if there is any refactoring or engineering that needs to be done before parallelizing src/scrape_all.py ?
+
+Response:
+Read `scrape_all.py`, all five scraper modules, and the shared utils (`scrape_utils.py`, `scrape_notified_utils.py`, `csv_utils.py`, `sources_utils.py`). Here's the unvarnished version.
+
+## Bottom line
+
+Less prep work is needed than you'd expect, because the codebase already did most of it defensively, in advance, with docstrings explaining exactly why. `new_session()` in `scrape_investis.py`/`scrape_investorroom.py`/`scrape_notified_utils.py` is documented as deliberately *not* a cached module-level singleton, specifically because "scrape_all.py runs sources concurrently in a thread pool" — a feature that doesn't exist yet. `scrape_all.py` itself already collects `(rc, items)` per source and does one batched merge at the end instead of writing as it goes, specifically to avoid needing to lock `data/`'s CSVs across concurrent writers. `run_scraper()`'s docstring literally says its return value "can't leak into or be clobbered by another call... once sources are scraped concurrently." Someone clearly wrote this with the ThreadPoolExecutor conversion in mind and never did it. So: no shared/global mutable state to hunt down, no session objects to fix, no merge-locking to add. That part's done.
+
+## What actually needs fixing first
+
+**1. Error handling is the real blocker, not thread-safety.** Check this: `scrape_investorroom.py`, `scrape_notified.py`, and `scrape_notified_gated.py` all contain the identical comment "return_code is always 0 here (this scraper has no early-exit failure path today)" — meaning a real failure (a `ConnectionError`, a parse exception, whatever) isn't caught and converted to `rc=1`, it just propagates as a raw exception. And `run_scraper()` in `scrape_all.py` only catches `ImportError`; nothing else. So today, in the *serial* version, one flaky domain throwing mid-scrape kills the entire batch run — every source after it in the loop never runs. That's a latent bug that exists right now, independent of parallelizing. It becomes mandatory to fix before parallelizing, though, because with `as_completed()` you need each future's exception caught individually — otherwise one bad source doesn't just skip itself, it can take down the whole executor loop or silently swallow results from sources that already finished. `scrape_q4_ir.py` is the outlier with one actual `return 1, []` path (fallback-to-visible exhausted) — the other four scrapers don't have an equivalent, so this isn't even a consistent contract across the codebase to build on. Standardize this (every `scrape_and_filter()` catches its own exceptions and returns `(1, items_so_far)`) before or as part of the thread-pool change.
+
+**2. `--show-browser` sources need a concurrency cap, not "one worker per source."** 12 of 34 configured sources are `q4_ir`, and several are configured with `args: [--show-browser]` in `scraper_config.yaml` — meaning Playwright launches a real, visible Chrome window, not headless. Naive unbounded parallelism means up to 12 real browser windows trying to open simultaneously. That's heavy on CPU/memory regardless, and on a headless CI box with no display, `--show-browser` sources will just fail outright when run concurrently in a way they don't today (today they run one at a time and probably work fine, or fail in a way nobody's had to reconcile with 11 other simultaneous launches). You need a `--max-workers` (bounded, sensible default, maybe lower than 34) rather than "thread pool = all sources at once."
+
+**3. `--between-delay` doesn't have an obvious meaning anymore.** The line `if ran > 0: time.sleep(args.between_delay)` sits inside the sequential for-loop and depends on `ran` counting up as sources finish in order — that structure goes away once you're consuming an `as_completed()` iterator. You need to decide: drop cross-source delay entirely (matches the actual argument in the review you quoted — it buys nothing across domains), or repurpose the flag as something else (e.g. `--max-workers`). Don't just leave `--between-delay` in the CLI with no effect; that's worse than removing it.
+
+**4. Playwright-in-a-background-thread is asserted, not tested.** Playwright's sync API does support running in a non-main thread as long as `sync_playwright()` is invoked fresh within that thread (which `_launch_browser`'s `with sync_playwright() as p:` pattern already does per-call, not globally) — but every current invocation of this code runs in the main thread. Nothing in the test suite exercises "launch Chromium from a `ThreadPoolExecutor` worker." I'd run one smoke test with a 2-worker pool including at least one q4_ir source before trusting this in a real run, rather than assuming the docstring's claim holds.
+
+**5. Minor: log interleaving.** Python's `logging` module is thread-safe at the line level, so you won't get corrupted output, but with 6+ sources running concurrently the `=== slug [module] argv: ... ===` banners and per-source INFO lines will interleave line-by-line in one stream. Worth adding the slug or thread name into the log format for the parallel path, or debugging a failure across 30 concurrent sources gets annoying fast. Not a blocker, just don't skip it and then be surprised.
+
+## What you don't need to touch
+
+- `new_session()` / per-call `requests.Session` / `curl_cffi` session handling — already correct and already documented as concurrency-safe.
+- No module-level caches anywhere in `utils/` — grepped all four util files, everything at module scope is an immutable regex or a static dict.
+- `merge_scraped_items()`'s batched-merge-at-the-end design — already avoids the concurrent-CSV-write problem, no locking needed.
+- `pick_smoke_test_selection()` / `group_sources_by_signature()` — orthogonal to this change, don't need modification.
+
+So: the mechanical part (swap the for-loop for `ThreadPoolExecutor` + `as_completed()`) is genuinely the easy part here, exactly as advertised. The part that actually needs engineering before that — making failures per-source instead of whole-batch-fatal, and capping concurrency so 12 Chrome instances don't fight over one machine — isn't mentioned in that review paragraph at all, and it's the part I'd actually block the PR on.
