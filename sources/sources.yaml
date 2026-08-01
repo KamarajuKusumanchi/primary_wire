@@ -541,6 +541,10 @@ sources:
       "Arvind Krishna's Letter to IBM Investors" published on 2026-07-14 which
       tanked IBM's stock by 25.21%. On the other hand,
       https://newsroom.ibm.com/announcements contains all the press releases.
+  - slug: illinois-tool-works
+    name: Illinois Tool Works Inc.
+    ticker: ITW
+    ir_url: https://investor.itw.com/
   - slug: incyte
     name: Incyte Corporation
     ticker: INCY
@@ -609,6 +613,10 @@ sources:
     name: Lennox International Inc.
     ticker: LII
     ir_url: https://investor.lennox.com/
+  - slug: linde
+    name: Linde plc
+    ticker: LIN
+    ir_url: https://www.linde.com/investors
   - slug: lockheed-martin
     name: Lockheed Martin Corporation
     ticker: LMT
@@ -626,6 +634,10 @@ sources:
     name: Lumentum Holdings Inc.
     ticker: LITE
     ir_url: https://investor.lumentum.com/
+  - slug: lyondell-basell
+    name: LyondellBasell Industries NV
+    ticker: LYB
+    ir_url: https://investors.lyondellbasell.com/
   - slug: martin-marietta
     name: Martin Marietta Materials, Inc.
     ticker: MLM
