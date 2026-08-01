@@ -96,10 +96,6 @@ sources:
     name: The Allstate Corporation
     ticker: ALL
     ir_url: https://www.allstateinvestors.com/
-  - slug: alphabet
-    name: Alphabet Inc.
-    ticker: GOOG
-    ir_url: https://abc.xyz/investor/
   - slug: altria
     name: Altria Group, Inc.
     ticker: MO
