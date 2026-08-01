@@ -812,7 +812,7 @@ sources:
   - slug: skyworks
     name: Skyworks Solutions, Inc.
     ticker: SWKS
-    ir_url: https://www.skyworksinc.com/investors
+    ir_url: https://investors.skyworksinc.com/
     news_releases_path: press-releases
   - slug: slb
     name: SLB N.V.

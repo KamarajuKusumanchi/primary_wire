@@ -120,7 +120,6 @@ meta,META,q4,https://investor.atmeta.com/home/default.aspx/news/default.aspx
 micron,MU,notified,https://investors.micron.com/news-releases
 microsoft,MSFT,unknown,https://news.microsoft.com/source/tag/investor-relations/
 moderna,MRNA,unknown,https://investors.modernatx.com/
-molson-coors,TAP,q4,https://ir.molsoncoors.com/news/default.aspx
 monolithic-power,MPWR,unknown,https://www.monolithicpower.com/en/about-mps/investor-relations.html
 morgan-stanley,MS,unknown,https://www.morganstanley.com/about-us-ir
 msci,MSCI,notified,https://ir.msci.com/news-releases
@@ -146,7 +145,7 @@ sandisk,SNDK,notified,https://investor.sandisk.com/news-releases
 sba-communications,SBAC,unknown,https://ir.sbasite.com/
 servicenow,NOW,unknown,https://investor.servicenow.com/
 sherwin-williams,SHW,unknown,https://investors.sherwin-williams.com/
-skyworks,SWKS,notified,https://www.skyworksinc.com/investors/press-releases
+skyworks,SWKS,notified,https://investors.skyworksinc.com/press-releases
 slb,SLB,notified,https://investorcenter.slb.com/news-releases
 smurfit-westrock,SW,q4,http://investors.smurfitwestrock.com/news/default.aspx
 solventum,SOLV,notified,https://investors.solventum.com/news-releases
