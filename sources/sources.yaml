@@ -96,10 +96,18 @@ sources:
     name: The Allstate Corporation
     ticker: ALL
     ir_url: https://www.allstateinvestors.com/
+  - slug: alphabet
+    name: Alphabet Inc.
+    ticker: GOOG
+    ir_url: https://abc.xyz/investor/
   - slug: altria
     name: Altria Group, Inc.
     ticker: MO
     ir_url: https://www.altria.com/Investors/
+  - slug: amazon
+    name: Amazon.com, Inc.
+    ticker: AMZN
+    ir_url: https://ir.aboutamazon.com/
   - slug: amcor
     name: Amcor plc
     ticker: AMCR
@@ -291,6 +299,10 @@ sources:
     ticker: GLW
     ir_url: https://investor.corning.com/
     news_path: news-and-events/news/default.aspx
+  - slug: corteva
+    name: Corteva, Inc.
+    ticker: CTVA
+    ir_url: https://investors.corteva.com/
   - slug: costco
     name: Costco Wholesale Corporation
     ticker: COST
@@ -358,6 +370,10 @@ sources:
     name: Dover Corporation
     ticker: DOV
     ir_url: https://www.dovercorporation.com/investors
+  - slug: eaton
+    name: Eaton Corporation, PLC
+    ticker: ETN
+    ir_url: https://www.eaton.com/us/en-us/company/investor-relations.html
   - slug: ecolab
     name: Ecolab Inc.
     ticker: ECL
@@ -647,6 +663,10 @@ sources:
     name: Molson Coors Beverage Company
     ticker: TAP
     ir_url: https://ir.molsoncoors.com/
+  - slug: monolithic-power
+    name: Monolithic Power Systems, Inc.
+    ticker: MPWR
+    ir_url: https://www.monolithicpower.com/en/about-mps/investor-relations.html
   - slug: morgan-stanley
     name: Morgan Stanley
     ticker: MS
