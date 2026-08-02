@@ -45,6 +45,7 @@ notified:
     - slug: teradyne
     - slug: global-payments
     - slug: ge-vernova
+    - slug: skyworks
 
 notified_gated:
   scraper: scrape_notified_gated
