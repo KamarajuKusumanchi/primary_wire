@@ -200,6 +200,7 @@ sources:
     ticker: BNY
     ir_url: 
       https://www.bny.com/corporate/global/en/investor-relations/overview.html
+    news_url: https://www.bny.com/corporate/global/en/investor-relations/press-releases.html
   - slug: booking
     name: Booking Holdings Inc.
     ticker: BKNG
