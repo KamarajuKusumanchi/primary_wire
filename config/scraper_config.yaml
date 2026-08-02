@@ -88,3 +88,8 @@ investis:
     - slug: home-depot
     - slug: allegion
     - slug: sysco
+
+aem:
+  scraper: scrape_aem
+  sources:
+    - slug: bny
