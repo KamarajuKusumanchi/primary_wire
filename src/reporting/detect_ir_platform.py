@@ -112,6 +112,12 @@ Usage
   # Control concurrency and per-request timeout
   python src/reporting/detect_ir_platform.py --all --workers 8 --timeout 15
 
+  # --all also cross-checks every scraper_config.yaml-configured slug's
+  # platform against what's freshly detected here, printing any mismatch to
+  # stderr (never stdout, so the CSV above stays clean); --strict turns a
+  # mismatch into a non-zero exit code instead of just a warning.
+  python src/reporting/detect_ir_platform.py --all --strict
+
 Output
 ------
 CSV with header row: slug,ticker,platform,scrape_url
@@ -132,6 +138,14 @@ To view this as a human-friendly fixed-width table, pipe it through the
 companion script, e.g.:
   python src/reporting/detect_ir_platform.py --all | python src/print_csv_table.py
   python src/print_csv_table.py reports/latest/ir_platform.csv
+
+With --all, any disagreement between config/scraper_config.yaml (which
+slugs have a hand-verified scraper for a given platform) and this run's
+own freshly detected platform for that slug is printed to stderr as
+"warning: ..." lines -- see check_scraper_config_consistency(). This never
+touches stdout, so `invoke ir-platform` (which captures this script's
+stdout straight into reports/latest/ir_platform.csv) still gets a clean
+CSV; the warnings show up as tasks.py's separately-printed stderr output.
 
 Requires
 --------
@@ -167,6 +181,18 @@ from utils.sources_utils import (  # noqa: E402
     platform_names,
     resolve_listing_url,
     resolve_scrape_url,
+)
+# CONFIG_GROUP_TO_PLATFORM/load_scraper_config are check_scraper_coverage.py's
+# (already battle-tested there) machinery for turning config/scraper_config.yaml
+# into slug->platform facts, notably the "q4_ir" group -> "q4" platform-name
+# translation -- reused here rather than re-derived, so the two scripts can't
+# quietly disagree about what a scraper_config.yaml group name means. See
+# check_scraper_config_consistency() below for why detect_ir_platform.py needs
+# this too.
+from reporting.check_scraper_coverage import (  # noqa: E402
+    CONFIG_GROUP_TO_PLATFORM,
+    SCRAPER_CONFIG_PATH as DEFAULT_SCRAPER_CONFIG_YAML,
+    load_scraper_config,
 )
 
 # curl_cffi impersonates Chrome's TLS fingerprint (JA3/JA4), which is required
@@ -840,6 +866,112 @@ def detect_platforms_parallel(df: pd.DataFrame, workers: int, timeout: int) -> p
     return result_df[["slug", "ticker", "platform", "scrape_url"]]
 
 # ---------------------------------------------------------------------------
+# Cross-check against config/scraper_config.yaml
+# ---------------------------------------------------------------------------
+#
+# config/scraper_config.yaml is a curated list of slugs that already have a
+# working, hand-verified scraper for a specific platform -- e.g. slug
+# "abbvie" living under the "notified" group is someone asserting "abbvie's
+# IR site runs Notified, and scrape_notified.py successfully scrapes it".
+# That assertion should always agree with what this module's own
+# evidence-based fingerprint checks find when scanning the same slug fresh.
+# A disagreement is a real signal worth surfacing: either scraper_config.yaml
+# is stale (the site migrated to a different IR platform since the scraper
+# was written, so the configured scraper may now be silently failing or
+# scraping the wrong markup) or detect_platform()'s own logic has regressed.
+# It is deliberately a strict SUBSET check, not a full comparison: not every
+# slug in sources.yaml has a configured scraper, so most of *result_df* will
+# have no counterpart in scraper_config.yaml at all -- that's expected and
+# not flagged.
+
+
+def load_configured_platforms(
+    scraper_config_path: Path = DEFAULT_SCRAPER_CONFIG_YAML,
+) -> pd.DataFrame:
+    """Return a (slug, platform) DataFrame of every slug configured in scraper_config.yaml.
+
+    One row per source entry across every group in *scraper_config_path*,
+    with the group name translated to the matching detect_platform() name
+    via check_scraper_coverage.CONFIG_GROUP_TO_PLATFORM (e.g. "q4_ir" ->
+    "q4") -- reused from there rather than re-derived here, so this
+    translation can't quietly drift from check_scraper_coverage.py's copy.
+    A slug appearing under more than one group (a scraper_config.yaml bug
+    check_scraper_coverage.py already flags) contributes one row per group
+    it's under; check_scraper_config_consistency() below will then report
+    a mismatch for whichever of those rows doesn't match the detected
+    platform, which is a reasonable side effect rather than something this
+    function needs to special-case.
+    """
+    config = load_scraper_config(scraper_config_path)
+    rows = [
+        {"slug": entry["slug"], "platform": CONFIG_GROUP_TO_PLATFORM.get(group_name, group_name)}
+        for group_name, group in (config or {}).items()
+        for entry in group.get("sources", [])
+        if entry.get("slug")
+    ]
+    return pd.DataFrame(rows, columns=["slug", "platform"])
+
+
+def check_scraper_config_consistency(
+    result_df: pd.DataFrame,
+    scraper_config_path: Path = DEFAULT_SCRAPER_CONFIG_YAML,
+) -> list[str]:
+    """Return human-readable mismatch messages between scraper_config.yaml and *result_df*.
+
+    *result_df* is this run's freshly detected (slug, ticker, platform,
+    scrape_url) DataFrame (detect_platforms_parallel()'s return value).
+    Every slug configured in scraper_config.yaml is expected to appear in
+    *result_df* with the SAME platform value scraper_config.yaml asserts
+    for it (see the module comment above for why). Two kinds of problems
+    are reported, each as one message:
+
+      - a configured slug missing from *result_df* entirely (e.g. removed
+        or renamed in sources.yaml since scraper_config.yaml was last
+        updated -- this run has no opinion on its platform at all)
+      - a configured slug present in *result_df* under a DIFFERENT
+        platform than scraper_config.yaml asserts
+
+    Returns an empty list when everything configured agrees, which is the
+    expected steady state. This deliberately does not attempt the
+    reverse -- flagging *result_df* rows with no scraper_config.yaml
+    counterpart -- since most rows are expected to have none (that's the
+    "not every slug has an automated scraper" side of the subset
+    relationship, and check_scraper_coverage.py already reports on that
+    gap in more detail).
+    """
+    configured = load_configured_platforms(scraper_config_path)
+    if configured.empty:
+        return []
+
+    merged = configured.merge(
+        result_df[["slug", "platform"]], on="slug", how="left",
+        suffixes=("_configured", "_detected"),
+    )
+
+    messages: list[str] = []
+    for _, row in merged[merged["platform_detected"].isna()].iterrows():
+        messages.append(
+            f"slug '{row['slug']}' is configured in scraper_config.yaml for "
+            f"platform '{row['platform_configured']}' but was not found in "
+            "this run's detection results (renamed or removed from "
+            "sources.yaml?)"
+        )
+
+    mismatched = merged[
+        merged["platform_detected"].notna()
+        & (merged["platform_detected"] != merged["platform_configured"])
+    ]
+    for _, row in mismatched.iterrows():
+        messages.append(
+            f"slug '{row['slug']}' is configured in scraper_config.yaml for "
+            f"platform '{row['platform_configured']}' but was detected as "
+            f"'{row['platform_detected']}' -- scraper_config.yaml may be "
+            "stale, or platform detection may have regressed"
+        )
+
+    return messages
+
+# ---------------------------------------------------------------------------
 # Output formatting
 # ---------------------------------------------------------------------------
 
@@ -885,6 +1017,20 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--sources", metavar="PATH", type=Path, default=DEFAULT_SOURCES_YAML,
         help=f"Path to sources.yaml (default: {DEFAULT_SOURCES_YAML}).",
+    )
+    parser.add_argument(
+        "--scraper-config", metavar="PATH", type=Path, default=DEFAULT_SCRAPER_CONFIG_YAML,
+        help="Path to scraper_config.yaml, used only by --all to cross-check "
+             "every configured slug's platform against what's freshly "
+             f"detected here (default: {DEFAULT_SCRAPER_CONFIG_YAML}). See "
+             "check_scraper_config_consistency().",
+    )
+    parser.add_argument(
+        "--strict", action="store_true",
+        help="With --all, exit 1 if scraper_config.yaml disagrees with any "
+             "freshly detected platform (mismatches are always printed to "
+             "stderr regardless of this flag; the CSV on stdout is written "
+             "either way).",
     )
     parser.add_argument(
         "--workers", type=int, default=5, metavar="N",
@@ -943,7 +1089,24 @@ def main(argv: Optional[list[str]] = None) -> int:
     # --all: parallel detection across every row
     if args.all:
         result = detect_platforms_parallel(df, workers=args.workers, timeout=args.timeout)
+        # Compare against config/scraper_config.yaml BEFORE printing the CSV,
+        # and report any mismatches on stderr, not stdout -- tasks.py's
+        # ir-platform task captures this script's stdout verbatim into
+        # reports/latest/ir_platform.csv, so anything printed to stdout here
+        # would corrupt that file. See check_scraper_config_consistency()'s
+        # docstring for what counts as a mismatch.
+        inconsistencies = check_scraper_config_consistency(result, args.scraper_config)
+        for message in inconsistencies:
+            print(f"warning: {message}", file=sys.stderr)
         print_csv(result)
+        if inconsistencies and args.strict:
+            noun = "inconsistency" if len(inconsistencies) == 1 else "inconsistencies"
+            print(
+                f"error: {len(inconsistencies)} scraper_config.yaml {noun} "
+                "found (see warnings above)",
+                file=sys.stderr,
+            )
+            return 1
         return 0
 
     # Single-target lookups
