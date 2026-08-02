@@ -139,6 +139,7 @@ from utils.scrape_notified_utils import (
     find_last_page,
     new_session,
     parse_listing_page as _shared_parse_listing_page,
+    resolve_page_size_from_html,
 )
 
 
@@ -578,6 +579,58 @@ def scrape_one_pass(
 
 
 
+def resolve_page_size_params(
+    base_url: str,
+    page_size: int,
+    timeout: int,
+    session,
+    news_releases_path: str = DEFAULT_NEWS_RELEASES_PATH,
+    first_page_index: int = DEFAULT_FIRST_PAGE_INDEX,
+) -> dict[str, str]:
+    """Probe page ``first_page_index`` (plain curl_cffi GET, no page-size
+    params) and hand its HTML to the shared, fetch-agnostic
+    resolve_page_size_from_html() (utils/scrape_notified_utils.py) to
+    decide how -- or whether -- to honor ``page_size``.
+
+    This function is deliberately the ONLY curl_cffi-specific part of the
+    --page-size feature; everything past "here is some HTML" lives in
+    resolve_page_size_from_html() so it can be reused as-is by a future
+    scrape_notified_gated.py integration, whose listing pages must be
+    fetched via a headed Playwright session instead of curl_cffi (plain
+    requests get 403'd there -- see that script's module docstring). That
+    integration would add an equivalent thin wrapper of its own (fetch via
+    Playwright instead of curl_cffi, e.g. by extending its existing
+    obtain_form_tokens() step to also return the page's HTML) rather than
+    touching this function or the shared resolver.
+
+    Returns {} (i.e. "use the site's default page size") if the probe
+    fetch itself fails -- see resolve_page_size_from_html()'s own
+    docstring for the other ways this can fall back. --page-size is a
+    best-effort optimization, never a hard requirement.
+
+    This costs one extra HTTP request (this plain probe) beyond what
+    scrape() would otherwise make. Page ``first_page_index`` then gets
+    fetched a second time -- this time with the resolved page-size params
+    included -- by scrape()'s normal flow, since it's the one whose item
+    offsets need to line up with the chosen page size for pagination to
+    stay consistent (see discover_page_size_widget()'s module note in
+    utils/scrape_notified_utils.py for why the two fetches can't be
+    collapsed into one).
+    """
+    probe_url = listing_page_url(base_url, page=first_page_index, news_releases_path=news_releases_path)
+    logger.info("Probing for an Items Per Page widget: %s", probe_url)
+    try:
+        probe_html = fetch_html(probe_url, session, timeout=timeout)
+    except Exception as exc:
+        logger.warning(
+            "Could not probe for an Items Per Page widget (%s); "
+            "using the site's default page size.", exc,
+        )
+        return {}
+
+    return resolve_page_size_from_html(probe_html, page_size)
+
+
 def scrape(
     base_url: str,
     slug: str,
@@ -590,6 +643,7 @@ def scrape(
     news_releases_path: str = DEFAULT_NEWS_RELEASES_PATH,
     first_page_index: int = DEFAULT_FIRST_PAGE_INDEX,
     extra_params: Optional[dict[str, str]] = None,
+    page_size: Optional[int] = None,
 ) -> list[NewsItem]:
     """Scrape listing pages, using binary search when a year filter is active.
 
@@ -609,7 +663,21 @@ def scrape(
     first_page_index is the site's own starting page number (0 for most
     Notified/Drupal sites; 1 for e.g. Teradyne). All page-number math below
     is relative to it -- nothing assumes the first page is literally 0.
+
+    page_size, if given, is resolved to extra query params via
+    resolve_page_size_params() above and merged into extra_params before
+    anything else runs, so every fetch below (including the binary-search
+    probes) transparently uses the larger page size. See that function's
+    docstring for the fallback behavior when the site doesn't support it.
     """
+    if page_size:
+        size_params = resolve_page_size_params(
+            base_url, page_size, timeout, session,
+            news_releases_path=news_releases_path, first_page_index=first_page_index,
+        )
+        if size_params:
+            extra_params = {**(extra_params or {}), **size_params}
+
     if years:
         # Step 1: fetch the first page to learn last_page.
         url0 = listing_page_url(
@@ -675,6 +743,7 @@ def scrape(
                 end_page=last_page,
                 target_years=years,
                 news_releases_path=news_releases_path,
+                extra_params=extra_params,
             )
 
             # Global dedup.
@@ -691,6 +760,7 @@ def scrape(
         session=session,
         debug_dump_html=debug_dump_html,
         news_releases_path=news_releases_path,
+        extra_params=extra_params,
     )
 
     # Global dedup (should already be clean from scrape_one_pass, but be safe).
@@ -801,6 +871,30 @@ def build_arg_parser() -> argparse.ArgumentParser:
         ),
     )
 
+    source.add_argument(
+        "--page-size", type=int, default=100, metavar="N",
+        help=(
+            "Request N listing items per HTTP page instead of the site's "
+            "default (typically 10), via the site's own 'Items Per Page' "
+            "filter widget when it has one -- cutting the number of "
+            "requests roughly proportionally (100/page needs ~1/10 as many "
+            "requests as 10/page). Default: 100 (confirmed available on "
+            "Skyworks; use e.g. --page-size 50 to ask for less). Not every "
+            "site offers exactly N -- if the widget offers a smaller size "
+            "instead, that's used (e.g. asking for 100 on a site that only "
+            "goes up to 50 uses 50); if the widget isn't found at all, "
+            "this is logged and the scraper transparently falls back to "
+            "the site's own default page size rather than failing. This is "
+            "a best-effort optimization based on undocumented site "
+            "behavior discovered fresh from that site's own HTML each run "
+            "(never hardcoded) -- confirmed hands-on for one site "
+            "(Skyworks), not verified across every Notified/Drupal site or "
+            "guaranteed to keep working. Pass --page-size 10 to effectively "
+            "disable it (still costs one extra probe request, but results "
+            "are identical to the site's unmodified default pagination)."
+        ),
+    )
+
     detail = parser.add_argument_group("detail-page fetch")
     detail.add_argument(
         "--fetch-detail-pages", action="store_true",
@@ -884,6 +978,7 @@ def scrape_and_filter(
             news_releases_path=news_releases_path,
             first_page_index=first_page_index,
             extra_params=extra_query_params,
+            page_size=args.page_size,
         )
         logger.info("Scraped %d item(s) total (before filtering).", len(all_items))
 

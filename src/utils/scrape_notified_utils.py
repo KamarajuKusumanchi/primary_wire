@@ -162,6 +162,183 @@ def find_last_page(soup) -> Optional[int]:
 
 
 # ---------------------------------------------------------------------------
+# "Items Per Page" widget (optional --page-size feature)
+# ---------------------------------------------------------------------------
+#
+# Some (not all) Notified/Drupal IR sites render an "Items Per Page" filter
+# widget above the listing table (visible options are typically 10/25/50)
+# alongside a Year filter, in a small <form method="get"> block distinct
+# from the ?page= pager. Submitting it does NOT change the site's
+# ?page=N pagination scheme -- ?page=1 still means "second page", just of
+# whatever page size was requested -- it only changes how many items each
+# page holds, which cuts the number of HTTP requests needed to walk the
+# full listing roughly proportionally (50/page needs 1/5 as many requests
+# as the 10/page default).
+#
+# This widget's field names are namespaced with a long per-block hex
+# prefix (e.g. "9ec0f40d...117162e3_items_per_page") that is NOT the same
+# across sites and, as far as we've confirmed, is tied to that block's own
+# Drupal configuration rather than to any individual visitor's session --
+# but that isn't verified across sites/time, so it is always discovered
+# fresh from that run's own fetched HTML (see discover_page_size_widget()
+# below) rather than ever hardcoded, the same way find_last_page() reads
+# the pager instead of assuming a page count.
+#
+# This is undocumented behavior (there's no public API contract for it,
+# just a form that happens to work over GET), confirmed hands-on for one
+# site (Skyworks) but not verified across the whole Notified/Drupal family
+# or over time. Treat --page-size as a "try it, and don't be surprised if
+# it needs revisiting" optimization, not a guaranteed feature -- callers
+# should fall back to the default page size whenever the widget isn't
+# found or doesn't offer the requested size (see scrape_notified.py's
+# --page-size handling for the fallback logic).
+
+ITEMS_PER_PAGE_NAME_RE = re.compile(r"^(?P<prefix>.+)_items_per_page$")
+
+
+def discover_page_size_widget(html: str) -> Optional[dict]:
+    """Look for an "Items Per Page" filter widget on a listing page.
+
+    Returns a dict with keys:
+      - "prefix": the widget's field-name prefix (see module note above),
+        also used as its own "..._widget_id" value.
+      - "sizes": sorted list of int page sizes the <select> offers
+        (e.g. [10, 25, 50]).
+      - "form_id" / "form_build_id": values of the surrounding form's
+        matching hidden inputs, if present (may be None).
+
+    Returns None if no such widget is found on this page -- not every
+    Notified/Drupal site has one; callers must handle that by falling back
+    to the site's default (usually 10/page) pagination.
+    """
+    soup = BeautifulSoup(html, "lxml")
+    select = soup.find("select", attrs={"name": ITEMS_PER_PAGE_NAME_RE})
+    if select is None:
+        return None
+
+    m = ITEMS_PER_PAGE_NAME_RE.match(select["name"])
+    prefix = m.group("prefix")
+
+    sizes: list[int] = []
+    for opt in select.find_all("option"):
+        raw = opt.get("value") or opt.get_text(strip=True)
+        try:
+            sizes.append(int(raw))
+        except (TypeError, ValueError):
+            continue
+    if not sizes:
+        return None
+
+    form = select.find_parent("form")
+    form_id = form_build_id = None
+    if form is not None:
+        fid_input = form.find("input", attrs={"name": "form_id"})
+        if fid_input is not None:
+            form_id = fid_input.get("value")
+        fbid_input = form.find("input", attrs={"name": "form_build_id"})
+        if fbid_input is not None:
+            form_build_id = fbid_input.get("value")
+
+    return {
+        "prefix": prefix,
+        "sizes": sorted(set(sizes)),
+        "form_id": form_id,
+        "form_build_id": form_build_id,
+    }
+
+
+def page_size_extra_params(widget: dict, size: int) -> dict[str, str]:
+    """Build the extra query params that request ``size`` items per page.
+
+    ``widget`` is a dict returned by discover_page_size_widget(); caller is
+    responsible for checking ``size in widget["sizes"]`` first. Merge the
+    result into the ``extra_params`` already threaded through
+    listing_page_url() (see scrape_notified.py) -- it composes with that
+    mechanism rather than needing a new one.
+
+    "_year[value]": "_none" is included to explicitly request "no year
+    filter" (matching the shape seen when submitting the widget with Year
+    left at its default "None" option) -- primary_wire always does its own
+    year filtering client-side afterward regardless (see this module's
+    Notified/Drupal platform note), so this is just to keep the request
+    shape as close as possible to a confirmed-working one rather than
+    omitting a field and hoping Drupal treats that the same way.
+    """
+    prefix = widget["prefix"]
+    params = {
+        f"{prefix}_items_per_page": str(size),
+        f"{prefix}_year[value]": "_none",
+        "op": "Filter",
+        f"{prefix}_widget_id": prefix,
+    }
+    if widget.get("form_id"):
+        params["form_id"] = widget["form_id"]
+    if widget.get("form_build_id"):
+        params["form_build_id"] = widget["form_build_id"]
+    return params
+
+
+def resolve_page_size_from_html(html: str, page_size: int) -> dict[str, str]:
+    """Decide how to honor a requested ``page_size`` given one already-
+    fetched listing page's HTML, and return the extra query params for it
+    (or {}, meaning "use the site's own default page size").
+
+    This is the fetch-agnostic core of the --page-size feature: it takes
+    HTML in and returns params out, with no opinion on how that HTML was
+    obtained. scrape_notified.py's resolve_page_size_params() wraps this
+    with a plain curl_cffi GET (open sites only need that). The intent is
+    for scrape_notified_gated.py to eventually reuse this exact function
+    unchanged: its one-time headed-Playwright step (obtain_form_tokens(),
+    which already reads this same widget's _widget_id/form_build_id
+    fields out of the live DOM to build a year-filtered URL -- see that
+    script's module docstring) would just need to also grab that page's
+    outerHTML and pass it here, rather than needing its own copy of this
+    decision logic. Not wired up there yet -- see the scrape_notified_gated.py
+    module docstring for why (unconfirmed whether page-size pagination is
+    even a bottleneck for the sites it targets).
+
+    If the widget doesn't offer ``page_size`` exactly, falls back to the
+    largest size it does offer that's still <= page_size (e.g. asking for
+    100 on a site that only goes up to 50 uses 50, not the bare default)
+    rather than giving up entirely -- this matters more now that callers
+    may pass a generously-large default rather than a value the caller
+    already confirmed the site supports.
+    """
+    widget = discover_page_size_widget(html)
+    if widget is None:
+        logger.warning(
+            "No Items Per Page widget found on this site; --page-size %d "
+            "ignored, using the site's default page size.", page_size,
+        )
+        return {}
+
+    sizes = widget["sizes"]
+    if page_size in sizes:
+        chosen = page_size
+    else:
+        smaller_or_equal = [s for s in sizes if s <= page_size]
+        if not smaller_or_equal:
+            logger.warning(
+                "This site's Items Per Page widget only offers %s, all "
+                "larger than the requested %d; using the site's default "
+                "page size instead.", sizes, page_size,
+            )
+            return {}
+        chosen = max(smaller_or_equal)
+        logger.info(
+            "This site's Items Per Page widget doesn't offer exactly %d "
+            "(offers: %s); using %d instead.", page_size, sizes, chosen,
+        )
+
+    logger.info(
+        "Found Items Per Page widget (prefix %s...%s); requesting %d "
+        "items/page instead of the default.",
+        widget["prefix"][:8], widget["prefix"][-4:], chosen,
+    )
+    return page_size_extra_params(widget, chosen)
+
+
+# ---------------------------------------------------------------------------
 # Date/time extraction near a listing-page link
 # ---------------------------------------------------------------------------
 
