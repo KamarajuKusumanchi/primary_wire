@@ -9,57 +9,37 @@ data/YYYY/YYYY-MM-DD.csv files.
 Default source: BNY (The Bank of New York Mellon Corporation)
   https://www.bny.com/corporate/global/en/investor-relations/press-releases.html
 
-IMPORTANT -- honest status of this scraper
--------------------------------------------
-This module went through two passes. The first pass was written without
-being able to inspect BNY's press-releases page through a real rendered
-browser session (the sandbox it was written in can only reach a small
-allow-list of package-registry domains, not bny.com), so it guessed at
-Adobe's documented Core Component markup (cmp-list__item, cmp-teaser__...).
-That guess was wrong, and it had a second, independent bug: it only ever
-collected whatever was in the DOM already loaded, because BNY's pagination
-control (see below) isn't a `<button>`/`<a>` with an accessible name, so
-the click-driven pagination loop never fired and it silently stopped after
-page 1 (10 items) every time, regardless of --year.
-
-Both were found and fixed by inspecting real --debug-dump-html output a
-person captured from an actual browser run. What that revealed:
-
-  1. BNY's press-release cards are NOT Adobe Core Components' List/Teaser
-     markup. They're a bespoke widget: each card is a
+Page structure (BNY)
+--------------------
+  1. Each press-release card is a bespoke widget, not Adobe Core
+     Components' documented List/Teaser markup: a
      `<div class="list-item-tile">` containing a `<time class="list-item-
      header__date">` and a `<div class="title"><a href="...">headline</a>
-     </div>`. This is now ITEM_SELECTOR_CASCADE's first, confirmed entry;
-     the original Core Component guesses and a same-host heuristic scan are
-     kept as fallbacks for *other* AEM sites that may use different
-     markup, not for BNY specifically anymore.
+     </div>`. This is ITEM_SELECTOR_CASCADE's first entry; the Core
+     Component guesses and a same-host heuristic scan further down the
+     cascade are fallbacks for *other* AEM sites that may use different
+     markup.
 
   2. Pagination is a bespoke numbered widget (`<ul class="pagination">` of
      `<label onclick="showDataOnPagination(N,this)">`), not a real link or
      button, and each click *replaces* the visible card list rather than
-     appending to it (confirmed: a captured page only ever contains 10
-     `.list-item-tile` cards in the DOM at once, however many total
-     releases exist). So this scraper now parses and collects items after
-     *each* page load, not once at the very end -- see
-     render_and_parse_year_pass()'s docstring.
+     appending to it -- a page only ever holds 10 `.list-item-tile` cards
+     in the DOM at once, however many total releases exist. So this
+     scraper parses and collects items after *each* page load, not once at
+     the very end -- see render_and_parse_year_pass()'s docstring.
 
-  3. The "Filter by" year control (visible in the static page shell) IS a
-     real, working in-page year filter, not just a facet label: a
-     `.list-filter-dropdown` that reveals `<li class="option">` entries
+  3. The "Filter by" year control is a real, working in-page year filter:
+     a `.list-filter-dropdown` that reveals `<li class="option">` entries
      (one per year, plain "2018".."2026" text) on click. Selecting a year
      narrows the paginated result set server-side before any of this
-     scraper's own click-through pagination happens, which is both far more
-     reliable and far cheaper than paginating through the entire unfiltered
+     scraper's own click-through pagination happens, which is both more
+     reliable and cheaper than paginating through the entire unfiltered
      history and filtering client-side -- see _try_select_year().
 
-None of this has been independently re-confirmed by re-running this updated
-code against a live browser (still no bny.com network access in the
-environment this was edited in) -- it's built directly from the real,
-rendered HTML a person captured and pasted back, which is the closest
-thing available to hands-on verification here. Re-run with --show-browser
---debug-dump-html and check the results before trusting this for anything
-that matters; if BNY's markup changes again, or another AEM site's differs,
---item-selector overrides the selector cascade without touching code.
+If BNY's markup changes, or another AEM site's differs, --item-selector
+overrides the selector cascade without touching code. Re-run with
+--show-browser --debug-dump-html to inspect the current rendered page
+before assuming the selectors above still apply.
 
 Architecture
 ------------
@@ -69,8 +49,7 @@ rendered DOM is parsed with BeautifulSoup. No private/internal API is used
 -- this reads exactly what a human visiting the page would see, including
 clicking through "Load More" / paginated "Next" controls if present.
 
-Fingerprint (for future platform-detection work, e.g.
-src/reporting/detect_ir_platform.py)
+Fingerprint (used by src/reporting/detect_ir_platform.py's aem check)
 -----------------------------------------------------------------------
 AEM sites are identifiable by:
   * Page source containing "/etc.clientlibs/" or "/content/dam/" asset paths
@@ -208,7 +187,7 @@ logger = logging.getLogger("scrape_aem")
 # directly: it survives a theme wrapping the headline in a nested <span>
 # or <h3>, as several IR-platform themes elsewhere in this repo do.
 ITEM_SELECTOR_CASCADE: list[str] = [
-    ".list-item-tile",  # confirmed against BNY's real rendered DOM -- see module docstring
+    ".list-item-tile",  # BNY's press-release card -- see module docstring
     ".cmp-list__item",
     ".cmp-teaser",
     "article.cmp-teaser",
@@ -227,7 +206,7 @@ DEFAULT_ITEM_SELECTOR = ", ".join(ITEM_SELECTOR_CASCADE)
 # matched item container before falling back to a bare-text-node walk.
 ITEM_DATE_SELECTORS: list[str] = [
     "time",
-    ".list-item-header__date",  # confirmed against BNY's real rendered DOM
+    ".list-item-header__date",  # BNY's dateline element -- see module docstring
     ".cmp-list__item-date",
     ".cmp-teaser__date",
     ".cmp-search__item-date",
@@ -238,11 +217,11 @@ ITEM_DATE_SELECTORS: list[str] = [
     "[class*='date']",
 ]
 
-# Known non-article paths on BNY's own investor-relations subnav (visible in
-# the static page shell -- see module docstring), used to keep the same-host
-# heuristic fallback (see is_probable_press_release_link()) from mistaking a
-# nav link for a press release. Harmless to leave in place for other AEM
-# sites; extend as needed for a new source's own known non-article paths.
+# Known non-article paths on BNY's own investor-relations subnav, used to
+# keep the same-host heuristic fallback (see is_probable_press_release_link())
+# from mistaking a nav link for a press release. Harmless to leave in place
+# for other AEM sites; extend as needed for a new source's own known
+# non-article paths.
 NAV_EXCLUDE_PATHS = frozenset({
     "corporate/global/en/investor-relations/overview.html",
     "corporate/global/en/investor-relations/press-releases.html",
@@ -528,8 +507,7 @@ def _click_load_more(page: Page, timeout_ms: int) -> bool:
 def _click_pagination_next(page: Page, timeout_ms: int) -> bool:
     """Click a "next page" control if one is visible and not disabled.
 
-    Layered selector cascade, most site-specific (and confirmed against
-    BNY's real markup) first:
+    Layered selector cascade, most site-specific first:
 
       1. BNY's own bespoke numbered-pagination widget: the right arrow is a
          `<label>` (not an `<a>`/`<button>`, and with no accessible name --
@@ -538,8 +516,8 @@ def _click_pagination_next(page: Page, timeout_ms: int) -> bool:
          generic class-name guesses ("chevron-right", "arrow-right",
          "pagination-next") for other AEM sites that might use a similarly
          non-semantic control. `:not(.disabled)` skips it once BNY's own
-         widget marks it spent (confirmed convention: the left arrow starts
-         with a literal "disabled" class on page 1).
+         widget marks it spent (the left arrow starts with a literal
+         "disabled" class on page 1).
       2. rel="next" or an aria-label containing "next" (the standard,
          accessible convention some AEM sites do implement properly).
       3. A link/button whose accessible name is literally "Next", "›", or
@@ -576,14 +554,13 @@ def _click_pagination_next(page: Page, timeout_ms: int) -> bool:
 def _try_select_year(page: Page, year: int, timeout_ms: int) -> bool:
     """Best-effort: apply an in-page year filter, if this site exposes one.
 
-    Confirmed against BNY's real markup: its "Filter by" control (visible
-    even in the static, pre-render page shell) is a bespoke listbox widget,
-    not a native <select> -- a clickable `.list-filter-dropdown` container
-    that reveals a `<ul class="select_ul">` of `<li class="option">`
-    entries on click, each labeled with a plain 4-digit year (also
-    carrying a `data-attr-val` ending in "/<year>" as a second way to
-    match, in case the visible label text ever isn't a bare year on some
-    other AEM site reusing this same widget).
+    BNY's "Filter by" control is a bespoke listbox widget, not a native
+    <select> -- a clickable `.list-filter-dropdown` container that reveals
+    a `<ul class="select_ul">` of `<li class="option">` entries on click,
+    each labeled with a plain 4-digit year (also carrying a `data-attr-val`
+    ending in "/<year>" as a second way to match, in case the visible label
+    text ever isn't a bare year on some other AEM site reusing this same
+    widget).
 
     Tries a real <select> first regardless, since a different AEM site
     might implement the same "filter by year" idea with ordinary markup.
@@ -668,13 +645,12 @@ def render_and_parse_year_pass(
     *year* via the in-page year control (see _try_select_year()) -- and
     return every item found across every page it can paginate through.
 
-    Unlike the first version of this function, this parses and collects
-    items after *each* page loads rather than doing one page.content() at
-    the very end. That's not optional: BNY's numbered-pagination widget
-    replaces the rendered card list on every click rather than appending to
-    it (confirmed against real captured output -- a page only ever has 10
+    This parses and collects items after *each* page loads rather than
+    doing one page.content() at the very end. That's not optional: BNY's
+    numbered-pagination widget replaces the rendered card list on every
+    click rather than appending to it -- a page only ever has 10
     `.list-item-tile` cards in the DOM at once, regardless of how many
-    total releases exist), so a single final snapshot would only ever
+    total releases exist -- so a single final snapshot would only ever
     contain the *last* page visited, silently dropping every page before
     it. This is very likely also the right assumption for other AEM sites
     using a numbered-pagination widget rather than an infinite-scroll
@@ -1184,6 +1160,7 @@ def scrape_and_filter(
         logger.error("Could not determine a listing URL. Pass --url, --slug, or --ticker.")
         return 1, []
     logger.info("slug=%s  ticker=%s  url=%s  item_selector=%r", slug, ticker, url, item_selector)
+    print(f"Scraping: {url}")
 
     years = parse_year_args(args)
     all_items = scrape(url, slug, ticker, years, args, item_selector)

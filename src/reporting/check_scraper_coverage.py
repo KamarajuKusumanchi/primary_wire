@@ -227,7 +227,7 @@ def missing_coverage_csv(missing_df: pd.DataFrame) -> str:
 # PLATFORMS (see that registry's own comment) -- not retyped here, so this
 # comment can't go stale the way a hand-copied list would. Every group not
 # listed here is assumed to already match its platform name 1:1 (true today
-# for investorroom, notified, notified_gated, investis).
+# for investorroom, notified, notified_gated, investis, aem).
 CONFIG_GROUP_TO_PLATFORM = {
     "q4_ir": "q4",
 }

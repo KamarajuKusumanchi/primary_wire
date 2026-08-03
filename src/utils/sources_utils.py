@@ -257,6 +257,12 @@ PLATFORMS: dict[str, Platform] = {
         scraper_module="scrape_investis",
         description="Investis Digital sites (\"Delivered by Investis Digital\" footer)",
     ),
+    "aem": Platform(
+        listing_field="aem_listing_path",
+        default_listing_path="",
+        scraper_module="scrape_aem",
+        description="Adobe Experience Manager sites (/etc.clientlibs/, /content/dam/ asset paths)",
+    ),
 }
 
 
@@ -315,8 +321,8 @@ def resolve_listing_url(record: dict, platform: str) -> str:
     pasteable into a browser and matches what the scraper actually parses.
 
     *platform* is one of PLATFORMS' keys (see platform_names()) -- currently
-    "q4", "investorroom", "notified", "notified_gated", "investis" -- or
-    "unknown"/anything else not in that registry. It selects which
+    "q4", "investorroom", "notified", "notified_gated", "investis", "aem" --
+    or "unknown"/anything else not in that registry. It selects which
     sources.yaml field holds the listing path and what its platform-specific
     default is. This mirrors each scraper's own
     resolve_source()/resolve_field_precedence() field lookup, minus the

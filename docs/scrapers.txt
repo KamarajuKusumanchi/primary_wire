@@ -1,7 +1,8 @@
 ====== primary_wire: Scrapers ======
 
 ''config/scraper_config.yaml'' drives automated scraping for ~30 sources,
-across four IR platforms (Q4, InvestorRoom, Notified, Investis Digital).
+across five IR platforms (Q4, InvestorRoom, Notified, Investis Digital,
+Adobe Experience Manager).
 This file documents
 each scraper script under ''src/'' in detail. See README.txt for the
 high-level picture; this is the one to read before running a scraper, adding
@@ -262,6 +263,60 @@ curl_cffi is used here as a precaution (the site sits behind Cloudflare)
 rather than a confirmed requirement the way it is for scrape_notified.py's
 AbbVie default -- see the module docstring if plain ''requests'' turns out
 to work fine and this needs revisiting.
+
+===== scrape_aem.py =====
+
+Collects press release links from any investor relations site built on
+Adobe Experience Manager (AEM). BNY (The Bank of New York Mellon
+Corporation) is the first and, so far, only confirmed site.
+
+AEM listings render via JS, so -- like Q4 -- this scraper drives Chrome via
+Playwright, then parses the rendered DOM with BeautifulSoup. BNY's own
+press-release cards are a bespoke widget (not Adobe's documented Core
+Components), and its pagination is a numbered widget that *replaces* the
+visible card list on every click rather than appending to it, so this
+scraper parses and collects items after each page loads instead of taking
+one snapshot at the end. BNY also exposes a real in-page "Filter by" year
+control, which this scraper drives directly (server-side filtering) rather
+than paginating through the entire unfiltered history and filtering
+client-side.
+
+''--item-selector'' overrides the built-in selector cascade for a future
+AEM source whose markup doesn't match BNY's bespoke cards or any of the
+Adobe Core Component guesses also in that cascade.
+
+Usage:
+
+  # BNY, dry-run
+  python src/scrape_aem.py --dry-run
+
+  # Any AEM IR site by slug, ticker, or URL
+  python src/scrape_aem.py --slug bny --dry-run
+  python src/scrape_aem.py --ticker BNY --dry-run
+  python src/scrape_aem.py \
+      --url https://www.bny.com/corporate/global/en/investor-relations/press-releases.html \
+      --dry-run
+
+  # Restrict to a year or range (drives the in-page year filter directly)
+  python src/scrape_aem.py --year 2025 --dry-run
+  python src/scrape_aem.py --start-year 2023 --end-year 2025 --dry-run
+
+  # Fetch detail pages to resolve any dates the listing page didn't expose
+  python src/scrape_aem.py --fetch-detail-pages --dry-run
+
+  # Watch the browser and save the rendered HTML for debugging selectors
+  python src/scrape_aem.py --show-browser --debug-dump-html /tmp/bny.html --dry-run
+
+  # Override the item-card CSS selector for a site whose markup doesn't
+  # match any of the built-in guesses
+  python src/scrape_aem.py --item-selector ".my-custom-card" --dry-run
+
+Requires:
+
+  pip install playwright beautifulsoup4 lxml
+
+Chrome is assumed to already be installed. No ''playwright install'' download
+is needed.
 
 ===== Guidelines for automated contributions =====
 

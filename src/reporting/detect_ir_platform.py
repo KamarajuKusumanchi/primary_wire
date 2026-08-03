@@ -67,8 +67,14 @@ notified_gated  (scrape_notified_gated.py)
     the normal notified/investorroom/q4 signal checks below. See
     GATED_SLUGS. Real sub-classification signals are future work.
 
+aem  (scrape_aem.py)
+  * Page source containing an "/etc.clientlibs/" or "/content/dam/" asset
+    path -- Adobe Experience Manager's own client-library and DAM asset
+    conventions, present regardless of which component library or bespoke
+    widget a given site's theme builds on top of them.
+
 Priority when multiple signals fire: notified (meta tag) > investis > investorroom
-> q4 > notified (link pattern)
+> q4 > notified (link pattern) > aem
 The Drupal generator meta tag is definitive and is checked first. The Investis
 footer string is also definitive (unique branding) and is checked right after,
 BEFORE Notified's broad link-pattern heuristic gets a chance to misfire on it
@@ -80,9 +86,12 @@ see scrape_notified.py's DETAIL_URL_RE) that can coincidentally match a Q4
 (or InvestorRoom, or Investis) site's own links -- e.g. Netflix's Q4
 news-details links nest under a "financial-releases" path segment, which also
 satisfies the Notified heuristic. To avoid misclassifying such sites as
-"notified", that heuristic is checked LAST, after Investis, InvestorRoom, and
-Q4 have all had a chance to claim the link via their own more specific
-patterns.
+"notified", that heuristic is checked before Investis, InvestorRoom, and Q4
+have all had a chance to claim the link via their own more specific
+patterns. aem is checked last of all: its asset-path signal is Adobe's own
+platform tooling rather than listing-page markup, so it's not expected to
+overlap with any other platform's signal, but it's still ordered after
+every listing-markup-specific check on general principle.
 notified_gated overrides a "notified" result for slugs in GATED_SLUGS.
 
 unknown
@@ -243,6 +252,7 @@ PLATFORM_INVESTORROOM = "investorroom"
 PLATFORM_NOTIFIED = "notified"
 PLATFORM_NOTIFIED_GATED = "notified_gated"
 PLATFORM_INVESTIS = "investis"
+PLATFORM_AEM = "aem"
 PLATFORM_UNKNOWN = "unknown"
 
 DETECTOR_PLATFORMS = (
@@ -251,6 +261,7 @@ DETECTOR_PLATFORMS = (
     PLATFORM_NOTIFIED,
     PLATFORM_NOTIFIED_GATED,
     PLATFORM_INVESTIS,
+    PLATFORM_AEM,
 )
 
 
@@ -352,6 +363,14 @@ INVESTIS_FOOTER_RE = re.compile(
     r"|(?:https?:)?//(?:www\.)?investis\.com\b",  # plain branding's link target
     re.IGNORECASE,
 )
+
+# AEM (scrape_aem.py's module docstring "Fingerprint" section): Adobe
+# Experience Manager's own client-library and DAM asset path conventions,
+# present on every AEM-rendered page regardless of the specific theme/
+# component library built on top of it (BNY's press-release cards, for
+# instance, are a bespoke widget, not Adobe's documented Core Components --
+# this fingerprint doesn't depend on that markup at all).
+AEM_ASSET_PATH_RE = re.compile(r"/etc\.clientlibs/|/content/dam/", re.IGNORECASE)
 
 # Slugs known to be Notified/Drupal sites gated by bot mitigation strict
 # enough to need scrape_notified_gated.py's headed-browser step (see module
@@ -565,6 +584,17 @@ def _check_investis(html: str) -> bool:
     return False
 
 
+def _check_aem(html: str) -> bool:
+    """AEM fingerprint: the page source references an ``/etc.clientlibs/``
+    or ``/content/dam/`` asset path (AEM's own client-library and DAM asset
+    conventions -- see scrape_aem.py's module docstring). These are part of
+    AEM's platform tooling, not a theme choice, so they show up regardless
+    of which component library (or bespoke widget) a given site's press-
+    release listing actually uses.
+    """
+    return bool(AEM_ASSET_PATH_RE.search(html))
+
+
 def _check_notified_meta(soup: BeautifulSoup) -> bool:
     """Definitive Notified/Drupal signal: <meta name="Generator" content="Drupal 10 ...">
     in <head>. No other platform produces this tag, so a match here is
@@ -619,25 +649,36 @@ def detect_platform_from_html(
     """Classify the IR platform from page HTML using documented fingerprints.
 
     Priority: notified (definitive) > investis > investorroom > q4
-    > notified (heuristic)
+    > notified (heuristic) > aem
 
     The Drupal generator meta tag is checked first and, if present, decides
     the result immediately -- no other platform can produce it. The Investis
     footer credit is checked next for the same reason (unique branding, so
     definitive on its own) -- see _check_investis().
 
-    Notified's *link-pattern* signal is checked LAST, after Investis,
-    InvestorRoom, and Q4, rather than second as the platform-priority order
-    might suggest. That signal is a deliberately broad heuristic (see
-    _check_notified_links()) that can coincidentally match a Q4 (or
-    InvestorRoom, or Investis) site's own links, e.g. Netflix's Q4
-    news-details links nest under a "financial-releases" path segment that
-    also satisfies the Notified heuristic, and Investis's own
-    /news-releases/<year>/<mm-dd-yyyy>-<serial> detail URLs do too (see Home
-    Depot in the module docstring). Checking Investis/Q4/InvestorRoom's more
-    specific signals first, and only falling back to Notified's broad
-    heuristic if none of them claims the link, avoids misclassifying those
-    sites as "notified".
+    Notified's *link-pattern* signal is checked before AEM's, rather than
+    second as the platform-priority order might suggest. That signal is a
+    deliberately broad heuristic (see _check_notified_links()) that can
+    coincidentally match a Q4 (or InvestorRoom, or Investis) site's own
+    links, e.g. Netflix's Q4 news-details links nest under a
+    "financial-releases" path segment that also satisfies the Notified
+    heuristic, and Investis's own /news-releases/<year>/<mm-dd-yyyy>-<serial>
+    detail URLs do too (see Home Depot in the module docstring). Checking
+    Investis/Q4/InvestorRoom's more specific signals first, and only
+    falling back to Notified's broad heuristic if none of them claims the
+    link, avoids misclassifying those sites as "notified".
+
+    AEM is checked last of all: its signal (an ``/etc.clientlibs/`` or
+    ``/content/dam/`` asset path anywhere in the page source -- see
+    _check_aem()) is a platform-tooling fingerprint, not a listing-page
+    markup pattern, so there's no reason to expect it to coincidentally
+    fire on a Q4/InvestorRoom/Notified/Investis site the way Notified's
+    broad link-pattern heuristic can. It's still ordered last on general
+    principle: every other check here identifies its platform from
+    listing-page-specific markup, which is inherently more specific than
+    "this page was built with AEM" -- if a still-undiscovered overlap ever
+    turns up, an already-matched, more specific platform should keep
+    winning rather than being pre-empted by AEM's broader signal.
 
     *news_details_segment* and *news_path* customize the Q4 signal checks
     for sources whose Q4 theme deviates from the Costco/CDW default (see
@@ -655,6 +696,8 @@ def detect_platform_from_html(
         return PLATFORM_Q4
     if _check_notified_links(soup):
         return PLATFORM_NOTIFIED
+    if _check_aem(html):
+        return PLATFORM_AEM
     return PLATFORM_UNKNOWN
 
 

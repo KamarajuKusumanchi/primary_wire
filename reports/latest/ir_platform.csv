@@ -1,5 +1,5 @@
 slug,ticker,platform,scrape_url
-abbott,ABT,unknown,https://www.abbott.com/en-us/investors
+abbott,ABT,aem,https://www.abbott.com/en-us/investors
 abbvie,ABBV,notified,https://investors.abbvie.com/news-releases
 accenture,ACN,investis,https://investor.accenture.com/news-releases
 aflac,AFL,unknown,https://investors.aflac.com/
@@ -30,7 +30,7 @@ bio-techne,TECH,notified,https://investors.bio-techne.com/press-releases
 biogen,BIIB,notified,https://investors.biogen.com/news-releases
 blackstone,BX,unknown,https://ir.blackstone.com/
 bls,,unknown,https://www.bls.gov/newsrelease/
-bny,BNY,unknown,https://www.bny.com/corporate/global/en/investor-relations/press-releases.html
+bny,BNY,aem,https://www.bny.com/corporate/global/en/investor-relations/press-releases.html
 booking,BKNG,q4,https://ir.bookingholdings.com/news/default.aspx
 broadcom,AVGO,notified,https://investors.broadcom.com/news-releases
 builders-firstsource,BLDR,q4,https://investors.bldr.com/news/default.aspx
@@ -47,9 +47,9 @@ ciena,CIEN,q4,https://investor.ciena.com/news/default.aspx
 cigna,CI,unknown,https://investors.thecignagroup.com/
 cinfin,CINF,investorroom,https://investors.cinfin.com/news-releases
 cintas,CTAS,unknown,https://www.cintas.com/investors/
-cme,CME,unknown,https://www.cmegroup.com/investor-relations.html
+cme,CME,aem,https://www.cmegroup.com/investor-relations.html
 cognizant,CTSH,q4,https://investors.cognizant.com/news/default.aspx
-coherent,COHR,unknown,https://www.coherent.com/company/investor-relations
+coherent,COHR,aem,https://www.coherent.com/company/investor-relations
 coinbase,COIN,q4,https://investor.coinbase.com/news/default.aspx
 coke,KO,notified,https://investors.coca-colacompany.com/news-releases
 conagra,CAG,unknown,https://www.conagrabrands.com/investor-relations
@@ -145,14 +145,14 @@ microsoft,MSFT,unknown,https://news.microsoft.com/source/tag/investor-relations/
 moderna,MRNA,unknown,https://investors.modernatx.com/
 molson-coors,TAP,q4,https://ir.molsoncoors.com/news/default.aspx
 monolithic-power,MPWR,unknown,https://www.monolithicpower.com/en/about-mps/investor-relations.html
-morgan-stanley,MS,unknown,https://www.morganstanley.com/about-us-ir
+morgan-stanley,MS,aem,https://www.morganstanley.com/about-us-ir
 msci,MSCI,notified,https://ir.msci.com/news-releases
 netapp,NTAP,q4,https://investors.netapp.com/news/default.aspx
 netflix,NFLX,q4,https://ir.netflix.net/investor-news-and-events/financial-releases/default.aspx
 news-corp,NWSA,notified,https://investors.newscorp.com/news-releases
 nike,NKE,unknown,https://investors.nike.com/
 norwegian-cruise-line,NCLH,notified,https://www.nclhltd.com/investors/news-releases
-nvidia,NVDA,unknown,https://investor.nvidia.com/news/press-releases/default.aspx
+nvidia,NVDA,aem,https://investor.nvidia.com/news/press-releases/default.aspx
 o-reilly-auto-parts,ORLY,unknown,https://corporate.oreillyauto.com/investor-relations-information/
 onsemi,ON,notified,https://investor.onsemi.com/news-releases
 packaging-corp,PKG,notified,https://ir.packagingcorp.com/news-releases
@@ -163,7 +163,7 @@ pepsi,PEP,unknown,https://www.pepsico.com/investors
 ptc,PTC,q4,https://investor.ptc.com/news/default.aspx
 qualcomm,QCOM,unknown,https://investor.qualcomm.com/
 quanta-services,PWR,notified,https://investors.quantaservices.com/news-releases
-quest-diagnostics,DGX,unknown,https://ir.questdiagnostics.com/
+quest-diagnostics,DGX,aem,https://ir.questdiagnostics.com
 robinhood,HOOD,notified_gated,https://investors.robinhood.com/press-releases
 rollins,ROL,notified,https://www.rollins.com/investors/news-releases
 ross-stores,ROST,notified,https://investors.rossstores.com/news-releases
