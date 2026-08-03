@@ -1,7 +1,7 @@
 
 S&P 500 companies:  503
-Covered in sources: 211
-Missing:            292
+Covered in sources: 221
+Missing:            282
 
 Missing tickers:
   A
@@ -14,7 +14,6 @@ Missing tickers:
   AES
   AIG
   AIZ
-  ALB
   ALGN
   AME
   AMGN
@@ -74,7 +73,6 @@ Missing tickers:
   CVS
   CVX
   D
-  DAL
   DD
   DG
   DHI
@@ -101,7 +99,6 @@ Missing tickers:
   ETR
   EVRG
   EW
-  EXC
   EXE
   EXPD
   EXR
@@ -138,7 +135,6 @@ Missing tickers:
   IBKR
   IDXX
   IEX
-  IFF
   INVH
   IRM
   IVZ
@@ -160,14 +156,11 @@ Missing tickers:
   LEN
   LH
   LNT
-  LOW
   LULU
   LUV
-  LVS
   LYV
   MA
   MAA
-  MAR
   MCD
   MCHP
   MCK
@@ -176,7 +169,6 @@ Missing tickers:
   MDT
   MET
   MGM
-  MKC
   MMM
   MNST
   MOS
@@ -260,10 +252,8 @@ Missing tickers:
   TPR
   TRGP
   TRMB
-  TROW
   TSN
   TT
-  TTWO
   TXT
   UDR
   ULTA

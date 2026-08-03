@@ -4,6 +4,7 @@ abbvie,ABBV,notified,https://investors.abbvie.com/news-releases
 accenture,ACN,investis,https://investor.accenture.com/news-releases
 aflac,AFL,unknown,https://investors.aflac.com/
 akamai,AKAM,notified,https://www.ir.akamai.com/news-releases
+albemarle,ALB,unknown,https://investors.albemarle.com/
 alexandria-real-estate-equities,ARE,q4,https://investor.are.com/news/default.aspx
 allegion,ALLE,investis,https://investor.allegion.com/news-and-events/news-releases
 allstate,ALL,notified,https://www.allstateinvestors.com/news-releases
@@ -67,6 +68,7 @@ datadog,DDOG,notified,https://investors.datadoghq.com/news-releases
 deckers,DECK,notified,https://ir.deckers.com/news-events/press-releases
 deere,DE,unknown,https://investor.deere.com/
 dell,DELL,notified,https://investors.delltechnologies.com/news-releases
+delta-air-lines,DAL,q4,https://ir.delta.com/news/default.aspx
 dexcom,DXCM,q4,https://investors.dexcom.com/news/default.aspx
 digital-realty-trust,DLR,notified,https://investor.digitalrealty.com/news-releases
 dollar-tree,DLTR,notified,https://corporate.dollartree.com/investors/news-releases
@@ -81,6 +83,7 @@ emerson,EMR,notified,https://ir.emerson.com/news-releases
 eqt,EQT,q4,https://ir.eqt.com/news/default.aspx
 equifax,EFX,notified,https://investor.equifax.com/news-releases
 erie-indemnity,ERIE,unknown,https://www.erieinsurance.com/investors
+exelon,EXC,notified,https://investors.exeloncorp.com/news-releases
 expedia,EXPE,q4,https://ir.expediagroup.com/news/default.aspx
 exxonmobil,XOM,notified,https://investor.exxonmobil.com/news-releases
 f5,FFIV,q4,https://investors.f5.com/news/default.aspx
@@ -114,6 +117,7 @@ honeywell-international,HON,notified,https://investor.honeywell.com/investor-rel
 hp,HPE,q4,https://investor.hp.com/news/default.aspx
 hubbell,HUBB,unknown,https://investor.hubbell.com/
 ibm,IBM,investorroom,https://newsroom.ibm.com/announcements
+iff,IFF,notified,https://ir.iff.com/news-releases
 illinois-tool-works,ITW,q4,https://investor.itw.com/news/default.aspx
 incyte,INCY,notified,https://investor.incyte.com/news-releases
 ingersoll-rand,IR,q4,https://investors.irco.com/news/default.aspx
@@ -131,14 +135,18 @@ kkr,KKR,unknown,https://ir.kkr.com/
 kla,KLAC,notified,https://ir.kla.com/news-releases
 l3harris,LHX,unknown,https://investors.l3harris.com/
 lam-research,LRCX,investorroom,https://newsroom.lamresearch.com/press-releases
+las-vegas-sands,LVS,q4,https://investor.sands.com/news/default.aspx
 lennox,LII,notified,https://investor.lennox.com/news-releases
 linde,LIN,unknown,https://www.linde.com/investors
 lockheed-martin,LMT,investorroom,https://news.lockheedmartin.com/news-releases?category=788
+lowes,LOW,unknown,https://corporate.lowes.com/investors
 lumentum,LITE,q4,https://investor.lumentum.com/news/default.aspx
 lyondell-basell,LYB,q4,https://investors.lyondellbasell.com/news/default.aspx
+marriott-international,MAR,notified,https://marriott.gcs-web.com/news-releases
 martin-marietta,MLM,unknown,https://www.martinmarietta.com/investor-relations
 marvell,MRVL,notified,https://investor.marvell.com/news-releases
 masco,MAS,unknown,https://investor.masco.com/
+mccormick,MKC,notified,https://ir.mccormick.com/news-releases
 meta,META,q4,https://investor.atmeta.com/home/default.aspx/news/default.aspx
 micron,MU,notified,https://investors.micron.com/news-releases
 microsoft,MSFT,unknown,https://news.microsoft.com/source/tag/investor-relations/
@@ -186,6 +194,8 @@ synchrony-financial,SYF,unknown,https://investors.synchrony.com/
 synopsys,SNPS,q4,https://investor.synopsys.com/news/default.aspx
 sysco,SYY,investis,https://investors.sysco.com/annual-reports-and-sec-filings/news-releases
 t-mobile,TMUS,q4,https://investor.t-mobile.com/news/default.aspx
+t-rowe-price,TROW,notified,https://investors.troweprice.com/news-releases
+take-two-games,TTWO,unknown,https://www.take2games.com/ir
 te-connectivity,TEL,notified,https://investors.te.com/news-releases
 teradyne,TER,notified,https://investors.teradyne.com/news-events/press-releases
 tesla,TSLA,unknown,https://ir.tesla.com/
