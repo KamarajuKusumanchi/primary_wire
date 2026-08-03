@@ -81,6 +81,8 @@ q4_ir:
       args: [--show-browser]
     - slug: molson-coors
       args: [--show-browser]
+    - slug: quest-diagnostics
+      args: [--show-browser]
 
 investis:
   scraper: scrape_investis

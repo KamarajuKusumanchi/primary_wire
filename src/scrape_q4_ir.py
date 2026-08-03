@@ -141,6 +141,8 @@ from utils.scrape_utils import (
 from utils.q4_link_pattern import (
     DEFAULT_NEWS_DETAILS_SEGMENT,
     DEFAULT_NEWS_PATH,
+    GENERIC_NEWS_DETAILS_SELECTOR,
+    derive_news_details_segment,
     q4_news_link_re,
     q4_news_link_selector,
     strip_year_placeholder,
@@ -172,7 +174,12 @@ DEFAULT_TICKER = "COST"
 # use /investor-news-and-events/financial-releases/
 # press-release-details/<year>/<slug>/default.aspx) use a different word.
 # Overridable via sources.yaml's "news_details_segment" field or
-# --news-details-segment.
+# --news-details-segment. When neither is set, render_news_page() no longer
+# just assumes this default blindly -- it renders the listing page once with
+# a segment-agnostic selector and calls q4_link_pattern.
+# derive_news_details_segment() on the result to read the real segment off
+# the page's own markup, falling back to this default only if that
+# derivation finds nothing. See resolve_source() and render_news_page().
 #
 # Both constants, and the link-matching logic below, live in
 # utils/q4_link_pattern.py, shared with src/reporting/detect_ir_platform.py
@@ -213,7 +220,7 @@ def _resolve_year_url(url_template: str, year: Optional[int]) -> str:
 # Default pair, used as a fallback default arg where a per-source one hasn't
 # been resolved yet (main() always resolves and passes a source-specific
 # pair explicitly; see resolve_source()).
-NEWS_LINK_RE_DEFAULT, NEWS_LINK_SELECTOR_DEFAULT = _news_link_matcher(DEFAULT_NEWS_DETAILS_SEGMENT)
+NEWS_LINK_RE_DEFAULT, _NEWS_LINK_SELECTOR_UNUSED = _news_link_matcher(DEFAULT_NEWS_DETAILS_SEGMENT)
 
 logger = logging.getLogger("scrape_q4_ir")
 
@@ -420,23 +427,65 @@ def render_news_page(
     polite_delay: float,
     max_load_more: int,
     debug_dump_html: Optional[Path],
-    link_selector: str = NEWS_LINK_SELECTOR_DEFAULT,
-) -> str:
+    news_details_segment: Optional[str] = None,
+) -> tuple[str, str]:
     """Drive Chrome to the listing page, apply filters, expand pagination, and
-    return the fully rendered HTML.
+    return (html, news_details_segment_used).
 
     `year` here only drives the in-page year dropdown (_try_select_year);
     pass None when the year is instead already baked into `url` (see
     _resolve_year_url() / scrape_all_years()) so this doesn't also try --
     redundantly and noisily -- to click a dropdown control that a
     year-in-path theme like Netflix's doesn't have.
+
+    `news_details_segment` follows the precedence resolve_source() already
+    established (--news-details-segment > sources.yaml's
+    "news_details_segment" field): pass it through as-is when it was
+    resolved from either of those. Pass None when it wasn't -- this source
+    isn't in sources.yaml yet, or is but has no override -- and this
+    function derives it instead of just assuming DEFAULT_NEWS_DETAILS_SEGMENT
+    ("news-details"): the page is first rendered/waited-on using the broad,
+    segment-agnostic GENERIC_NEWS_DETAILS_SELECTOR, then
+    q4_link_pattern.derive_news_details_segment() inspects the resulting
+    markup for the real "-details" segment this theme actually uses (e.g.
+    Netflix's "press-release-details"). If derivation finds nothing either
+    (an unfamiliar theme, or a page that failed to render), this falls back
+    to DEFAULT_NEWS_DETAILS_SEGMENT, same as before this derivation step
+    existed. The returned news_details_segment_used is whichever segment
+    (configured, derived, or fallback) was actually used to find links on
+    this render, so the caller can build the matching parse_news_items()
+    regex from it.
     """
+    if news_details_segment:
+        link_selector = q4_news_link_selector(news_details_segment)
+    else:
+        link_selector = GENERIC_NEWS_DETAILS_SELECTOR
+
     with sync_playwright() as p:
         browser, page = _launch_browser(p, headless, browser_channel, timeout_ms)
 
         logger.info("Loading %s ...", url)
         page.goto(url, wait_until="domcontentloaded", timeout=timeout_ms)
         _wait_for_news_links(page, timeout_ms, link_selector)
+
+        if not news_details_segment:
+            derived = derive_news_details_segment(page.content())
+            news_details_segment = derived or DEFAULT_NEWS_DETAILS_SEGMENT
+            if derived:
+                logger.info(
+                    "Derived news_details_segment=%r from the rendered page "
+                    "(no --news-details-segment / sources.yaml override set).",
+                    news_details_segment,
+                )
+            else:
+                logger.warning(
+                    "Could not derive news_details_segment from the rendered "
+                    "page; falling back to the default %r. Pass "
+                    "--news-details-segment, or add a news_details_segment "
+                    "field to sources.yaml, if this source needs something else.",
+                    news_details_segment,
+                )
+            link_selector = q4_news_link_selector(news_details_segment)
 
         if category and category != "All News":
             logger.info("Selecting category: %s", category)
@@ -481,7 +530,7 @@ def render_news_page(
             logger.info("Saved rendered HTML to %s", debug_dump_html)
 
         browser.close()
-        return html
+        return html, news_details_segment
 
 
 # ---------------------------------------------------------------------------
@@ -760,8 +809,8 @@ def resolve_source(
     fetch_detail_pages: Optional[bool] = None,
     news_path: Optional[str] = None,
     news_details_segment: Optional[str] = None,
-) -> tuple[str, str, str, bool, re.Pattern, str]:
-    """Resolve (url, slug, ticker, fetch_detail_pages, link_re, link_selector)
+) -> tuple[str, str, str, bool, Optional[str]]:
+    """Resolve (url, slug, ticker, fetch_detail_pages, news_details_segment)
     by consulting sources.yaml.
 
     Thin Q4-specific wrapper around sources_utils.resolve_source_identity():
@@ -787,19 +836,34 @@ def resolve_source(
     the resolution (--url precedence, defaults, warnings) to
     resolve_source_identity as usual.
 
-    news_details_segment precedence follows the same pattern (CLI arg >
-    sources.yaml field > DEFAULT_NEWS_DETAILS_SEGMENT ("news-details")), and
-    is used to build the (link_re, link_selector) pair that identifies
-    press-release detail links on this source's listing page.
+    news_details_segment precedence (highest wins):
+      1. the news_details_segment argument (i.e. --news-details-segment on
+         the CLI)
+      2. the "news_details_segment" field on the matched sources.yaml record
+      3. None -- i.e. not specified anywhere. Earlier versions of this
+         function defaulted straight to DEFAULT_NEWS_DETAILS_SEGMENT
+         ("news-details") here, which is right for Costco/CDW's theme but
+         silently returns zero items for any source using a different
+         segment (e.g. Netflix's "press-release-details") until someone
+         notices and adds the field by hand. Resolution of that fallback is
+         now deferred to render_news_page(), which -- only when this
+         function returns None -- renders the listing page once with a
+         segment-agnostic selector and derives the real segment from the
+         page's own markup (q4_link_pattern.derive_news_details_segment()),
+         falling back to DEFAULT_NEWS_DETAILS_SEGMENT only if that
+         derivation itself finds nothing. See render_news_page().
 
     fetch_detail_pages precedence (highest wins):
       1. the fetch_detail_pages argument (i.e. --fetch-detail-pages on the CLI)
       2. the "needs_detail_page_dates" field on the matched sources.yaml record
       3. False
 
-    Returns (url, slug, ticker, fetch_detail_pages, link_re, link_selector).
+    Returns (url, slug, ticker, fetch_detail_pages, news_details_segment).
     url/slug/ticker are plain strings (never None); fetch_detail_pages is a
-    plain bool. Logs warnings for any fields that could not be resolved.
+    plain bool; news_details_segment is the literal string if resolved from
+    a CLI arg or sources.yaml, or None if it still needs to be derived at
+    render time (see above). Logs warnings for any fields that could not be
+    resolved.
     """
     from utils.sources_utils import find_source, find_source_by_url, load_sources, resolve_source_identity
 
@@ -824,10 +888,11 @@ def resolve_source(
     if not news_path:
         news_path = (peeked_record.get("news_path") if peeked_record else None) or DEFAULT_NEWS_PATH
     if not news_details_segment:
-        news_details_segment = (
-            (peeked_record.get("news_details_segment") if peeked_record else None)
-            or DEFAULT_NEWS_DETAILS_SEGMENT
-        )
+        # Leave as None (rather than defaulting to DEFAULT_NEWS_DETAILS_SEGMENT
+        # here) when neither the CLI arg nor sources.yaml specify one --
+        # render_news_page() derives the real segment from the rendered page
+        # itself in that case. See this function's docstring above.
+        news_details_segment = peeked_record.get("news_details_segment") if peeked_record else None
 
     url, slug, ticker, record, _extra_query_params = resolve_source_identity(
         url, slug, ticker,
@@ -839,9 +904,7 @@ def resolve_source(
     if fetch_detail_pages is None:
         fetch_detail_pages = bool(record.get("needs_detail_page_dates")) if record else False
 
-    link_re, link_selector = _news_link_matcher(news_details_segment)
-
-    return url, slug, ticker, fetch_detail_pages, link_re, link_selector
+    return url, slug, ticker, fetch_detail_pages, news_details_segment
 
 
 def scrape_all_years(
@@ -850,8 +913,7 @@ def scrape_all_years(
     ticker: str,
     years: Optional[set[int]],
     args: argparse.Namespace,
-    link_re: re.Pattern,
-    link_selector: str,
+    news_details_segment: Optional[str],
 ) -> list[NewsItem]:
     """Render the listing page for each requested year and collect all NewsItems.
 
@@ -861,6 +923,13 @@ def scrape_all_years(
     For themes without the placeholder (e.g. Costco/CDW), the same URL is
     used for every year and the year is instead selected via an in-page
     dropdown inside render_news_page().
+
+    `news_details_segment` is whatever resolve_source() came back with:
+    either the configured segment (--news-details-segment or sources.yaml's
+    field), or None if it needs to be derived from the rendered page (see
+    render_news_page()). When None, the first year's render derives it and
+    that derived value is reused for every subsequent year, so derivation
+    only happens once per invocation, not once per year.
 
     When no year filter is active, a single render of the default view is done.
     Multiple years are separated by --polite-delay to avoid hammering the site.
@@ -880,7 +949,7 @@ def scrape_all_years(
         if debug_path and len(years_to_visit) > 1:
             debug_path = debug_path.with_name(f"{debug_path.stem}_{year}{debug_path.suffix}")
 
-        html = render_news_page(
+        html, segment_used = render_news_page(
             url=url,
             # If the year is already baked into `url`, don't also pass it
             # through to the in-page dropdown selector -- that control
@@ -896,8 +965,14 @@ def scrape_all_years(
             polite_delay=args.polite_delay,
             max_load_more=args.max_load_more,
             debug_dump_html=debug_path,
-            link_selector=link_selector,
+            news_details_segment=news_details_segment,
         )
+        if news_details_segment is None:
+            # Reuse the segment derived on this first render for every
+            # subsequent year's render instead of re-deriving each time.
+            news_details_segment = segment_used
+
+        link_re = q4_news_link_re(segment_used)
         items = parse_news_items(html, base_url=url, slug=slug, ticker=ticker, link_re=link_re)
         all_items.extend(items)
 
@@ -940,8 +1015,11 @@ def build_arg_parser() -> argparse.ArgumentParser:
         help=(
             "Path segment used by this theme's press-release detail links in "
             "place of 'news-details', e.g. 'press-release-details' for "
-            "Netflix (default: 'news-details'). Overrides sources.yaml's "
-            "news_details_segment field for this run; most sites don't need this."
+            "Netflix. Overrides sources.yaml's news_details_segment field for "
+            "this run. Most sites don't need this -- when neither this flag "
+            "nor sources.yaml specify a segment, it's auto-derived from the "
+            "rendered listing page, falling back to 'news-details' only if "
+            "that derivation finds nothing."
         ),
     )
 
@@ -1047,7 +1125,7 @@ def scrape_and_filter(
     level = {0: _logging.WARNING, 1: _logging.INFO}.get(args.verbose, _logging.DEBUG)
     _logging.basicConfig(level=level, format="%(levelname)s: %(message)s")
 
-    url, slug, ticker, fetch_detail_pages, link_re, link_selector = resolve_source(
+    url, slug, ticker, fetch_detail_pages, news_details_segment = resolve_source(
         args.url, args.slug, args.ticker, args.fetch_detail_pages,
         args.news_path, args.news_details_segment,
     )
@@ -1055,12 +1133,13 @@ def scrape_and_filter(
         logger.error("Could not determine a news URL. Pass --url, --slug, or --ticker.")
         return 1, []
     logger.info(
-        "slug=%s  ticker=%s  url=%s  fetch_detail_pages=%s", slug, ticker, url, fetch_detail_pages
+        "slug=%s  ticker=%s  url=%s  fetch_detail_pages=%s  news_details_segment=%s",
+        slug, ticker, url, fetch_detail_pages, news_details_segment or "(auto-detect)",
     )
     print(f"Scraping: {url}")
 
     years = parse_year_args(args)
-    all_items = scrape_all_years(url, slug, ticker, years, args, link_re, link_selector)
+    all_items = scrape_all_years(url, slug, ticker, years, args, news_details_segment)
 
     if args.fallback_to_visible and args.headless and not all_items:
         logger.warning(
@@ -1068,7 +1147,7 @@ def scrape_and_filter(
             "Retrying with a visible browser window (--fallback-to-visible)."
         )
         args.headless = False
-        all_items = scrape_all_years(url, slug, ticker, years, args, link_re, link_selector)
+        all_items = scrape_all_years(url, slug, ticker, years, args, news_details_segment)
 
     if fetch_detail_pages:
         fetch_missing_dates(

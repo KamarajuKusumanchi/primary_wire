@@ -28,6 +28,8 @@ Imported by:
 from __future__ import annotations
 
 import re
+from collections import Counter
+from typing import Optional
 
 # The "-details" path segment used by press-release detail links, e.g. the
 # "news-details" in /news/news-details/<year>/<slug>/default.aspx. Most Q4
@@ -65,6 +67,55 @@ def q4_news_link_selector(news_details_segment: str = "") -> str:
     """
     segment = news_details_segment or DEFAULT_NEWS_DETAILS_SEGMENT
     return f"a[href*='/{segment}/']"
+
+
+# Generic, segment-agnostic sniff pattern -- used only to *derive* an
+# unspecified source's news_details_segment from its own rendered listing
+# page, never to identify actual press-release items for scraping (that's
+# what q4_news_link_re(), built from the *specific* derived/configured
+# segment, is for). Matches the same overall shape --
+# /<segment>-details/<year>/<slug>... -- but leaves the segment itself
+# wide open (any run of lowercase word-chars ending in "-details") since
+# discovering that name is the whole point here.
+_DETAILS_SEGMENT_SNIFF_RE = re.compile(
+    r"/([a-z0-9]+(?:-[a-z0-9]+)*-details)/\d{4}/[^/\"'?#]+", re.IGNORECASE
+)
+
+# Broad CSS selector used only while a source's news_details_segment is
+# still unknown, so the listing page can be rendered/waited-on at all before
+# the precise per-source selector (q4_news_link_selector()) can be built.
+# Matches any "...-details/" path segment -- deliberately looser than the
+# final selector, which is why it's never used for actual item parsing.
+GENERIC_NEWS_DETAILS_SELECTOR = "a[href*='-details/']"
+
+
+def derive_news_details_segment(html: str) -> Optional[str]:
+    """Best-effort: figure out a Q4 source's news_details_segment by
+    inspecting its own rendered listing-page markup, instead of assuming
+    the Costco/CDW default "news-details" for every source.
+
+    Scans every href in *html* for the shape
+    .../<segment>-details/<year>/<slug>... (the same shape q4_news_link_re()
+    matches for a *known* segment) via _DETAILS_SEGMENT_SNIFF_RE above, and
+    returns the most common captured segment -- most listing pages only ever
+    show one, but taking a mode guards against an occasional unrelated
+    "-details" link elsewhere on the page (e.g. an event or webcast link)
+    outvoting the real one. Returns None if no such link is found anywhere,
+    in which case the caller should fall back to DEFAULT_NEWS_DETAILS_SEGMENT.
+
+    Used by scrape_q4_ir.py's render_news_page() when a source has no
+    "news_details_segment" field in sources.yaml and none was passed via
+    --news-details-segment: rather than blindly assuming "news-details"
+    (which silently returns zero items for a theme like Netflix's, whose
+    real segment is "press-release-details"), the listing page is first
+    rendered with the broad GENERIC_NEWS_DETAILS_SELECTOR above, and this
+    function then inspects what actually showed up.
+    """
+    matches = _DETAILS_SEGMENT_SNIFF_RE.findall(html)
+    if not matches:
+        return None
+    segment, _count = Counter(matches).most_common(1)[0]
+    return segment
 
 
 def strip_year_placeholder(path: str) -> str:
