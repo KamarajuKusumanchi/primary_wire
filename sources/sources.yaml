@@ -201,7 +201,8 @@ sources:
     ticker: BNY
     ir_url: 
       https://www.bny.com/corporate/global/en/investor-relations/overview.html
-    news_url: https://www.bny.com/corporate/global/en/investor-relations/press-releases.html
+    news_url: 
+      https://www.bny.com/corporate/global/en/investor-relations/press-releases.html
   - slug: booking
     name: Booking Holdings Inc.
     ticker: BKNG
@@ -627,6 +628,10 @@ sources:
     ir_url: https://investor.lamresearch.com/
     news_url: https://newsroom.lamresearch.com/
     news_releases_path: press-releases
+  - slug: las-vegas-sands
+    name: Las Vegas Sands Corp.
+    ticker: LVS
+    ir_url: https://investor.sands.com/
   - slug: lennox
     name: Lennox International Inc.
     ticker: LII
@@ -648,6 +653,10 @@ sources:
       categories: (1) Investor and Financial News (2) Uncategorized. To
       minimize the noise, only the first category (category=788) is scraped
       for now.
+  - slug: lowes
+    name: Lowe's Companies, Inc.
+    ticker: LOW
+    ir_url: https://corporate.lowes.com/investors
   - slug: lumentum
     name: Lumentum Holdings Inc.
     ticker: LITE
@@ -656,6 +665,10 @@ sources:
     name: LyondellBasell Industries NV
     ticker: LYB
     ir_url: https://investors.lyondellbasell.com/
+  - slug: marriott-international
+    name: Marriott International
+    ticker: MAR
+    ir_url: https://marriott.gcs-web.com/
   - slug: martin-marietta
     name: Martin Marietta Materials, Inc.
     ticker: MLM
@@ -865,6 +878,10 @@ sources:
     name: T-Mobile US, Inc.
     ticker: TMUS
     ir_url: https://investor.t-mobile.com/
+  - slug: take-two-games
+    name: Take-Two Interactive Software, Inc.
+    ticker: TTWO
+    ir_url: https://www.take2games.com/ir
   - slug: te-connectivity
     name: TE Connectivity plc
     ticker: TEL
