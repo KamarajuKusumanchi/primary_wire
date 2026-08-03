@@ -83,6 +83,10 @@ sources:
     name: Akamai Technologies, Inc.
     ticker: AKAM
     ir_url: https://www.ir.akamai.com/
+  - slug: albemarle
+    name: Albemarle Corporation
+    ticker: ALB
+    ir_url: https://investors.albemarle.com/
   - slug: alexandria-real-estate-equities
     name: Alexandria Real Estate Equities, Inc.
     ticker: ARE
@@ -355,6 +359,10 @@ sources:
     name: Dell Technologies Inc.
     ticker: DELL
     ir_url: https://investors.delltechnologies.com/
+  - slug: delta-air-lines
+    name: Delta Air Lines, Inc.
+    ticker: DAL
+    ir_url: https://ir.delta.com/
   - slug: dexcom
     name: DexCom, Inc.
     ticker: DXCM
@@ -411,6 +419,10 @@ sources:
     name: Erie Indemnity Company
     ticker: ERIE
     ir_url: https://www.erieinsurance.com/investors
+  - slug: exelon
+    name: Exelon Corporation
+    ticker: EXC
+    ir_url: https://investors.exeloncorp.com/
   - slug: expedia
     name: Expedia Group, Inc.
     ticker: EXPE
@@ -558,6 +570,10 @@ sources:
       "Arvind Krishna's Letter to IBM Investors" published on 2026-07-14 which
       tanked IBM's stock by 25.21%. On the other hand,
       https://newsroom.ibm.com/announcements contains all the press releases.
+  - slug: iff
+    name: International Flavors & Fragran
+    ticker: IFF
+    ir_url: https://ir.iff.com/
   - slug: illinois-tool-works
     name: Illinois Tool Works Inc.
     ticker: ITW
@@ -681,6 +697,10 @@ sources:
     name: Masco Corporation
     ticker: MAS
     ir_url: https://investor.masco.com/
+  - slug: mccormick
+    name: McCormick & Company, Incorporated
+    ticker: MKC
+    ir_url: https://ir.mccormick.com/
   - slug: meta
     name: Meta Platforms, Inc.
     ticker: META
@@ -878,6 +898,10 @@ sources:
     name: T-Mobile US, Inc.
     ticker: TMUS
     ir_url: https://investor.t-mobile.com/
+  - slug: t-rowe-price
+    name: T. Rowe Price Group, Inc.
+    ticker: TROW
+    ir_url: https://investors.troweprice.com/
   - slug: take-two-games
     name: Take-Two Interactive Software, Inc.
     ticker: TTWO
