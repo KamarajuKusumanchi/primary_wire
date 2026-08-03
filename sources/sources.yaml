@@ -120,6 +120,7 @@ sources:
     ir_url: https://ir.ameriprise.com/
   - slug: analog-devices
     name: Analog Devices, Inc.
+    news_releases_path: press-releases
     ticker: ADI
     ir_url: https://investor.analog.com/
   - slug: apa
