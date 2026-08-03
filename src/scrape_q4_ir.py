@@ -1057,6 +1057,7 @@ def scrape_and_filter(
     logger.info(
         "slug=%s  ticker=%s  url=%s  fetch_detail_pages=%s", slug, ticker, url, fetch_detail_pages
     )
+    print(f"Scraping: {url}")
 
     years = parse_year_args(args)
     all_items = scrape_all_years(url, slug, ticker, years, args, link_re, link_selector)
