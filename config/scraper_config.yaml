@@ -46,6 +46,7 @@ notified:
     - slug: global-payments
     - slug: ge-vernova
     - slug: skyworks
+    - slug: coke
 
 notified_gated:
   scraper: scrape_notified_gated

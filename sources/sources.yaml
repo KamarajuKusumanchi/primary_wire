@@ -288,6 +288,8 @@ sources:
     name: The Coca-Cola Company
     ticker: KO
     ir_url: https://investors.coca-colacompany.com/
+    news_releases_path: news-events/press-releases
+    first_page_index: 1
   - slug: conagra
     name: Conagra Brands, Inc.
     ticker: CAG
