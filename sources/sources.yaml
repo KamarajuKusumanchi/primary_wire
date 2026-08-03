@@ -769,6 +769,7 @@ sources:
     name: Quest Diagnostics Incorporated
     ticker: DGX
     ir_url: https://ir.questdiagnostics.com/
+    news_path: press-releases/default.aspx
   - slug: robinhood
     name: Robinhood Markets, Inc.
     ticker: HOOD
