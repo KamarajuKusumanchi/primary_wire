@@ -42,6 +42,7 @@ caseys,CASY,notified_gated,https://investor.caseys.com/press-releases
 cbre,CBRE,notified,https://ir.cbre.com/news-releases
 cdw,CDW,q4,https://investor.cdw.com/news/default.aspx
 centene,CNC,investorroom,https://investors.centene.com/press-releases
+cf-industries,CF,q4,https://investor.cfindustries.com/news/default.aspx
 charter,CHTR,notified,https://ir.charter.com/news-releases
 chipotle,CMG,investorroom,https://ir.chipotle.com/news-releases
 ciena,CIEN,q4,https://investor.ciena.com/news/default.aspx
@@ -75,6 +76,7 @@ dollar-tree,DLTR,notified,https://corporate.dollartree.com/investors/news-releas
 doordash,DASH,q4,https://ir.doordash.com/news/default.aspx
 dover,DOV,unknown,https://www.dovercorporation.com/investors
 eaton,ETN,notified,https://www.eaton.com/us/en-us/company/investor-relations.html/news-releases
+ebay,EBAY,q4,https://investors.ebayinc.com/news/default.aspx
 ecolab,ECL,q4,https://investor.ecolab.com/news/default.aspx
 edison-international,EIX,unknown,https://www.edison.com/investors
 eli-lilly,LLY,notified,https://investor.lilly.com/news-releases
@@ -163,6 +165,7 @@ norwegian-cruise-line,NCLH,notified,https://www.nclhltd.com/investors/news-relea
 nvidia,NVDA,aem,https://investor.nvidia.com/news/press-releases/default.aspx
 o-reilly-auto-parts,ORLY,unknown,https://corporate.oreillyauto.com/investor-relations-information/
 onsemi,ON,notified,https://investor.onsemi.com/news-releases
+oracle,ORCL,q4,https://investor.oracle.com/news/default.aspx
 packaging-corp,PKG,notified,https://ir.packagingcorp.com/news-releases
 palantir,PLTR,unknown,https://investors.palantir.com/
 paramount,PSKY,notified,https://ir.paramount.com/press-releases

@@ -1,7 +1,7 @@
 
 S&P 500 companies:  503
-Covered in sources: 221
-Missing:            282
+Covered in sources: 224
+Missing:            279
 
 Missing tickers:
   A
@@ -50,7 +50,6 @@ Missing tickers:
   CBOE
   CCL
   CEG
-  CF
   CFG
   CHD
   CL
@@ -85,7 +84,6 @@ Missing tickers:
   DVA
   DVN
   EA
-  EBAY
   ECHO
   ED
   EG
@@ -195,7 +193,6 @@ Missing tickers:
   ODFL
   OKE
   OMC
-  ORCL
   OTIS
   OXY
   PANW
