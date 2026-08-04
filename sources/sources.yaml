@@ -1001,6 +1001,7 @@ sources:
     name: Virtu Financial, Inc.
     ticker: VIRT
     ir_url: https://ir.virtu.com/
+    news_releases_path: press-releases
   - slug: visa
     name: Visa Inc.
     ticker: V
