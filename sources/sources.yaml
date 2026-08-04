@@ -249,6 +249,10 @@ sources:
     ticker: CNC
     ir_url: https://investors.centene.com/
     news_releases_path: press-releases
+  - slug: cf-industries
+    name: CF Industries Holdings, Inc.
+    ticker: CF
+    ir_url: https://investor.cfindustries.com/
   - slug: charter
     name: Charter Communications, Inc.
     ticker: CHTR
@@ -387,6 +391,10 @@ sources:
     name: Eaton Corporation, PLC
     ticker: ETN
     ir_url: https://www.eaton.com/us/en-us/company/investor-relations.html
+  - slug: ebay
+    name: eBay Inc.
+    ticker: EBAY
+    ir_url: https://investors.ebayinc.com/
   - slug: ecolab
     name: Ecolab Inc.
     ticker: ECL
@@ -768,6 +776,10 @@ sources:
     name: ON Semiconductor Corporation
     ticker: "ON"
     ir_url: https://investor.onsemi.com/
+  - slug: oracle
+    name: Oracle Corporation
+    ticker: ORCL
+    ir_url: https://investor.oracle.com/
   - slug: packaging-corp
     name: Packaging Corporation of America
     ticker: PKG
