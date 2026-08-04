@@ -693,6 +693,7 @@ sources:
     name: Marriott International
     ticker: MAR
     ir_url: https://marriott.gcs-web.com/
+    news_releases_path: press-releases
   - slug: martin-marietta
     name: Martin Marietta Materials, Inc.
     ticker: MLM

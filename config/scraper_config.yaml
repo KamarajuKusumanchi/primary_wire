@@ -47,6 +47,7 @@ notified:
     - slug: ge-vernova
     - slug: skyworks
     - slug: coke
+    - slug: marriott-international
 
 notified_gated:
   scraper: scrape_notified_gated

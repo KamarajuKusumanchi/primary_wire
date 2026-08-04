@@ -1,15 +1,15 @@
 Sources in sources.yaml:     228
-With automated scraper:      40 (17.5%)
-Without automated scraper:   188
+With automated scraper:      41 (18.0%)
+Without automated scraper:   187
 
 Coverage by platform:
 
   platform           total  configured   missing  percentage_done
-  notified              84          11        73            13.1%
+  notified              84          12        72            14.3%
   q4                    66          14        52            21.2%
   unknown               51           0        51             0.0%
   aem                    6           1         5            16.7%
   investorroom          12           8         4            66.7%
   investis               6           3         3            50.0%
   notified_gated         3           3                     100.0%
-  TOTAL                228          40       188            17.5%
+  TOTAL                228          41       187            18.0%
