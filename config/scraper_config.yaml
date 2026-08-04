@@ -48,6 +48,7 @@ notified:
     - slug: skyworks
     - slug: coke
     - slug: marriott-international
+    - slug: virtu
 
 notified_gated:
   scraper: scrape_notified_gated

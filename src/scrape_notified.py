@@ -17,9 +17,17 @@ You can identify a Notified/Drupal IR site by any of:
   * Detail pages use paths like:
       /news-releases/news-release-details/<slug>
   * Dates in listing table are in M/D/YY format (e.g. "6/26/26", "11/24/25")
-  * Year filter available via a dropdown but NOT reflected in the URL --
-    the page reloads via a form POST, so year-filtering through the URL is
-    NOT supported; instead filter by year client-side after scraping.
+  * Some sites also expose a "Year" filter dropdown in the same GET-method
+    widget form as the "Items Per Page" widget (see --page-size below);
+    where present, it's used to force an explicit, unambiguous year scope
+    via the URL (see resolve_year_filter_from_html() in
+    utils/scrape_notified_utils.py) -- but whether the site actually
+    *honors* that filter server-side varies (confirmed working on Virtu;
+    confirmed present-but-ignored on Skyworks, which only honors its Items
+    Per Page param). Either way, year-filtering is never trusted blindly:
+    this script always verifies each fetched page's own dates via binary
+    search / early-exit, so results are correct regardless of whether a
+    given site's Year widget actually does anything.
 
 URL structure
 -------------
@@ -31,8 +39,11 @@ Listing page (paginated by 0-based page index):
 
 The last page index can be read from the "last »" pagination link.
 
-There is NO server-side ?year= or ?l= parameter; page size is fixed
-server-side (10 items/page for AbbVie).
+Page size is fixed server-side by default (10 items/page for AbbVie), but
+some sites expose an "Items Per Page" widget (see --page-size) and/or a
+"Year" filter widget, both discovered and applied automatically -- see
+"Platform fingerprints" above and resolve_page_size_from_html() /
+resolve_year_filter_from_html() in utils/scrape_notified_utils.py.
 
 Press release detail pages:
   {base_url}/news-releases/news-release-details/<slug>
@@ -140,6 +151,7 @@ from utils.scrape_notified_utils import (
     new_session,
     parse_listing_page as _shared_parse_listing_page,
     resolve_page_size_from_html,
+    resolve_year_filter_from_html,
 )
 
 
@@ -579,56 +591,54 @@ def scrape_one_pass(
 
 
 
-def resolve_page_size_params(
+def probe_listing_page(
     base_url: str,
-    page_size: int,
     timeout: int,
     session,
     news_releases_path: str = DEFAULT_NEWS_RELEASES_PATH,
     first_page_index: int = DEFAULT_FIRST_PAGE_INDEX,
-) -> dict[str, str]:
-    """Probe page ``first_page_index`` (plain curl_cffi GET, no page-size
-    params) and hand its HTML to the shared, fetch-agnostic
-    resolve_page_size_from_html() (utils/scrape_notified_utils.py) to
-    decide how -- or whether -- to honor ``page_size``.
+) -> Optional[str]:
+    """Fetch page ``first_page_index`` with no extra query params (plain
+    curl_cffi GET) and return its raw HTML, for widget discovery only --
+    both the "Items Per Page" widget (--page-size) and the "Year" filter
+    widget (server-side year filtering; see resolve_year_filter_from_html()
+    in utils/scrape_notified_utils.py) are discovered from this same one
+    fetch, so only a single extra probe request is made regardless of how
+    many of those features end up applying.
 
-    This function is deliberately the ONLY curl_cffi-specific part of the
-    --page-size feature; everything past "here is some HTML" lives in
-    resolve_page_size_from_html() so it can be reused as-is by a future
-    scrape_notified_gated.py integration, whose listing pages must be
-    fetched via a headed Playwright session instead of curl_cffi (plain
-    requests get 403'd there -- see that script's module docstring). That
-    integration would add an equivalent thin wrapper of its own (fetch via
-    Playwright instead of curl_cffi, e.g. by extending its existing
-    obtain_form_tokens() step to also return the page's HTML) rather than
-    touching this function or the shared resolver.
+    This function is deliberately the ONLY curl_cffi-specific part of
+    widget discovery; everything past "here is some HTML" lives in the
+    shared, fetch-agnostic resolve_page_size_from_html()/
+    resolve_year_filter_from_html() (utils/scrape_notified_utils.py) so it
+    can be reused as-is by a future scrape_notified_gated.py integration,
+    whose listing pages must be fetched via a headed Playwright session
+    instead of curl_cffi (plain requests get 403'd there -- see that
+    script's module docstring). That integration would add an equivalent
+    thin wrapper of its own (fetch via Playwright instead of curl_cffi,
+    e.g. by extending its existing obtain_form_tokens() step to also
+    return the page's HTML) rather than touching this function or the
+    shared resolvers.
 
-    Returns {} (i.e. "use the site's default page size") if the probe
-    fetch itself fails -- see resolve_page_size_from_html()'s own
-    docstring for the other ways this can fall back. --page-size is a
-    best-effort optimization, never a hard requirement.
-
-    This costs one extra HTTP request (this plain probe) beyond what
-    scrape() would otherwise make. Page ``first_page_index`` then gets
-    fetched a second time -- this time with the resolved page-size params
-    included -- by scrape()'s normal flow, since it's the one whose item
-    offsets need to line up with the chosen page size for pagination to
-    stay consistent (see discover_page_size_widget()'s module note in
+    Returns None if the probe fetch itself fails; callers treat that the
+    same as "no widgets found" and fall back to site defaults. Page
+    ``first_page_index`` then gets fetched a second time -- this time with
+    whatever extra params were resolved from this probe -- by scrape()'s
+    normal flow, since it's the one whose item offsets/year scope need to
+    line up with those params for pagination to stay consistent (see
+    discover_page_size_widget()'s module note in
     utils/scrape_notified_utils.py for why the two fetches can't be
     collapsed into one).
     """
     probe_url = listing_page_url(base_url, page=first_page_index, news_releases_path=news_releases_path)
-    logger.info("Probing for an Items Per Page widget: %s", probe_url)
+    logger.info("Probing for site widgets (Items Per Page / Year filter): %s", probe_url)
     try:
-        probe_html = fetch_html(probe_url, session, timeout=timeout)
+        return fetch_html(probe_url, session, timeout=timeout)
     except Exception as exc:
         logger.warning(
-            "Could not probe for an Items Per Page widget (%s); "
-            "using the site's default page size.", exc,
+            "Could not probe listing page for widgets (%s); "
+            "using the site's defaults.", exc,
         )
-        return {}
-
-    return resolve_page_size_from_html(probe_html, page_size)
+        return None
 
 
 def scrape(
@@ -665,18 +675,53 @@ def scrape(
     is relative to it -- nothing assumes the first page is literally 0.
 
     page_size, if given, is resolved to extra query params via
-    resolve_page_size_params() above and merged into extra_params before
-    anything else runs, so every fetch below (including the binary-search
-    probes) transparently uses the larger page size. See that function's
-    docstring for the fallback behavior when the site doesn't support it.
+    probe_listing_page()/resolve_page_size_from_html() above and merged
+    into extra_params before anything else runs, so every fetch below
+    (including the binary-search probes) transparently uses the larger
+    page size. See resolve_page_size_from_html()'s docstring for the
+    fallback behavior when the site doesn't support it.
+
+    Separately -- and regardless of page_size -- a Year filter widget is
+    also discovered (from that same probe fetch) and, when found, used to
+    force the listing to an explicit, unambiguous year scope (either the
+    single target year, or explicit "All") rather than trusting whatever
+    year that site's own <select> happens to default to. See
+    resolve_year_filter_from_html()'s docstring
+    (utils/scrape_notified_utils.py) for why this matters: unlike
+    --page-size, this is a correctness fix, not just an optimization --
+    confirmed on Virtu, whose unfiltered listing silently scopes itself to
+    the current year rather than "All".
+
+    Deliberately NOT special-cased into "skip the binary search, this is
+    already filtered": whether the widget's ``_year[value]`` param is
+    actually honored server-side varies by site even when the widget
+    itself is present and lists the right year as an option -- confirmed
+    on Skyworks, whose Year <select> is real and submittable exactly like
+    Virtu's, but whose listing silently returns its full, unfiltered
+    reverse-chronological archive regardless of the value submitted (only
+    its Items Per Page param is actually honored). The binary search below
+    doesn't assume either way: it reads whatever dates are actually on
+    each fetched page, so it stays correct (just doing a few harmless
+    extra probes) whether or not the year param this function adds ends up
+    doing anything -- unlike a hardcoded "trust the widget" shortcut,
+    which would silently walk the entire unfiltered archive as if it were
+    already narrowed, and misreport that in its own log line.
     """
-    if page_size:
-        size_params = resolve_page_size_params(
-            base_url, page_size, timeout, session,
+    probe_html: Optional[str] = None
+    if page_size or years:
+        probe_html = probe_listing_page(
+            base_url, timeout, session,
             news_releases_path=news_releases_path, first_page_index=first_page_index,
         )
+
+    if page_size:
+        size_params = resolve_page_size_from_html(probe_html or "", page_size)
         if size_params:
             extra_params = {**(extra_params or {}), **size_params}
+
+    year_widget_params = resolve_year_filter_from_html(probe_html, years)
+    if year_widget_params:
+        extra_params = {**(extra_params or {}), **year_widget_params}
 
     if years:
         # Step 1: fetch the first page to learn last_page.

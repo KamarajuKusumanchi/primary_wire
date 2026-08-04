@@ -339,6 +339,210 @@ def resolve_page_size_from_html(html: str, page_size: int) -> dict[str, str]:
 
 
 # ---------------------------------------------------------------------------
+# "Year" filter widget (server-side year filtering, when the site supports it)
+# ---------------------------------------------------------------------------
+#
+# The module docstring at the top of scrape_notified.py claims the Year
+# dropdown "reloads via a form POST that isn't reflected in the URL", so
+# year-filtering is always done client-side after scraping the full,
+# unfiltered (reverse-chronological) archive. That's true for most
+# Notified/Drupal sites tested so far (e.g. AbbVie, Skyworks) -- but not
+# all: some sites (confirmed on Virtu) expose this same Year dropdown as a
+# proper GET-method "Views exposed filter" widget, in the very same
+# <form method="get"> as the "Items Per Page" widget above (same
+# per-block hex-prefixed field-name convention, e.g.
+# "aac2c522...59015b_year[value]"), submittable via plain query params
+# exactly like --page-size is.
+#
+# Discovering and using this widget when present isn't just an
+# optimization the way --page-size is -- on a site like Virtu it's a
+# correctness fix. Virtu's <select>'s own default-selected <option> is NOT
+# "All" (value "_none"); it's the current year. So a plain, param-less
+# fetch of the listing page -- which is exactly what this script's normal
+# "no year filter" / binary-search-priming fetches do -- silently returns
+# only the current year's press releases, not full history. For a request
+# targeting a past year (e.g. --year 2025 fetched in 2026), every page the
+# binary search inspects is scoped to the wrong year, so it can only ever
+# find whatever *stray* past-year items happen to still be showing near
+# the current year/date boundary -- which is exactly the symptom that
+# prompted this: --year 2025 found only 1 stray item (a January 2026 post
+# discussing Q4 2025 results) instead of the 18 real 2025 releases.
+#
+# Like the Items Per Page widget, this is confirmed hands-on for one site
+# (Virtu) and not verified across the whole Notified/Drupal family, so it
+# is always discovered fresh from that run's own fetched HTML rather than
+# hardcoded, and callers must tolerate it being absent (the common case).
+
+YEAR_FILTER_NAME_RE = re.compile(r"^(?P<prefix>.+)_year\[value\]$")
+
+
+def discover_year_widget(html: str) -> Optional[dict]:
+    """Look for a "Year" filter <select> widget on a listing page.
+
+    Returns a dict with keys:
+      - "prefix": the widget's field-name prefix (same convention as
+        discover_page_size_widget() above; on sites that have both
+        widgets, e.g. Skyworks, they share one prefix -- both selects live
+        in the same widget-form-base form).
+      - "years": sorted list of int years the <select> offers.
+      - "has_none": whether the <select> also offers an explicit "All
+        years" option (value "_none") -- true on every site seen so far,
+        but checked rather than assumed.
+      - "default": the value Drupal has pre-selected -- an int year, or
+        "_none" if the "All" option is selected (or, as Drupal renders it
+        when no option carries an explicit `selected` attribute, if
+        nothing is marked selected at all; the first `<option>`, "All", is
+        then the browser's own implicit default, so absence of a
+        `selected` attribute is treated the same as "_none" is explicitly
+        selected). This is what lets a caller detect the Virtu case: a
+        plain fetch of this page is NOT "all years" whenever "default" is
+        an int rather than "_none".
+      - "form_id" / "form_build_id": values of the surrounding form's
+        matching hidden inputs, if present (may be None).
+
+    Returns None if no such widget is found on this page -- most
+    Notified/Drupal sites don't have one; callers fall back to full-archive
+    pagination with client-side year filtering (this script's original,
+    still-default behavior).
+    """
+    soup = BeautifulSoup(html, "lxml")
+    select = soup.find("select", attrs={"name": YEAR_FILTER_NAME_RE})
+    if select is None:
+        return None
+
+    m = YEAR_FILTER_NAME_RE.match(select["name"])
+    prefix = m.group("prefix")
+
+    years: list[int] = []
+    has_none = False
+    default: Any = "_none"
+    for opt in select.find_all("option"):
+        raw = (opt.get("value") or "").strip()
+        if raw == "_none":
+            has_none = True
+            if opt.has_attr("selected"):
+                default = "_none"
+            continue
+        try:
+            year = int(raw)
+        except (TypeError, ValueError):
+            continue
+        years.append(year)
+        if opt.has_attr("selected"):
+            default = year
+
+    if not years and not has_none:
+        return None
+
+    form = select.find_parent("form")
+    form_id = form_build_id = None
+    if form is not None:
+        fid_input = form.find("input", attrs={"name": "form_id"})
+        if fid_input is not None:
+            form_id = fid_input.get("value")
+        fbid_input = form.find("input", attrs={"name": "form_build_id"})
+        if fbid_input is not None:
+            form_build_id = fbid_input.get("value")
+
+    return {
+        "prefix": prefix,
+        "years": sorted(years),
+        "has_none": has_none,
+        "default": default,
+        "form_id": form_id,
+        "form_build_id": form_build_id,
+    }
+
+
+def year_filter_extra_params(widget: dict, year: "int | str") -> dict[str, str]:
+    """Build the extra query params that request a single ``year`` (an int
+    from ``widget["years"]``, or the string "_none" for "All") through a
+    Year filter widget discovered by discover_year_widget().
+
+    Mirrors page_size_extra_params()'s shape (same op/widget_id/form_id/
+    form_build_id fields) since it's the same underlying Drupal exposed-
+    filter form -- on a site with both widgets, merging this dict with
+    page_size_extra_params()'s is safe; the shared keys will just agree.
+    """
+    prefix = widget["prefix"]
+    params = {
+        f"{prefix}_year[value]": str(year),
+        "op": "Filter",
+        f"{prefix}_widget_id": prefix,
+    }
+    if widget.get("form_id"):
+        params["form_id"] = widget["form_id"]
+    if widget.get("form_build_id"):
+        params["form_build_id"] = widget["form_build_id"]
+    return params
+
+
+def resolve_year_filter_from_html(
+    html: Optional[str], target_years: Optional[set[int]]
+) -> dict[str, str]:
+    """Decide whether/how to force explicit server-side year filtering,
+    given one already-fetched listing page's HTML (or None if that fetch
+    failed) and the caller's target year(s). Returns extra query params to
+    merge in, or {} to mean "no change; use this script's normal
+    full-archive-pagination + client-side-filtering behavior".
+
+    Two cases actively use the widget (when found):
+
+      1. Exactly one target year is requested and the widget offers it:
+         request that year explicitly. The listing then only ever
+         contains that year's items, so full-archive pagination/binary
+         search is skipped in favor of just walking this (typically much
+         shorter) filtered result set -- see scrape()'s docstring.
+
+      2. Multiple/no target years, but the widget's own unfiltered default
+         is a specific year rather than "All" (see discover_year_widget()'s
+         "default" key): explicitly request "_none" ("All"), so the
+         "unfiltered" listing this script's own pagination logic then
+         walks is actually unfiltered. Without this, a site like Virtu
+         would silently limit even a *no-year-filter* run to whatever the
+         <select>'s default happens to be (typically the current year).
+
+    Falls back to {} (no-op) if ``html`` is None (the probe fetch itself
+    failed), if no Year filter widget is found at all, or if a single
+    requested year isn't one of the widget's own options and the widget's
+    own default is already "_none" (nothing to fix).
+    """
+    if html is None:
+        return {}
+
+    widget = discover_year_widget(html)
+    if widget is None:
+        return {}
+
+    if target_years and len(target_years) == 1:
+        (only_year,) = tuple(target_years)
+        if only_year in widget["years"]:
+            logger.info(
+                "Found Year filter widget (prefix %s...%s); requesting "
+                "year %d directly instead of paginating the full archive.",
+                widget["prefix"][:8], widget["prefix"][-4:], only_year,
+            )
+            return year_filter_extra_params(widget, only_year)
+        logger.debug(
+            "Year filter widget found but doesn't offer %d (offers: %s); "
+            "falling back to full-archive pagination + client-side "
+            "filtering.", only_year, widget["years"],
+        )
+
+    if widget.get("has_none") and widget.get("default") != "_none":
+        logger.info(
+            "Found Year filter widget (prefix %s...%s) whose unfiltered "
+            "default is year %s, not \"All\"; explicitly requesting "
+            "\"All\" years so full-archive pagination sees complete "
+            "history.",
+            widget["prefix"][:8], widget["prefix"][-4:], widget.get("default"),
+        )
+        return year_filter_extra_params(widget, "_none")
+
+    return {}
+
+
+# ---------------------------------------------------------------------------
 # Date/time extraction near a listing-page link
 # ---------------------------------------------------------------------------
 
