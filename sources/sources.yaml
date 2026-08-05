@@ -75,6 +75,10 @@ sources:
     name: Accenture plc
     ticker: ACN
     ir_url: https://investor.accenture.com/
+  - slug: adp
+    name: Automatic Data Processing, Inc.
+    ticker: ADP
+    ir_url: https://investors.adp.com/
   - slug: aflac
     name: AFLAC Incorporated
     ticker: AFL
@@ -165,6 +169,10 @@ sources:
     name: Arthur J. Gallagher & Co.
     ticker: AJG
     ir_url: https://investor.ajg.com/
+  - slug: assurant
+    name: Assurant, Inc.
+    ticker: AIZ
+    ir_url: https://ir.assurant.com/
   - slug: atmos-energy
     name: Atmos Energy Corporation
     ticker: ATO
@@ -362,6 +370,10 @@ sources:
     name: Datadog, Inc.
     ticker: DDOG
     ir_url: https://investors.datadoghq.com/
+  - slug: davita
+    name: DaVita Inc.
+    ticker: DVA
+    ir_url: https://investors.davita.com/
   - slug: deckers
     name: Deckers Outdoor Corporation
     ticker: DECK
@@ -379,6 +391,10 @@ sources:
     name: Delta Air Lines, Inc.
     ticker: DAL
     ir_url: https://ir.delta.com/
+  - slug: devon-energy
+    name: Devon Energy Corporation
+    ticker: DVN
+    ir_url: https://investors.devonenergy.com/
   - slug: dexcom
     name: DexCom, Inc.
     ticker: DXCM
@@ -387,6 +403,10 @@ sources:
     name: Digital Realty Trust, Inc.
     ticker: DLR
     ir_url: https://investor.digitalrealty.com/
+  - slug: disney
+    name: Walt Disney Company (The)
+    ticker: DIS
+    ir_url: https://investors.thewaltdisneycompany.com/
   - slug: dollar-tree
     name: Dollar Tree, Inc.
     ticker: DLTR
@@ -427,6 +447,10 @@ sources:
     name: Emerson Electric Co.
     ticker: EMR
     ir_url: https://ir.emerson.com/
+  - slug: eog-resources
+    name: EOG Resources, Inc.
+    ticker: EOG
+    ir_url: https://investors.eogresources.com/
   - slug: eqt
     name: EQT Corporation
     ticker: EQT
@@ -575,13 +599,21 @@ sources:
     ticker: HON
     ir_url: https://investor.honeywell.com/investor-relations
   - slug: hp
+    name: HP Inc.
+    ticker: HPQ
+    ir_url: https://investor.hp.com/
+  - slug: hpe
     name: Hewlett Packard Enterprise Company
     ticker: HPE
-    ir_url: https://investor.hp.com/
+    ir_url: https://investors.hpe.com/
   - slug: hubbell
     name: Hubbell Incorporated
     ticker: HUBB
     ir_url: https://investor.hubbell.com/
+  - slug: humana
+    name: Humana Inc.
+    ticker: HUM
+    ir_url: https://humana.gcs-web.com/
   - slug: ibm
     name: International Business Machines Corporation
     ticker: IBM
@@ -610,6 +642,10 @@ sources:
     name: Ingersoll Rand Inc.
     ticker: IR
     ir_url: https://investors.irco.com/
+  - slug: insulet
+    name: Insulet Corporation
+    ticker: PODD
+    ir_url: https://investor.insulet.com/
   - slug: intel
     name: Intel Corporation
     ticker: INTC
@@ -781,6 +817,10 @@ sources:
     ir_url: https://ir.netflix.net
     news_path: investor-news-and-events/financial-releases/{year}/default.aspx
     news_details_segment: press-release-details
+  - slug: newmont
+    name: Newmont Corporation
+    ticker: NEM
+    ir_url: https://www.newmont.com/investors/
   - slug: news-corp
     name: News Corporation
     ticker: NWSA
@@ -805,6 +845,10 @@ sources:
     name: O'Reilly Automotive, Inc.
     ticker: ORLY
     ir_url: https://corporate.oreillyauto.com/investor-relations-information/
+  - slug: omnicom
+    name: Omnicom Group Inc.
+    ticker: OMC
+    ir_url: https://investor.omc.com/
   - slug: onsemi
     name: ON Semiconductor Corporation
     ticker: "ON"
