@@ -145,6 +145,10 @@ sources:
     name: Applied Materials, Inc.
     ticker: AMAT
     ir_url: https://ir.appliedmaterials.com/
+  - slug: aptiv
+    name: Aptiv PLC
+    ticker: APTV
+    ir_url: https://ir.aptiv.com/
   - slug: archer-daniels-midland
     name: Archer-Daniels-Midland Company
     ticker: ADM
@@ -281,6 +285,10 @@ sources:
     name: CME Group Inc.
     ticker: CME
     ir_url: https://www.cmegroup.com/investor-relations.html
+  - slug: cms-energy
+    name: CMS Energy Corporation
+    ticker: CMS
+    ir_url: https://www.cmsenergy.com/investor-relations/
   - slug: cognizant
     name: Cognizant Technology Solutions Corporation
     ticker: CTSH
@@ -337,6 +345,10 @@ sources:
     name: Cummins Inc.
     ticker: CMI
     ir_url: https://investor.cummins.com/
+  - slug: cvs
+    name: CVS Health Corporation
+    ticker: CVS
+    ir_url: https://investors.cvshealth.com/
   - slug: danaher
     name: Danaher Corporation
     ticker: DHR
@@ -511,6 +523,10 @@ sources:
     name: Gen Digital Inc.
     ticker: GEN
     ir_url: https://investor.gendigital.com/
+  - slug: generac
+    name: Generac Holdings Inc.
+    ticker: GNRC
+    ir_url: https://investors.generac.com/
   - slug: genuine-parts
     name: Genuine Parts Company
     ticker: GPC
@@ -656,6 +672,10 @@ sources:
     name: Las Vegas Sands Corp.
     ticker: LVS
     ir_url: https://investor.sands.com/
+  - slug: leidos
+    name: Leidos Holdings, Inc.
+    ticker: LDOS
+    ir_url: https://investors.leidos.com/
   - slug: lennox
     name: Lennox International Inc.
     ticker: LII
@@ -710,6 +730,14 @@ sources:
     name: McCormick & Company, Incorporated
     ticker: MKC
     ir_url: https://ir.mccormick.com/
+  - slug: mcdonalds
+    name: McDonald's Corporation
+    ticker: MCD
+    ir_url: https://corporate.mcdonalds.com/corpmcd/investors.html
+  - slug: merck
+    name: Merck & Company, Inc.
+    ticker: MRK
+    ir_url: https://www.merck.com/investor-relations/
   - slug: meta
     name: Meta Platforms, Inc.
     ticker: META
@@ -765,6 +793,10 @@ sources:
     name: Norwegian Cruise Line Holdings Ltd.
     ticker: NCLH
     ir_url: https://www.nclhltd.com/investors
+  - slug: nrg
+    name: NRG Energy, Inc.
+    ticker: NRG
+    ir_url: https://investors.nrg.com/
   - slug: nvidia
     name: NVIDIA Corporation
     ticker: NVDA
@@ -968,6 +1000,10 @@ sources:
     name: Uber Technologies, Inc.
     ticker: UBER
     ir_url: https://investor.uber.com/
+  - slug: ulta
+    name: Ulta Beauty, Inc.
+    ticker: ULTA
+    ir_url: https://www.ulta.com/investor
   - slug: united-airlines
     name: United Airlines Holdings, Inc.
     ticker: UAL
@@ -1006,6 +1042,10 @@ sources:
     name: Visa Inc.
     ticker: V
     ir_url: https://investor.visa.com/
+  - slug: vistra
+    name: Vistra Corp.
+    ticker: VST
+    ir_url: https://investor.vistracorp.com/
   - slug: wabtec
     name: Westinghouse Air Brake Technologies Corporation
     ticker: WAB
