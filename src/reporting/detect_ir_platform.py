@@ -115,6 +115,13 @@ Usage
   # Custom sources file
   python src/reporting/detect_ir_platform.py --all --sources /path/to/sources.yaml
 
+  # Dump the raw fetched HTML alongside the normal CSV output, for a site
+  # this script gets wrong (or isn't in sources.yaml at all yet) -- hand
+  # the file to someone else to eyeball the markup by hand:
+  python src/reporting/detect_ir_platform.py \
+      --url https://investors.palantir.com/news \
+      --debug-dump-html palantir.html
+
   # Redirect-friendly: output is CSV, no ANSI
   python src/reporting/detect_ir_platform.py --all > platforms.csv
 
@@ -704,6 +711,7 @@ def detect_platform_from_html(
 def detect_platform(
     ir_url: str, session, timeout: int, slug: str = "",
     news_path: str = "", news_details_segment: str = "",
+    debug_dump_html: Optional[Path] = None,
 ) -> str:
     """Fetch *ir_url* (or its news_path sub-page, if given) and return the
     detected platform name.
@@ -734,6 +742,17 @@ def detect_platform(
     there's no content-based signal for "gated" yet, so this is a manual
     override keyed by slug rather than something detect_platform_from_html
     can determine from the page alone).
+
+    *debug_dump_html*, if given, saves the raw fetched HTML to that path
+    (creating parent directories as needed) before classification, mirroring
+    every scraper's own --debug-dump-html flag (scrape_q4_ir.py,
+    scrape_investis.py, scrape_investorroom.py, scrape_notified.py,
+    scrape_notified_gated.py, scrape_aem.py). Useful for sites this script
+    gets wrong (or a site not yet in sources.yaml at all, via --url): dump
+    the page as fetched here -- same session/impersonation/redirect handling
+    as the real detection run -- and hand the file to someone else to
+    eyeball the markup by hand. Nothing is dumped on a failed fetch, since
+    there's no HTML yet at that point.
     """
     if not ir_url:
         return PLATFORM_UNKNOWN
@@ -742,6 +761,10 @@ def detect_platform(
         final_url, html = fetch_html(fetch_url, session, timeout=timeout)
         if final_url != fetch_url:
             logger.debug("Redirected: %s → %s", fetch_url, final_url)
+        if debug_dump_html:
+            debug_dump_html.parent.mkdir(parents=True, exist_ok=True)
+            debug_dump_html.write_text(html, encoding="utf-8")
+            logger.info("Saved HTML to %s", debug_dump_html)
         platform = detect_platform_from_html(
             html, news_details_segment=news_details_segment, news_path=news_path,
         )
@@ -1084,6 +1107,15 @@ def build_arg_parser() -> argparse.ArgumentParser:
         help="Per-request HTTP timeout in seconds (default: 20).",
     )
     parser.add_argument(
+        "--debug-dump-html", type=Path, default=None, metavar="PATH",
+        help="Save the raw fetched HTML for a single-target lookup "
+             "(--slug/--ticker/--url) to PATH, in addition to the normal "
+             "CSV output -- e.g. to hand the page to someone else for a "
+             "manual look. Same shared flag name as every scraper's own "
+             "--debug-dump-html. Ignored (with a warning) under --all, "
+             "since that mode fetches many pages, not one.",
+    )
+    parser.add_argument(
         "-v", "--verbose", action="store_true",
         help="Enable DEBUG logging (shows which signals fired).",
     )
@@ -1131,6 +1163,12 @@ def main(argv: Optional[list[str]] = None) -> int:
 
     # --all: parallel detection across every row
     if args.all:
+        if args.debug_dump_html:
+            print(
+                "warning: --debug-dump-html is ignored with --all "
+                "(only single-target --slug/--ticker/--url lookups support it)",
+                file=sys.stderr,
+            )
         result = detect_platforms_parallel(df, workers=args.workers, timeout=args.timeout)
         # Compare against config/scraper_config.yaml BEFORE printing the CSV,
         # and report any mismatches on stderr, not stdout -- tasks.py's
@@ -1177,6 +1215,7 @@ def main(argv: Optional[list[str]] = None) -> int:
         platform = detect_platform(
             scrape_url, session, timeout=args.timeout, slug=slug,
             news_path=news_path, news_details_segment=news_details_segment,
+            debug_dump_html=args.debug_dump_html,
         )
     # Report the full listing URL now that the platform is known -- e.g.
     # https://news.lockheedmartin.com/news-releases?category=788 rather
