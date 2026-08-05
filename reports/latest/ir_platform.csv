@@ -18,6 +18,7 @@ apa,APA,notified,https://investor.apacorp.com/news-releases
 apollo,APO,notified,https://ir.apollo.com/news-events/press-releases
 apple,AAPL,unknown,https://investor.apple.com/
 applied-materials,AMAT,notified,https://ir.appliedmaterials.com/news-releases
+aptiv,APTV,q4,https://ir.aptiv.com/news/default.aspx
 archer-daniels-midland,ADM,q4,https://www.investors.adm.com/news/default.aspx
 ares,ARES,unknown,https://ir.ares.com/
 arista-networks,ANET,unknown,https://investors.arista.com/
@@ -50,6 +51,7 @@ cigna,CI,unknown,https://investors.thecignagroup.com/
 cinfin,CINF,investorroom,https://investors.cinfin.com/news-releases
 cintas,CTAS,unknown,https://www.cintas.com/investors/
 cme,CME,aem,https://www.cmegroup.com/investor-relations.html
+cms-energy,CMS,notified,https://www.cmsenergy.com/investor-relations/news-releases
 cognizant,CTSH,q4,https://investors.cognizant.com/news/default.aspx
 coherent,COHR,aem,https://www.coherent.com/company/investor-relations
 coinbase,COIN,q4,https://investor.coinbase.com/news/default.aspx
@@ -63,6 +65,7 @@ criver,CRL,notified,https://ir.criver.com/news-releases
 crowdstrike,CRWD,notified,https://ir.crowdstrike.com/press-releases
 crown-castle,CCI,notified,https://investor.crowncastle.com/news-releases
 cummins,CMI,unknown,https://investor.cummins.com/
+cvs,CVS,q4,https://investors.cvshealth.com/news/default.aspx
 danaher,DHR,investorroom,https://investors.danaher.com/press-releases
 darden-restaurants,DRI,q4,https://investor.darden.com/news/default.aspx
 datadog,DDOG,notified,https://investors.datadoghq.com/news-releases
@@ -105,6 +108,7 @@ gartner,IT,notified,https://investor.gartner.com/news-releases
 ge-healthcare,GEHC,notified,https://investor.gehealthcare.com/news-releases
 ge-vernova,GEV,notified,https://www.gevernova.com/investors/news/media-hub?tag=Investor+Relations&type[press_release]=press_release
 gen-digital,GEN,q4,https://investor.gendigital.com/news/default.aspx
+generac,GNRC,notified,https://investors.generac.com/news-releases
 genuine-parts,GPC,investorroom,https://www.genpt.com/overview/press-releases
 gilead,GILD,q4,https://investors.gilead.com/news/default.aspx
 global-payments,GPN,notified,https://investors.globalpayments.com/news-events/press-releases
@@ -138,6 +142,7 @@ kla,KLAC,notified,https://ir.kla.com/news-releases
 l3harris,LHX,unknown,https://investors.l3harris.com/
 lam-research,LRCX,investorroom,https://newsroom.lamresearch.com/press-releases
 las-vegas-sands,LVS,q4,https://investor.sands.com/news/default.aspx
+leidos,LDOS,notified,https://investors.leidos.com/news-releases
 lennox,LII,notified,https://investor.lennox.com/news-releases
 linde,LIN,unknown,https://www.linde.com/investors
 lockheed-martin,LMT,investorroom,https://news.lockheedmartin.com/news-releases?category=788
@@ -149,6 +154,8 @@ martin-marietta,MLM,unknown,https://www.martinmarietta.com/investor-relations
 marvell,MRVL,notified,https://investor.marvell.com/news-releases
 masco,MAS,unknown,https://investor.masco.com/
 mccormick,MKC,notified,https://ir.mccormick.com/news-releases
+mcdonalds,MCD,aem,https://corporate.mcdonalds.com/corpmcd/investors.html
+merck,MRK,unknown,https://www.merck.com/investor-relations/
 meta,META,q4,https://investor.atmeta.com/home/default.aspx/news/default.aspx
 micron,MU,notified,https://investors.micron.com/news-releases
 microsoft,MSFT,unknown,https://news.microsoft.com/source/tag/investor-relations/
@@ -162,6 +169,7 @@ netflix,NFLX,q4,https://ir.netflix.net/investor-news-and-events/financial-releas
 news-corp,NWSA,notified,https://investors.newscorp.com/news-releases
 nike,NKE,unknown,https://investors.nike.com/
 norwegian-cruise-line,NCLH,notified,https://www.nclhltd.com/investors/news-releases
+nrg,NRG,notified,https://investors.nrg.com/news-releases
 nvidia,NVDA,aem,https://investor.nvidia.com/news/press-releases/default.aspx
 o-reilly-auto-parts,ORLY,unknown,https://corporate.oreillyauto.com/investor-relations-information/
 onsemi,ON,notified,https://investor.onsemi.com/news-releases
@@ -210,6 +218,7 @@ tractor-supply,TSCO,unknown,https://ir.tractorsupply.com/
 travelers,TRV,q4,https://investor.travelers.com/newsroom/press-releases/default.aspx
 tyler-tech,TYL,q4,https://investors.tylertech.com/news/default.aspx
 uber,UBER,unknown,https://investor.uber.com/
+ulta,ULTA,notified,https://www.ulta.com/investor/news-releases
 united-airlines,UAL,notified,https://ir.united.com/news-releases
 united-rentals,URI,q4,https://investor-relations.unitedrentals.com/press-releases/default.aspx
 universal-health-services,UHS,notified,https://ir.uhs.com/news-releases
@@ -219,6 +228,7 @@ vertex-pharmaceuticals,VRTX,notified,https://investors.vrtx.com/news-releases
 vertiv,VRT,q4,https://investors.vertiv.com/news/default.aspx
 virtu,VIRT,notified,https://ir.virtu.com/press-releases
 visa,V,q4,https://investor.visa.com/news/default.aspx
+vistra,VST,investorroom,https://investor.vistracorp.com/news-releases
 wabtec,WAB,notified,https://ir.wabteccorp.com/news-releases
 warner-bros-discovery,WBD,q4,https://ir.wbd.com/news/default.aspx
 western-digital,WDC,notified,https://investor.wdc.com/news-releases
