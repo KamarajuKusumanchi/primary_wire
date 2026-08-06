@@ -149,6 +149,10 @@ sources:
     name: Applied Materials, Inc.
     ticker: AMAT
     ir_url: https://ir.appliedmaterials.com/
+  - slug: applovin
+    name: AppLovin Corporation
+    ticker: APP
+    ir_url: https://investors.applovin.com/
   - slug: aptiv
     name: Aptiv PLC
     ticker: APTV
@@ -289,6 +293,10 @@ sources:
     name: Cintas Corporation
     ticker: CTAS
     ir_url: https://www.cintas.com/investors/
+  - slug: cisco
+    name: Cisco Systems, Inc.
+    ticker: CSCO
+    ir_url: https://investor.cisco.com/
   - slug: cme
     name: CME Group Inc.
     ticker: CME
@@ -471,6 +479,10 @@ sources:
     name: Expedia Group, Inc.
     ticker: EXPE
     ir_url: https://ir.expediagroup.com/
+  - slug: extra-space
+    name: Extra Space Storage Inc.
+    ticker: EXR
+    ir_url: https://ir.extraspace.com/
   - slug: exxonmobil
     name: ExxonMobil Holdings Corporation
     ticker: XOM
@@ -678,6 +690,10 @@ sources:
     name: J.B. Hunt Transport Services, Inc.
     ticker: JBHT
     ir_url: https://investor.jbhunt.com/
+  - slug: jp-morgan-chase
+    name: JP Morgan Chase & Co.
+    ticker: JPM
+    ir_url: https://www.jpmorganchase.com/ir
   - slug: keycorp
     name: KeyCorp
     ticker: KEY
@@ -698,6 +714,10 @@ sources:
     name: L3Harris Technologies, Inc.
     ticker: LHX
     ir_url: https://investors.l3harris.com/
+  - slug: labcorp
+    name: Labcorp Holdings Inc.
+    ticker: LH
+    ir_url: https://ir.labcorp.com/
   - slug: lam-research
     name: Lam Research Corporation
     ticker: LRCX
@@ -803,6 +823,10 @@ sources:
     name: Morgan Stanley
     ticker: MS
     ir_url: https://www.morganstanley.com/about-us-ir
+  - slug: motorola-solutions
+    name: Motorola Solutions, Inc.
+    ticker: MSI
+    ir_url: https://www.motorolasolutions.com/investors.html
   - slug: msci
     name: MSCI Inc.
     ticker: MSCI
@@ -845,6 +869,10 @@ sources:
     name: O'Reilly Automotive, Inc.
     ticker: ORLY
     ir_url: https://corporate.oreillyauto.com/investor-relations-information/
+  - slug: occidental-petroleum
+    name: Occidental Petroleum Corporation
+    ticker: OXY
+    ir_url: https://www.oxy.com/investors/
   - slug: omnicom
     name: Omnicom Group Inc.
     ticker: OMC
@@ -857,6 +885,10 @@ sources:
     name: Oracle Corporation
     ticker: ORCL
     ir_url: https://investor.oracle.com/
+  - slug: paccar
+    name: PACCAR Inc
+    ticker: PCAR
+    ir_url: https://investors.paccar.com/
   - slug: packaging-corp
     name: Packaging Corporation of America
     ticker: PKG
@@ -870,6 +902,10 @@ sources:
     ticker: PSKY
     ir_url: https://ir.paramount.com/
     news_releases_path: press-releases
+  - slug: parker
+    name: Parker-Hannifin Corporation
+    ticker: PH
+    ir_url: https://investors.parker.com/
   - slug: paypal
     name: PayPal Holdings, Inc.
     ticker: PYPL
@@ -896,6 +932,10 @@ sources:
     ir_url: https://ir.questdiagnostics.com/
     news_path: press-releases/default.aspx
     news_details_segment: press-release-details
+  - slug: revvity
+    name: Revvity, Inc.
+    ticker: RVTY
+    ir_url: https://ir.revvity.com/
   - slug: robinhood
     name: Robinhood Markets, Inc.
     ticker: HOOD
@@ -1061,6 +1101,10 @@ sources:
     name: Universal Health Services, Inc.
     ticker: UHS
     ir_url: https://ir.uhs.com/
+  - slug: ventas
+    name: Ventas, Inc.
+    ticker: VTR
+    ir_url: https://ir.ventasreit.com/
   - slug: verisign
     name: VeriSign, Inc.
     ticker: VRSN
