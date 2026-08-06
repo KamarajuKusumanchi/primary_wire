@@ -75,7 +75,6 @@ Missing tickers:
   DPZ
   DTE
   DUK
-  EA
   ECHO
   ED
   EG
@@ -95,6 +94,7 @@ Missing tickers:
   FAST
   FCX
   FE
+  FERG
   FISV
   FITB
   FIX
