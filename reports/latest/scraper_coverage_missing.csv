@@ -15,6 +15,7 @@ analog-devices,ADI,notified,https://investor.analog.com/press-releases
 apa,APA,notified,https://investor.apacorp.com/news-releases
 apple,AAPL,unknown,https://investor.apple.com/
 applied-materials,AMAT,notified,https://ir.appliedmaterials.com/news-releases
+applovin,APP,q4,https://investors.applovin.com/news/default.aspx
 aptiv,APTV,q4,https://ir.aptiv.com/news/default.aspx
 archer-daniels-midland,ADM,q4,https://www.investors.adm.com/news/default.aspx
 ares,ARES,unknown,https://ir.ares.com/
@@ -41,6 +42,7 @@ ciena,CIEN,q4,https://investor.ciena.com/news/default.aspx
 cigna,CI,unknown,https://investors.thecignagroup.com/
 cinfin,CINF,investorroom,https://investors.cinfin.com/news-releases
 cintas,CTAS,unknown,https://www.cintas.com/investors/
+cisco,CSCO,q4,https://investor.cisco.com/news/default.aspx
 cme,CME,aem,https://www.cmegroup.com/investor-relations.html
 cms-energy,CMS,notified,https://www.cmsenergy.com/investor-relations/news-releases
 cognizant,CTSH,q4,https://investors.cognizant.com/news/default.aspx
@@ -80,6 +82,7 @@ equifax,EFX,notified,https://investor.equifax.com/news-releases
 erie-indemnity,ERIE,unknown,https://www.erieinsurance.com/investors
 exelon,EXC,notified,https://investors.exeloncorp.com/news-releases
 expedia,EXPE,q4,https://ir.expediagroup.com/news/default.aspx
+extra-space,EXR,q4,https://ir.extraspace.com/news/default.aspx
 exxonmobil,XOM,notified,https://investor.exxonmobil.com/news-releases
 f5,FFIV,q4,https://investors.f5.com/news/default.aspx
 factset,FDS,notified,https://investor.factset.com/news-releases
@@ -121,11 +124,13 @@ intuitive-surgical,ISRG,notified,https://isrg.intuitive.com/news-releases
 iqvia,IQV,unknown,https://ir.iqvia.com/
 j-m-smucker,SJM,q4,https://investors.jmsmucker.com/news/default.aspx
 jb-hunt,JBHT,investis,https://investor.jbhunt.com/news-releases
+jp-morgan-chase,JPM,aem,https://www.jpmorganchase.com/ir
 keycorp,KEY,unknown,https://investor.key.com/
 kimco-realty,KIM,unknown,https://investors.kimcorealty.com/
 kkr,KKR,unknown,https://ir.kkr.com/
 kla,KLAC,notified,https://ir.kla.com/news-releases
 l3harris,LHX,unknown,https://investors.l3harris.com/
+labcorp,LH,notified,https://ir.labcorp.com/news-releases
 las-vegas-sands,LVS,q4,https://investor.sands.com/news/default.aspx
 leidos,LDOS,notified,https://investors.leidos.com/news-releases
 lennox,LII,notified,https://investor.lennox.com/news-releases
@@ -145,6 +150,7 @@ microsoft,MSFT,unknown,https://news.microsoft.com/source/tag/investor-relations/
 moderna,MRNA,unknown,https://investors.modernatx.com/
 monolithic-power,MPWR,unknown,https://www.monolithicpower.com/en/about-mps/investor-relations.html
 morgan-stanley,MS,aem,https://www.morganstanley.com/about-us-ir
+motorola-solutions,MSI,aem,https://www.motorolasolutions.com/investors.html
 msci,MSCI,notified,https://ir.msci.com/news-releases
 newmont,NEM,unknown,https://www.newmont.com/investors/
 news-corp,NWSA,notified,https://investors.newscorp.com/news-releases
@@ -153,16 +159,20 @@ norwegian-cruise-line,NCLH,notified,https://www.nclhltd.com/investors/news-relea
 nrg,NRG,notified,https://investors.nrg.com/news-releases
 nvidia,NVDA,aem,https://investor.nvidia.com/news/press-releases/default.aspx
 o-reilly-auto-parts,ORLY,unknown,https://corporate.oreillyauto.com/investor-relations-information/
+occidental-petroleum,OXY,unknown,https://www.oxy.com/investors/
 omnicom,OMC,q4,https://investor.omc.com/news/default.aspx
 onsemi,ON,notified,https://investor.onsemi.com/news-releases
 oracle,ORCL,q4,https://investor.oracle.com/news/default.aspx
+paccar,PCAR,q4,https://investors.paccar.com/news/default.aspx
 packaging-corp,PKG,notified,https://ir.packagingcorp.com/news-releases
 palantir,PLTR,unknown,https://investors.palantir.com/
+parker,PH,notified,https://investors.parker.com/news-releases
 paypal,PYPL,q4,https://investor.pypl.com/news/default.aspx
 pepsi,PEP,unknown,https://www.pepsico.com/investors
 ptc,PTC,q4,https://investor.ptc.com/news/default.aspx
 qualcomm,QCOM,unknown,https://investor.qualcomm.com/
 quanta-services,PWR,notified,https://investors.quantaservices.com/news-releases
+revvity,RVTY,q4,https://ir.revvity.com/news/default.aspx
 rollins,ROL,notified,https://www.rollins.com/investors/news-releases
 ross-stores,ROST,notified,https://investors.rossstores.com/news-releases
 royal-caribbean,RCL,investorroom,https://www.rclinvestor.com/news-releases
@@ -193,6 +203,7 @@ ulta,ULTA,notified,https://www.ulta.com/investor/news-releases
 united-airlines,UAL,notified,https://ir.united.com/news-releases
 united-rentals,URI,q4,https://investor-relations.unitedrentals.com/press-releases/default.aspx
 universal-health-services,UHS,notified,https://ir.uhs.com/news-releases
+ventas,VTR,investis,https://ir.ventasreit.com/news-releases
 verisign,VRSN,notified,https://investor.verisign.com/news-releases
 verizon,VZ,notified,https://www.verizon.com/about/investors/news-releases
 vertex-pharmaceuticals,VRTX,notified,https://investors.vrtx.com/news-releases
