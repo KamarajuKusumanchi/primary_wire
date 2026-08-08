@@ -66,6 +66,13 @@ _MONTH_NAMES = (
 DATE_PATTERNS: list[tuple[re.Pattern, list[str]]] = [
     # "Jun 18, 2026" / "June 18, 2026"
     (re.compile(rf"\b(?:{_MONTH_NAMES})\.?\s+\d{{1,2}},\s*\d{{4}}\b"), ["%b %d, %Y", "%B %d, %Y"]),
+    # "18 Jun, 2026" / "18 June 2026" -- day-first dateline order, e.g.
+    # CME Group's press-releases listing (cmegroup.com, ".cmeBrowseAllDate"
+    # cards read "6 August, 2026" rather than BNY-style "August 6, 2026").
+    # Comma is optional since day-first datelines are seen both ways.
+    (re.compile(rf"\b\d{{1,2}}\s+(?:{_MONTH_NAMES})\.?,?\s*\d{{4}}\b"), [
+        "%d %b, %Y", "%d %B, %Y", "%d %b %Y", "%d %B %Y",
+    ]),
     # "06/18/2026"
     (re.compile(r"\b\d{1,2}/\d{1,2}/\d{4}\b"), ["%m/%d/%Y"]),
     # "2026-06-18"

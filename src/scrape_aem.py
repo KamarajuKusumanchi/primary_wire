@@ -36,6 +36,38 @@ Page structure (BNY)
      reliable and cheaper than paginating through the entire unfiltered
      history and filtering client-side -- see _try_select_year().
 
+Page structure (CME Group)
+---------------------------
+  1. Not an Adobe Core Components site at all under the hood -- CME's own
+     "cme*"-prefixed widget classes on top of AEM. Each press-release card
+     is `<li><div class="vcard column"><div class="vcard content">
+     <div class="cmeBrowseAllLeft"><p class="cmeBrowseAllTitle"><a
+     href="...">headline</a></p><p class="cmeBrowseAllDate">6 August,
+     2026</p></div></div></div></li>`, with every card an `<li>` directly
+     under `<ul id="cmeSearchFilterResults">`. ITEM_SELECTOR_CASCADE
+     matches on that id directly since a bare "li" would false-positive on
+     nav menus elsewhere on the page.
+  2. The dateline text is day-first ("6 August, 2026", not "August 6,
+     2026") -- DATE_PATTERNS in utils/scrape_utils.py has a dedicated
+     pattern for this order; don't assume every AEM/press-release theme
+     uses the US month-first convention BNY's does.
+  3. Pagination is a jQuery "bootpag" widget (`<ul class="pagination
+     bootpag">` of `<li data-lp="N"><a href="javascript:void(0);">...`),
+     with the "next" control being `<li class="next">` -- no aria-label,
+     no rel="next", and its accessible name ("Next \u203a") doesn't match a
+     bare "next" or "\u203a", so it needed its own entry in
+     _click_pagination_next()'s selector cascade.
+  4. No working in-page year filter was found -- there's a free-text
+     date-range picker (`input[name=start]`/`input[name=end]`), but it's a
+     JS-driven calendar widget, not a plain text field, and automating it
+     reliably without being able to test live against the site wasn't
+     attempted. So CME always falls back to the unfiltered paginate-and-
+     filter-client-side path -- see render_and_parse_year_pass()'s early-
+     stop-once-past-the-target-year logic, which makes that fallback both
+     correct (it won't stop before reaching the requested year) and cheap
+     (it won't keep paginating long after it has), independent of
+     --max-load-more.
+
 If BNY's markup changes, or another AEM site's differs, --item-selector
 overrides the selector cascade without touching code. Re-run with
 --show-browser --debug-dump-html to inspect the current rendered page
@@ -141,7 +173,12 @@ except ImportError:
     sys.exit("Missing dependency. Install with: pip install beautifulsoup4 lxml")
 
 try:
-    from playwright.sync_api import Page, TimeoutError as PlaywrightTimeoutError, sync_playwright
+    from playwright.sync_api import (
+        Error as PlaywrightError,
+        Page,
+        TimeoutError as PlaywrightTimeoutError,
+        sync_playwright,
+    )
 except ImportError:
     sys.exit("Missing dependency. Install with: pip install playwright")
 
@@ -171,14 +208,17 @@ logger = logging.getLogger("scrape_aem")
 
 # Tried as one combined CSS selector (BeautifulSoup .select() / Playwright
 # locator both accept a comma-separated list and match any of them). Ordered
-# roughly most-specific-and-most-likely-correct first:
+# most-specific-and-most-likely-correct first:
 #
-#   1. Adobe Core Components' documented "List" component BEM classes.
-#   2. Adobe Core Components' documented "Teaser" component BEM classes.
-#   3. Generic "search result" class names used by AEM search/faceted-search
-#      widgets (the pattern BNY's press-releases page appears to use, based
-#      on the static-shell facet labels observed -- see module docstring).
-#   4. Bare <article> -- a common semantic wrapper for a single result card
+#   1. BNY's own bespoke card widget (see module docstring's "Page structure
+#      (BNY)" section).
+#   2. CME's own bespoke card widget (see module docstring's "Page structure
+#      (CME Group)" section).
+#   3. Adobe Core Components' documented "List" component BEM classes.
+#   4. Adobe Core Components' documented "Teaser" component BEM classes.
+#   5. Generic "search result" class names used by AEM search/faceted-search
+#      widgets.
+#   6. Bare <article> -- a common semantic wrapper for a single result card
 #      regardless of the specific component library on top of it.
 #
 # Each entry here is a *container* selector (the card), not the link itself
@@ -188,6 +228,7 @@ logger = logging.getLogger("scrape_aem")
 # or <h3>, as several IR-platform themes elsewhere in this repo do.
 ITEM_SELECTOR_CASCADE: list[str] = [
     ".list-item-tile",  # BNY's press-release card -- see module docstring
+    "#cmeSearchFilterResults > li",  # CME's press-release card -- see module docstring
     ".cmp-list__item",
     ".cmp-teaser",
     "article.cmp-teaser",
@@ -207,6 +248,7 @@ DEFAULT_ITEM_SELECTOR = ", ".join(ITEM_SELECTOR_CASCADE)
 ITEM_DATE_SELECTORS: list[str] = [
     "time",
     ".list-item-header__date",  # BNY's dateline element -- see module docstring
+    ".cmeBrowseAllDate",  # CME's dateline element -- see module docstring
     ".cmp-list__item-date",
     ".cmp-teaser__date",
     ".cmp-search__item-date",
@@ -242,6 +284,15 @@ NAV_EXCLUDE_PATHS = frozenset({
     "corporate/global/en/insights.html",
 })
 MIN_HEADLINE_TITLE_LEN = 20  # chars; a real press-release title clears this, a nav label doesn't
+
+# Safety ceiling for render_and_parse_year_pass()'s early-stop-once-past-
+# the-target-year fallback (see its docstring) -- only ever raises the
+# effective page-count cap above whatever --max-load-more already says, and
+# only for the specific case of a year filter that couldn't be applied
+# in-page. Exists purely to bound a request for a year the site has no
+# releases for at all; a real target year always stops well before this via
+# the date check, regardless of the site's total history length.
+_UNFILTERED_YEAR_HUNT_SAFETY_CAP = 300
 
 
 # ---------------------------------------------------------------------------
@@ -410,20 +461,98 @@ def is_confirmed_heuristic_item(title: str, card_date: Optional[date]) -> bool:
 # Browser helpers
 # ---------------------------------------------------------------------------
 
+# A plain, current desktop Chrome UA string. Playwright's own default UA in
+# headless mode is normally fine (modern "headless=new" Chromium no longer
+# advertises "HeadlessChrome/"), but we pin an explicit one anyway so the
+# browser's UA, its Client-Hints headers, and its actual rendering behavior
+# all agree with each other -- bot-mitigation CDNs like Akamai cross-check
+# these against one another, and any mismatch is itself a signal.
+_DESKTOP_CHROME_UA = (
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+    "(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
+)
+
+# Patched into every page before any site JS runs. navigator.webdriver=true
+# is the single most common automation tell that bot-mitigation scripts
+# check for -- Playwright (like Selenium/Puppeteer) sets it because it drives
+# the browser over CDP. Clearing it doesn't make the browser un-automated,
+# but it removes the cheapest, most widely-used detection signal.
+_STEALTH_INIT_SCRIPT = """
+Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
+"""
+
+
 def _launch_browser(p, headless: bool, browser_channel: str, timeout_ms: int):
     """Launch a Chromium browser and return a configured Page.
 
     Same pattern as scrape_q4_ir.py's _launch_browser(): extracted to avoid
     duplicating the launch/configure block across render_listing_page() and
     fetch_missing_dates().
+
+    cmegroup.com (and presumably other AEM sites behind the same class of
+    CDN) runs Akamai Bot Manager in front of this page. Getting past it in
+    headless mode takes more than just "launch Chromium and go":
+      1. --disable-http2: without this, the very first navigation fails
+         outright with net::ERR_HTTP2_PROTOCOL_ERROR -- Akamai's HTTP/2
+         fingerprint check RSTs the stream before any HTML comes back.
+      2. --disable-blink-features=AutomationControlled: removes one of the
+         standard CDP-automation tells from the renderer.
+      3. A real desktop UA + matching viewport/locale/timezone/headers, and
+         patching navigator.webdriver via an init script: with HTTP/2 out of
+         the way, an unconfigured automated browser doesn't get RST anymore,
+         it just gets silently stalled (hangs past the goto timeout) --
+         Akamai's JS challenge either never resolves or the response is
+         withheld. Looking as close to a normal desktop Chrome session as
+         possible is what gets a response back at all.
+    None of this guarantees headless will get through -- if it still doesn't,
+    --show-browser / --fallback-to-visible is the documented fallback (see
+    scrape_and_filter()).
     """
-    launch_kwargs: dict = {"headless": headless}
+    launch_kwargs: dict = {
+        "headless": headless,
+        "args": ["--disable-http2", "--disable-blink-features=AutomationControlled"],
+    }
     if browser_channel:
         launch_kwargs["channel"] = browser_channel
     browser = p.chromium.launch(**launch_kwargs)
-    page = browser.new_page()
+    context = browser.new_context(
+        user_agent=_DESKTOP_CHROME_UA,
+        viewport={"width": 1920, "height": 1080},
+        locale="en-US",
+        timezone_id="America/New_York",
+        extra_http_headers={"Accept-Language": "en-US,en;q=0.9"},
+    )
+    context.add_init_script(_STEALTH_INIT_SCRIPT)
+    page = context.new_page()
     page.set_default_timeout(timeout_ms)
     return browser, page
+
+
+def _goto_with_retry(page: Page, url: str, timeout_ms: int, *, retries: int = 2) -> None:
+    """page.goto() with a couple of retries on transient network-level
+    failures (net::ERR_* -- connection resets, protocol errors, etc.), as
+    opposed to PlaywrightTimeoutError which already gets its own handling
+    elsewhere. Bot-mitigation CDNs occasionally drop the very first
+    connection attempt from a fresh browser context even once HTTP/2 is
+    disabled (see _launch_browser()), so a bare retry with a short pause
+    clears most of these without needing a whole new browser instance.
+    """
+    last_error: Optional[PlaywrightError] = None
+    for attempt in range(1, retries + 2):
+        try:
+            page.goto(url, wait_until="domcontentloaded", timeout=timeout_ms)
+            return
+        except PlaywrightTimeoutError:
+            raise
+        except PlaywrightError as exc:
+            last_error = exc
+            logger.warning(
+                "Navigation to %s failed (attempt %d/%d): %s", url, attempt, retries + 1, exc,
+            )
+            if attempt <= retries:
+                time.sleep(2.0)
+    assert last_error is not None
+    raise last_error
 
 
 def _current_item_hrefs(page: Page, item_selector: str) -> set[str]:
@@ -518,9 +647,16 @@ def _click_pagination_next(page: Page, timeout_ms: int) -> bool:
          non-semantic control. `:not(.disabled)` skips it once BNY's own
          widget marks it spent (the left arrow starts with a literal
          "disabled" class on page 1).
-      2. rel="next" or an aria-label containing "next" (the standard,
+      2. CME's own "bootpag" jQuery pagination plugin: `<li class="next">`
+         wrapping a plain `<a href="javascript:void(0);">Next ›</a>` -- no
+         aria-label, no rel="next", and its accessible name ("Next ›")
+         doesn't fully match the bare "next"/"›"/"»" names case 4 below
+         looks for, so it needs its own entry. `:not(.disabled)` matters
+         here too: the same `<li class="next">` gains a "disabled" class
+         once the last page is reached.
+      3. rel="next" or an aria-label containing "next" (the standard,
          accessible convention some AEM sites do implement properly).
-      3. A link/button whose accessible name is literally "Next", "›", or
+      4. A link/button whose accessible name is literally "Next", "›", or
          "»" (kept from the original design, for sites that use ordinary
          semantic markup).
 
@@ -531,6 +667,7 @@ def _click_pagination_next(page: Page, timeout_ms: int) -> bool:
         "[class*='chevron-right']:not(.disabled), "
         "[class*='arrow-right']:not(.disabled), "
         "[class*='pagination-next']:not(.disabled), "
+        "li.next:not(.disabled) a, "
         "a[rel='next']:not(.disabled)"
     )
     control = page.locator(selector)
@@ -662,27 +799,56 @@ def render_and_parse_year_pass(
     default (BNY's default view: most recent releases across all years,
     mixed) -- used when no --year/--start-year/--end-year/--since/--until
     was given at all, so there's nothing to narrow by up front.
+
+    Early-stop-once-past-the-target-year (unfiltered-fallback only)
+    -----------------------------------------------------------------
+    When *year* is given but no in-page year control could be applied (see
+    _try_select_year() -- true for CME, which has no working year filter at
+    all, only a JS date-range picker this scraper doesn't attempt to drive),
+    the listing is still sorted newest-first, so once an entire page's items
+    are all older than Jan 1 of *year*, every subsequent page can only be
+    older still -- there's nothing more to find for this year, and we stop
+    right there instead of trusting a fixed --max-load-more page count to
+    happen to land far enough back. This is both a correctness fix (a low
+    --max-load-more no longer risks silently missing a year that's simply
+    further back in an unfiltered listing than the default page count
+    reaches) and a politeness one (stops as soon as the answer is known,
+    rather than always walking exactly --max-load-more pages regardless of
+    where the year boundary actually falls).
+    _UNFILTERED_YEAR_HUNT_SAFETY_CAP is the hard ceiling for this case (a
+    plain --max-load-more only kicks in if it's higher, e.g. explicitly
+    raised): with a real stopping signal in hand the risk isn't stopping too
+    late, it's a request for a year the site has no releases for at all
+    (typo, or predates the site's history) spinning through its *entire*
+    history -- this caps that at a fixed, generous number of pages instead.
     """
     with sync_playwright() as p:
         browser, page = _launch_browser(p, headless, browser_channel, timeout_ms)
 
         logger.info("Loading %s ...", url)
-        page.goto(url, wait_until="domcontentloaded", timeout=timeout_ms)
+        _goto_with_retry(page, url, timeout_ms)
         _wait_for_items(page, timeout_ms, item_selector)
 
+        year_filter_applied = False
         if year is not None:
             before = _current_item_hrefs(page, item_selector)
             if _try_select_year(page, year, timeout_ms):
+                year_filter_applied = True
                 logger.info("Applied in-page filter: year=%d", year)
                 time.sleep(polite_delay)
                 _wait_for_list_change(page, before, change_timeout_ms, item_selector)
             else:
                 logger.warning(
                     "Could not find/apply an in-page year filter for %d -- falling back to "
-                    "paginating through the unfiltered default listing (slower, and bounded "
-                    "by --max-load-more=%d; raise it if this year's releases aren't reached).",
-                    year, max_load_more,
+                    "paginating through the unfiltered default listing, stopping once every "
+                    "item on a page is older than %d (see render_and_parse_year_pass()'s "
+                    "docstring on the early-stop this triggers).",
+                    year, year,
                 )
+
+        effective_max_load_more = max_load_more
+        if year is not None and not year_filter_applied:
+            effective_max_load_more = max(max_load_more, _UNFILTERED_YEAR_HUNT_SAFETY_CAP)
 
         all_items: list[NewsItem] = []
         seen_urls: set[str] = set()
@@ -706,11 +872,21 @@ def render_and_parse_year_pass(
                 page_num, len(page_items), len(new_items), len(all_items),
             )
 
-            if page_num >= max_load_more:
+            if year is not None and not year_filter_applied and page_items:
+                dated = [i.publish_date for i in page_items if i.publish_date is not None]
+                if dated and max(dated) < date(year, 1, 1):
+                    logger.info(
+                        "Page %d is entirely older than %d -- stopping this unfiltered "
+                        "pass early (every %d item on this listing has now been seen).",
+                        page_num, year, year,
+                    )
+                    break
+
+            if page_num >= effective_max_load_more:
                 logger.warning(
                     "Hit --max-load-more (%d) while paginating; there may be more, older "
                     "press releases this run didn't reach. Re-run with a higher "
-                    "--max-load-more if so.", max_load_more,
+                    "--max-load-more if so.", effective_max_load_more,
                 )
                 break
 
@@ -898,7 +1074,7 @@ def fetch_missing_dates(
                 time.sleep(polite_delay)
             logger.info("  [%d/%d] %s", i + 1, len(undated), item.url)
             try:
-                page.goto(item.url, wait_until="domcontentloaded", timeout=timeout_ms)
+                _goto_with_retry(page, item.url, timeout_ms)
                 try:
                     page.wait_for_selector("h1, h2, h3, time", timeout=timeout_ms, state="visible")
                 except PlaywrightTimeoutError:
@@ -1039,9 +1215,10 @@ def build_arg_parser() -> argparse.ArgumentParser:
     browser.add_argument(
         "--fallback-to-visible", action="store_true", default=False,
         help=(
-            "If the headless run finds zero items (likely blocked by bot mitigation), "
-            "automatically retry with a visible browser window. Has no effect when "
-            "--show-browser is already set. Not suitable for headless CI environments."
+            "If the headless run finds zero items, or times out just navigating to the "
+            "listing page (both are typical bot-mitigation symptoms), automatically retry "
+            "with a visible browser window. Has no effect when --show-browser is already "
+            "set. Not suitable for headless CI environments."
         ),
     )
     browser.add_argument(
@@ -1163,7 +1340,18 @@ def scrape_and_filter(
     print(f"Scraping: {url}")
 
     years = parse_year_args(args)
-    all_items = scrape(url, slug, ticker, years, args, item_selector)
+    try:
+        all_items = scrape(url, slug, ticker, years, args, item_selector)
+    except PlaywrightTimeoutError:
+        # A hung goto() -- as opposed to zero items coming back from a page
+        # that *did* load -- is just as much a bot-mitigation symptom (see
+        # _launch_browser()'s docstring), so it gets the same fallback
+        # treatment below rather than a bare crash. Only swallow it here if
+        # we can actually retry; otherwise let it propagate as before.
+        if not (args.fallback_to_visible and args.headless):
+            raise
+        logger.warning("Headless run timed out navigating -- likely blocked by bot mitigation.")
+        all_items = None
 
     if args.fallback_to_visible and args.headless and not all_items:
         logger.warning(
