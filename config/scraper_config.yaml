@@ -49,6 +49,7 @@ notified:
     - slug: coke
     - slug: marriott-international
     - slug: virtu
+    - slug: generac
 
 notified_gated:
   scraper: scrape_notified_gated
