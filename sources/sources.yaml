@@ -301,6 +301,7 @@ sources:
     name: CME Group Inc.
     ticker: CME
     ir_url: https://www.cmegroup.com/investor-relations.html
+    news_url: https://www.cmegroup.com/media-room/press-releases.html
   - slug: cms-energy
     name: CMS Energy Corporation
     ticker: CMS
