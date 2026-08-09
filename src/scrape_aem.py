@@ -316,7 +316,15 @@ class NewsItem(_BaseNewsItem):
 # Two URL date-slug conventions seen across AEM sites:
 #   /2026/01/15/some-title.html   (path-segment date, common for AEM blogs/news)
 #   /2026-01-15-some-title.html   (hyphenated date prefix, InvestorRoom-style)
-_URL_DATE_PATH_RE = re.compile(r"/(\d{4})/(\d{2})/(\d{2})(?:/|$)")
+# Two URL date-slug conventions seen across AEM sites:
+#   /2026/01/15/some-title.html   (path-segment date, common for AEM blogs/news)
+#   /2026/8/06/some-title.html    (same, but CME's own detail-page URLs don't
+#                                   zero-pad the month segment -- \d{1,2}
+#                                   rather than \d{2} below, or this
+#                                   date-from-URL fallback would silently
+#                                   never fire for CME at all)
+#   /2026-01-15-some-title.html   (hyphenated date prefix, InvestorRoom-style)
+_URL_DATE_PATH_RE = re.compile(r"/(\d{4})/(\d{1,2})/(\d{1,2})(?:/|$)")
 _URL_DATE_SLUG_RE = re.compile(r"/(\d{4}-\d{2}-\d{2})-")
 
 

@@ -87,6 +87,38 @@ def test_parse_date_still_handles_unabbreviated_and_other_formats():
     assert parse_date("nothing date-like here")[0] is None
 
 
+# ---------------------------------------------------------------------------
+# parse_date() -- day-first "6 August, 2026" dateline order, e.g. CME
+# Group's own press-release listing (cmegroup.com, ".cmeBrowseAllDate"
+# cards -- see scrape_aem.py's module docstring). Confirmed against a real
+# --debug-dump-html capture of CME's listing page: every card there reads
+# "6 August, 2026", not BNY-style "August 6, 2026".
+# ---------------------------------------------------------------------------
+
+def test_parse_date_handles_cme_style_day_first_date_with_comma():
+    d, raw = parse_date("6 August, 2026")
+    assert d == date(2026, 8, 6)
+    assert raw == "6 August, 2026"
+
+
+def test_parse_date_handles_day_first_date_without_comma():
+    assert parse_date("6 August 2026")[0] == date(2026, 8, 6)
+    assert parse_date("16 December 2026")[0] == date(2026, 12, 16)
+
+
+def test_parse_date_handles_day_first_date_with_abbreviated_month():
+    assert parse_date("6 Aug, 2026")[0] == date(2026, 8, 6)
+    assert parse_date("06 Aug 2026")[0] == date(2026, 8, 6)
+
+
+def test_parse_date_month_first_still_wins_when_both_could_match():
+    # The day-first pattern is tried after the month-first one precisely so
+    # it can't hijack an ordinary month-first dateline -- e.g. it must not
+    # match just the "18, 2026" tail of "Jun 18, 2026" as if "18" were
+    # itself a day-first date missing its month.
+    assert parse_date("Jun 18, 2026")[0] == date(2026, 6, 18)
+
+
 def test_dedupe_by_url_keeps_first_occurrence_and_ignores_trailing_slash():
     items = [
         _item("B", "https://e.com/b", date(2026, 1, 2)),
