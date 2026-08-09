@@ -669,31 +669,58 @@ def _click_pagination_next(page: Page, timeout_ms: int) -> bool:
          semantic markup).
 
     Returns False if none of the above is found or clickable, which the
-    caller treats as "no more pages"."""
-    selector = (
-        "[class*='keyboard_arrow_right']:not(.disabled), "
-        "[class*='chevron-right']:not(.disabled), "
-        "[class*='arrow-right']:not(.disabled), "
-        "[class*='pagination-next']:not(.disabled), "
-        "li.next:not(.disabled) a, "
-        "a[rel='next']:not(.disabled)"
-    )
-    control = page.locator(selector)
-    if control.count() == 0:
-        control = page.locator("[aria-label*='next' i]:not(.disabled)")
-    if control.count() == 0:
-        control = page.get_by_role("link", name=re.compile(r"^\s*(next|›|»)\s*$", re.IGNORECASE))
-    if control.count() == 0:
-        control = page.get_by_role("button", name=re.compile(r"^\s*(next|›|»)\s*$", re.IGNORECASE))
-    if control.count() == 0:
+    caller treats as "no more pages".
+
+    Bug this replaced (2026-08): the cascade used to be joined into a
+    *single* comma-separated selector and only ``.first`` (i.e. first in
+    DOM order) was tried. On CME that silently broke pagination after page
+    1: CME's navbar has an unrelated, closed "Create an Account" dropdown
+    item earlier in the DOM whose icon span carries a
+    ``class="icon-chevron-right"`` -- matching the generic
+    ``[class*='chevron-right']`` guess meant for *other* sites' arrow
+    icons. Because that span sits before the real `<li class="next">`
+    pagination control in the DOM, ``.first`` resolved to it every time,
+    found it invisible (the dropdown is closed), and returned False --
+    without ever looking at the real, visible "Next" control matched
+    later by the very same combined selector. So each selector group is
+    now tried in priority order, and *within* a group every match (not
+    just the first) is checked for visibility before giving up on that
+    group and moving to the next -- both restoring the documented
+    site-specific priority and skipping incidental false-positive
+    matches like CME's navbar icon."""
+    selector_groups = [
+        "[class*='keyboard_arrow_right']:not(.disabled)",
+        "[class*='chevron-right']:not(.disabled)",
+        "[class*='arrow-right']:not(.disabled)",
+        "[class*='pagination-next']:not(.disabled)",
+        "li.next:not(.disabled) a",
+        "a[rel='next']:not(.disabled)",
+        "[aria-label*='next' i]:not(.disabled)",
+    ]
+    role_fallbacks = [
+        ("link", re.compile(r"^\s*(next|›|»)\s*$", re.IGNORECASE)),
+        ("button", re.compile(r"^\s*(next|›|»)\s*$", re.IGNORECASE)),
+    ]
+
+    def _click_first_visible(control) -> bool:
+        for idx in range(control.count()):
+            candidate = control.nth(idx)
+            try:
+                if not candidate.is_visible():
+                    continue
+                candidate.click(timeout=timeout_ms)
+                return True
+            except PlaywrightTimeoutError:
+                continue
         return False
-    try:
-        if not control.first.is_visible():
-            return False
-        control.first.click(timeout=timeout_ms)
-        return True
-    except PlaywrightTimeoutError:
-        return False
+
+    for selector in selector_groups:
+        if _click_first_visible(page.locator(selector)):
+            return True
+    for role, name in role_fallbacks:
+        if _click_first_visible(page.get_by_role(role, name=name)):
+            return True
+    return False
 
 
 def _try_select_year(page: Page, year: int, timeout_ms: int) -> bool:
