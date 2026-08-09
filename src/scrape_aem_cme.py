@@ -45,36 +45,51 @@ Page structure
      for why this scraper still defaults to the unfiltered walk-and-stop
      strategy rather than that control.
 
-Date-range filter (--use-date-filter, opt-in, best-effort)
-------------------------------------------------------------
-The original scrape_aem.py never drove this control -- it always walked
-CME's listing from page 1 (most recent) forward, relying on the
+Date-range filter (--use-date-filter, default-on, opt-out via --no-date-filter)
+--------------------------------------------------------------------------------
+The original scrape_aem.py never used this filter at all -- it always
+walked CME's listing from page 1 (most recent) forward, relying on the
 early-stop-once-past-the-target-year logic below to bound the work. That
 is correct but wasteful for anything other than the current year: the
 --debug-dump-html capture this split was written from needed 11 pages
 (330 cards) to reach October 2023 -- i.e. it fetched and parsed roughly
 300 press releases it had no use for to find ~20 that mattered.
 
-_try_apply_cme_date_range() below drives the picker directly (`start`/
-`end` are plain `<input type="text">` fields, not a JS calendar overlay
-that has to be clicked through -- filling them and clicking the "Filter
-Results" submit button is enough for a typical bootstrap-datepicker-style
-widget). This is NEW, unverified-against-the-live-site code: nothing in
-this repo has driven this control before, and it could not be tested live
-while writing it. It is therefore:
-  * opt-in via --use-date-filter, not the default -- so existing automated
-    runs keep the previously verified (slower but working) behavior.
-  * best-effort with a clean fallback -- if the fill/submit doesn't
-    visibly narrow the result set within --change-timeout, this scraper
-    logs a warning and falls back to the unfiltered walk-and-stop
-    strategy, exactly as if --use-date-filter had never been passed.
-Before relying on this for real runs, verify it with --show-browser
---use-date-filter --year <a year with few releases> and eyeball what
-actually happens.
+A first version of this feature tried to drive CME's "Refine Your
+Search" date-picker UI directly -- `.fill()`-ing the `input[name=start]`
+/ `input[name=end]` text fields and clicking
+`#btnSearchFilterConfirmBottom`. That version shipped untested and
+turned out not to work at all: those inputs belong to a
+bootstrap-datepicker widget that only registers a date (and fires the
+change event CME's own JS listens for) when it's clicked inside the
+widget's calendar dropdown -- a raw `.fill()` of the underlying
+`<input>` doesn't touch the widget's internal state, so "Filter
+Results" always submitted empty/stale values and silently did nothing.
+Every run fell back to the unfiltered walk-and-stop strategy, which is
+why a --year 2024 run walked all 11 pages of CME's entire unfiltered
+history instead of the 4 pages that actually cover 2024.
 
-If a future run confirms it works reliably, promoting it from opt-in to
-default (and dropping the now-unnecessary full-history walk for older
-years) is a reasonable follow-up -- just verify first.
+_try_apply_cme_date_range() now sidesteps the calendar widget entirely:
+CME's press-releases page is itself a client-side router keyed off the
+URL fragment, `#pageNum=<n>&dateFrom=<epoch-ms>&dateTo=<epoch-ms>` --
+exactly the state "Filter Results" was (unsuccessfully) trying to reach
+via the UI. This navigates straight to that fragment, with dateFrom/
+dateTo computed by _cme_date_range_ms() to match what CME's own picker
+produces for Jan 1 - Dec 31 of the target year in the
+America/New_York-pinned browser context this scraper already uses (see
+_launch_browser()). CME's own pagination preserves dateFrom/dateTo in
+the hash as pageNum increments, so the existing
+_click_pagination_next()-driven loop below carries the filter forward
+for every later page unmodified -- confirmed against a manually-driven
+CME session covering three different years, each landing on the
+expected 3-4 filtered pages instead of the 11+ an unfiltered walk needs.
+
+This is still best-effort with a clean fallback: if navigating to the
+filtered URL doesn't visibly narrow the result set within
+--change-timeout (e.g. CME changes its hash-routing scheme), this
+scraper logs a warning and falls back to the unfiltered walk-and-stop
+strategy, exactly as if --use-date-filter had never been passed. Pass
+--no-date-filter to force the old always-unfiltered behavior.
 
 Architecture
 ------------
@@ -123,10 +138,11 @@ Usage
   python src/scrape_aem_cme.py --ticker CME --dry-run
   python src/scrape_aem_cme.py --url https://www.cmegroup.com/media-room/press-releases.html --dry-run
 
-  # Restrict to a year (unfiltered walk-and-stop by default -- see
-  # "Date-range filter" above for the opt-in alternative)
+  # Restrict to a year (uses CME's date-filtered listing state by default --
+  # see "Date-range filter" above; pass --no-date-filter for the old,
+  # slower unfiltered walk-and-stop behavior)
   python src/scrape_aem_cme.py --year 2024 --dry-run
-  python src/scrape_aem_cme.py --year 2024 --use-date-filter --show-browser --dry-run
+  python src/scrape_aem_cme.py --year 2024 --no-date-filter --show-browser --dry-run
 
   # Fetch detail pages to resolve any dates the listing page didn't expose
   python src/scrape_aem_cme.py --fetch-detail-pages --dry-run
@@ -159,10 +175,11 @@ import re
 import sys
 import time
 from dataclasses import dataclass
-from datetime import date
+from datetime import date, datetime
 from pathlib import Path
 from typing import Iterable, Optional
 from urllib.parse import urljoin, urlsplit
+from zoneinfo import ZoneInfo
 
 try:
     from bs4 import BeautifulSoup
@@ -195,6 +212,12 @@ DATA_DIR = REPO_ROOT / "data"
 DEFAULT_SLUG = "cme"
 DEFAULT_TICKER = "CME"
 DEFAULT_URL = "https://www.cmegroup.com/media-room/press-releases.html"
+
+# Timezone CME's own date-range picker computes its dateFrom/dateTo
+# millisecond timestamps in -- see _cme_date_range_ms()'s docstring.
+# Matches _launch_browser()'s browser-context timezone_id, so a
+# hand-verified epoch value and this scraper's computed one agree.
+CME_TIMEZONE = ZoneInfo("America/New_York")
 
 logger = logging.getLogger("scrape_aem_cme")
 
@@ -545,52 +568,153 @@ def _click_pagination_next(page: Page, timeout_ms: int) -> bool:
     return False
 
 
-def _try_apply_cme_date_range(page: Page, year: int, timeout_ms: int) -> bool:
-    """Best-effort, OPT-IN (see --use-date-filter): fill CME's date-range
-    picker with Jan 1 - Dec 31 of *year* and submit it.
+def _cme_date_range_ms(year: int) -> tuple[int, int]:
+    """Return (dateFrom, dateTo) as millisecond Unix timestamps for
+    CME's date-range filter covering all of *year*.
 
-    CME's "Refine Your Search" panel has a `#datepicker` widget with two
-    plain `<input type="text" name="start">` / `name="end">` fields (not a
-    click-through calendar overlay -- see module docstring) and a
-    `#btnSearchFilterConfirmBottom` submit button labeled "Filter Results".
-    This fills both inputs directly and clicks that button.
-
-    UNVERIFIED against the live site -- see the "Date-range filter"
-    section of this module's docstring. Tries the two most common
-    bootstrap-datepicker input formats ("mm/dd/yyyy" then "yyyy-mm-dd");
-    if neither leaves a materially different result count/list after
-    --change-timeout, returns False and the caller falls back to the
-    unfiltered walk-and-stop strategy, same as if this had never been
-    tried.
-
-    Returns True only if the fields were filled and the confirm button
-    was clicked without error -- NOT a guarantee the site actually
-    narrowed the results; the caller's own _wait_for_list_change() /
-    early-stop check is what actually verifies that.
+    Reverse-engineered from a manually-driven "Refine Your Search"
+    session: CME's bootstrap-datepicker resolves the selected Jan 1 /
+    Dec 31 calendar dates to *local* midnight in the browser's own
+    timezone, then hands those off as plain epoch milliseconds -- e.g.
+    selecting "1/1/2024" - "12/31/2024" in a browser whose timezone is
+    America/New_York produces dateFrom=1704085200000 (2024-01-01
+    00:00:00 -05:00) and dateTo=1735621200000 (2024-12-31 00:00:00
+    -05:00; note this is *midnight* Dec 31, not end-of-day -- CME's
+    backend evidently treats dateTo as "any time on this calendar day
+    or earlier", not as an exact upper bound, since it still returns
+    Dec 31 releases). This only lines up with CME's own numbers because
+    _launch_browser() pins the context to timezone_id="America/New_York";
+    don't compute this in UTC or the local machine's timezone.
     """
-    start = page.locator("input[name='start']")
-    end = page.locator("input[name='end']")
-    confirm = page.locator("#btnSearchFilterConfirmBottom")
-    if start.count() == 0 or end.count() == 0 or confirm.count() == 0:
-        logger.debug("Date-range picker controls not found on the page.")
-        return False
+    start = datetime(year, 1, 1, tzinfo=CME_TIMEZONE)
+    end = datetime(year, 12, 31, tzinfo=CME_TIMEZONE)
+    return int(start.timestamp() * 1000), int(end.timestamp() * 1000)
 
-    for fmt in ("%m/%d/%Y", "%Y-%m-%d"):
-        try:
-            start.first.fill(date(year, 1, 1).strftime(fmt), timeout=timeout_ms)
-            end.first.fill(date(year, 12, 31).strftime(fmt), timeout=timeout_ms)
-            confirm.first.click(timeout=timeout_ms)
-            logger.info(
-                "Submitted CME date-range filter for %d using %r-style dates -- "
-                "UNVERIFIED against the live site, see module docstring; the caller "
-                "will fall back automatically if this didn't actually narrow the results.",
-                year, fmt,
-            )
-            return True
-        except PlaywrightTimeoutError:
-            logger.debug("Date-range fill/submit with format %r failed; trying the next format.", fmt)
-            continue
-    return False
+
+def _cme_date_filter_url(base_url: str, page_num: int, date_from_ms: int, date_to_ms: int) -> str:
+    """Build one of CME's own hash-routed, date-filtered listing URLs,
+    e.g.:
+      https://www.cmegroup.com/media-room/press-releases.html
+        #pageNum=1&dateFrom=1704085200000&dateTo=1735621200000
+    """
+    root = base_url.split("#", 1)[0]
+    return f"{root}#pageNum={page_num}&dateFrom={date_from_ms}&dateTo={date_to_ms}"
+
+
+def _navigate_full(page: Page, target_url: str, timeout_ms: int) -> None:
+    """Navigate to *target_url*, guaranteeing a genuine (re)load even when
+    it differs from the page's current URL only in its fragment
+    ("#...") identifier.
+
+    This is what actually broke --use-date-filter even after the URL
+    fragment itself (dateFrom/dateTo/pageNum) was fixed and verified
+    correct: a plain page.goto() from an already-loaded page to a URL
+    that differs *only* by its "#hash" is treated by Chromium/CDP as a
+    same-document navigation (effectively a history.pushState) rather
+    than a real page load -- no new HTTP request, and critically, none
+    of the page's bootstrap JavaScript re-runs. CME's press-releases
+    listing reads its dateFrom/dateTo/pageNum filter state out of
+    location.hash only during that bootstrap. render_and_parse_year_pass()
+    always did a plain, hash-less page.goto(url) first (to establish a
+    baseline "before" item set for change detection), so by the time
+    _try_apply_cme_date_range() called page.goto(url + "#dateFrom=...")
+    afterwards, the document was already loaded -- that second goto()
+    silently turned into a no-op hash update, which is exactly what a
+    live run showed: the correct filtered URL, followed by "Item list
+    did not change within 8000ms."
+
+    The fix: detect the same-document case and force a real reload
+    instead of relying on goto(). page.reload() -- unlike goto() --
+    always does a full navigation, so setting location.hash directly via
+    page.evaluate() and then calling page.reload() reliably re-runs the
+    page's bootstrap JS against the new hash.
+    """
+    if "#" in target_url:
+        base, fragment = target_url.split("#", 1)
+    else:
+        base, fragment = target_url, ""
+
+    current_base = page.url.split("#", 1)[0] if page.url else ""
+    if current_base != base:
+        # A genuine cross-document navigation -- plain goto() actually
+        # loads the page and re-runs its bootstrap JS, no special
+        # handling needed.
+        _goto_with_retry(page, target_url, timeout_ms)
+        return
+
+    # Same document (base URL unchanged from the page's current URL,
+    # only the fragment differs) -- goto() here would be a
+    # same-document navigation and silently do nothing. Set the hash
+    # directly, then force a real reload so the page's bootstrap JS
+    # re-runs against the new hash.
+    page.evaluate("h => { window.location.hash = h; }", fragment)
+    page.reload(wait_until="domcontentloaded", timeout=timeout_ms)
+
+
+def _try_apply_cme_date_range(
+    page: Page, base_url: str, year: int, timeout_ms: int, item_selector: str,
+) -> bool:
+    """Best-effort, opt-out via --no-date-filter (see --use-date-filter):
+    jump straight to CME's own date-filtered listing state for *year*.
+
+    Two things had to be fixed here, in order, before this actually
+    worked:
+
+    1. WHAT to navigate to. The first version of this function tried to
+       drive the "Refine Your Search" UI directly -- `.fill()`-ing the
+       `input[name=start]` / `input[name=end]` text fields and clicking
+       `#btnSearchFilterConfirmBottom`. That never worked at all: those
+       fields belong to a bootstrap-datepicker widget that only picks up
+       (and fires the change event CME's own JS listens for) a date
+       selected by clicking inside its calendar dropdown -- a raw
+       `.fill()` of the underlying `<input>` leaves the widget's
+       internal state untouched, so "Filter Results" submitted
+       empty/stale values every time and did nothing.
+
+       Fix: CME's press-releases page is itself a client-side router
+       keyed off the URL fragment --
+       `#pageNum=<n>&dateFrom=<epoch-ms>&dateTo=<epoch-ms>` -- so this
+       navigates straight to that fragment instead, using
+       _cme_date_range_ms() to compute the epoch values CME's own
+       picker would produce for Jan 1 - Dec 31 of *year*.
+
+    2. HOW to navigate there. Even with the correct fragment, a plain
+       page.goto() to it did nothing on a page that had already loaded
+       the same base URL a moment earlier: Chromium treats a
+       fragment-only URL change against an already-loaded document as
+       a same-document navigation, which doesn't re-run the page's
+       bootstrap JS -- and that bootstrap JS is the only place CME's
+       listing reads location.hash. A live run showed exactly this
+       symptom: the correct filtered URL logged, immediately followed
+       by "Item list did not change."
+
+       Fix: see _navigate_full(), which detects this same-document case
+       and forces a genuine reload (set the hash, then page.reload())
+       instead of relying on goto().
+
+    CME's pagination control preserves dateFrom/dateTo in the hash as
+    pageNum increments, so once this establishes page 1 of the filtered
+    state, the existing _click_pagination_next()-driven loop in
+    render_and_parse_year_pass() carries the filter forward for every
+    subsequent page unmodified.
+
+    Returns True if navigation to the filtered URL completed without a
+    Playwright error -- NOT a guarantee CME actually narrowed the
+    results; the caller's own _wait_for_list_change() / early-stop
+    check is what actually verifies that, and it falls back to the
+    unfiltered walk-and-stop strategy exactly as before if this doesn't
+    pan out.
+    """
+    date_from_ms, date_to_ms = _cme_date_range_ms(year)
+    target = _cme_date_filter_url(base_url, 1, date_from_ms, date_to_ms)
+    logger.info("Navigating to CME's date-filtered listing state for %d: %s", year, target)
+    try:
+        _navigate_full(page, target, timeout_ms)
+        _wait_for_items(page, timeout_ms, item_selector)
+        return True
+    except (PlaywrightTimeoutError, PlaywrightError) as exc:
+        logger.debug("Navigation to CME's date-filtered listing URL failed: %s", exc)
+        return False
 
 
 # ---------------------------------------------------------------------------
@@ -636,21 +760,23 @@ def render_and_parse_year_pass(
     default (most recent releases across all years, mixed) -- used when
     no --year/--start-year/--end-year/--since/--until was given at all.
 
-    Early-stop-once-past-the-target-year (the default strategy for a
-    specific year)
+    Early-stop-once-past-the-target-year (fallback strategy for a
+    specific year, used when the date filter isn't applied)
     -----------------------------------------------------------------
-    CME has no verified working year filter (see
-    _try_apply_cme_date_range() for the opt-in, unverified date-range
-    attempt). By default, this scraper instead paginates the unfiltered,
-    newest-first listing and stops as soon as an entire page's items are
-    all older than Jan 1 of *year* -- there's nothing older left to find.
-    This is both a correctness fix (a low --max-load-more no longer risks
-    silently missing a year that's simply further back than the default
-    page count reaches) and a politeness one (stops as soon as the answer
-    is known). It is NOT cheap for an old year: reaching October 2023 from
-    today's listing took 11 pages / ~330 cards in testing. See
-    --use-date-filter for an (unverified) way to avoid that.
-    UNFILTERED_YEAR_HUNT_SAFETY_CAP is the hard ceiling for this case.
+    By default (--use-date-filter) this scraper jumps straight to CME's
+    date-filtered listing state for *year* -- see _try_apply_cme_date_range().
+    If that isn't applied (--no-date-filter was passed, or the filtered
+    URL didn't visibly narrow the results), this instead paginates the
+    unfiltered, newest-first listing and stops as soon as an entire
+    page's items are all older than Jan 1 of *year* -- there's nothing
+    older left to find. This is both a correctness fix (a low
+    --max-load-more no longer risks silently missing a year that's
+    simply further back than the default page count reaches) and a
+    politeness one (stops as soon as the answer is known). It is NOT
+    cheap for an old year: reaching October 2023 from today's listing
+    took 11 pages / ~330 cards in testing, vs. 3-4 pages with the date
+    filter applied. UNFILTERED_YEAR_HUNT_SAFETY_CAP is the hard ceiling
+    for this fallback case.
     """
     with sync_playwright() as p:
         browser, page = _launch_browser(p, headless, browser_channel, timeout_ms)
@@ -662,7 +788,7 @@ def render_and_parse_year_pass(
         date_filter_applied = False
         if year is not None and use_date_filter:
             before = _current_item_hrefs(page, item_selector)
-            if _try_apply_cme_date_range(page, year, timeout_ms):
+            if _try_apply_cme_date_range(page, url, year, timeout_ms, item_selector):
                 time.sleep(polite_delay)
                 after = _wait_for_list_change(page, before, change_timeout_ms, item_selector)
                 # Treat "the list actually changed" as confirmation the
@@ -674,10 +800,10 @@ def render_and_parse_year_pass(
                     logger.info("CME date-range filter for %d appears to have applied.", year)
                 else:
                     logger.warning(
-                        "Submitted the CME date-range filter for %d, but the result list "
-                        "didn't change -- falling back to the unfiltered walk-and-stop "
-                        "strategy. (--use-date-filter is unverified against the live "
-                        "site; this is the expected safe failure mode if it doesn't work.)",
+                        "Navigated to CME's date-filtered listing URL for %d, but the "
+                        "result list didn't change -- falling back to the unfiltered "
+                        "walk-and-stop strategy. (Pass --no-date-filter to skip straight "
+                        "to that strategy and silence this warning.)",
                         year,
                     )
 
@@ -707,21 +833,30 @@ def render_and_parse_year_pass(
                 page_num, len(page_items), len(new_items), len(all_items),
             )
 
-            if year is not None and not date_filter_applied and page_items:
+            if year is not None and page_items:
                 dated = [i.publish_date for i in page_items if i.publish_date is not None]
-                if dated and max(dated) < date(year, 1, 1):
-                    logger.info(
-                        "Page %d is entirely older than %d -- stopping this unfiltered "
-                        "pass early (every %d item on this listing has now been seen).",
-                        page_num, year, year,
-                    )
-                    break
-                if date_filter_applied and dated and min(dated) > date(year, 12, 31):
-                    # Filtered pass sanity check: if the *filter* claims to
-                    # be scoped to `year` but we're still seeing dates past
-                    # it, something didn't apply the way we assumed --
-                    # don't stop early on a possibly-wrong premise.
-                    pass
+                if not date_filter_applied:
+                    if dated and max(dated) < date(year, 1, 1):
+                        logger.info(
+                            "Page %d is entirely older than %d -- stopping this unfiltered "
+                            "pass early (every %d item on this listing has now been seen).",
+                            page_num, year, year,
+                        )
+                        break
+                else:
+                    # Filtered pass sanity check: the filter claims to be
+                    # scoped to `year`, so a page containing only dates
+                    # past it is a sign the filter didn't actually apply
+                    # the way we assumed -- warn rather than silently
+                    # trust it (don't stop early on a possibly-wrong
+                    # premise; --max-load-more / the exhausted-pagination
+                    # break below still bound the run).
+                    if dated and min(dated) > date(year, 12, 31):
+                        logger.warning(
+                            "Page %d of the date-filtered pass for %d has items newer than "
+                            "%d-12-31 -- the CME date filter may not have applied as expected.",
+                            page_num, year, year,
+                        )
 
             if page_num >= effective_max_load_more:
                 logger.warning(
@@ -978,13 +1113,21 @@ def build_arg_parser() -> argparse.ArgumentParser:
         ),
     )
     source.add_argument(
-        "--use-date-filter", action="store_true", default=False,
+        "--use-date-filter", dest="use_date_filter", action="store_true", default=True,
         help=(
-            "For --year/--start-year/--end-year runs, try CME's in-page date-range "
-            "picker instead of paginating the entire unfiltered listing. OPT-IN and "
-            "UNVERIFIED against the live site -- see the 'Date-range filter' section of "
+            "For --year/--start-year/--end-year runs, jump directly to CME's "
+            "hash-routed date-filtered listing state instead of paginating the entire "
+            "unfiltered listing (default: on). See the 'Date-range filter' section of "
             "this module's docstring. Falls back automatically to the unfiltered "
             "walk-and-stop strategy if the filter doesn't visibly narrow the results."
+        ),
+    )
+    source.add_argument(
+        "--no-date-filter", dest="use_date_filter", action="store_false",
+        help=(
+            "Disable the date-range filter and always paginate the full unfiltered "
+            "listing for --year/--start-year/--end-year runs (the old default "
+            "behavior)."
         ),
     )
 
