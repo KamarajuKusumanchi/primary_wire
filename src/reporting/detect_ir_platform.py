@@ -67,11 +67,28 @@ notified_gated  (scrape_notified_gated.py)
     the normal notified/investorroom/q4 signal checks below. See
     GATED_SLUGS. Real sub-classification signals are future work.
 
-aem  (scrape_aem.py)
+aem  (scrape_aem_bny.py, scrape_aem_cme.py -- one scraper per site, not one
+      shared module; see below)
   * Page source containing an "/etc.clientlibs/" or "/content/dam/" asset
     path -- Adobe Experience Manager's own client-library and DAM asset
     conventions, present regardless of which component library or bespoke
     widget a given site's theme builds on top of them.
+  * NOTE (2026-08): "aem" is a real, correct platform classification here
+    -- both bny and cme genuinely carry this fingerprint -- but unlike
+    every other platform above, it does NOT map to a single scraper
+    module. AEM is a page-authoring platform, not a prepackaged
+    press-release-listing widget: each AEM site's IR team builds its own
+    bespoke listing markup, pagination control, and filter UI on top of
+    it, and bny's and cme's turned out to share almost none of that (see
+    scrape_aem_bny.py's and scrape_aem_cme.py's module docstrings for the
+    specifics -- different card markup, different pagination widgets,
+    BNY has a working in-page year filter and CME doesn't). This module's
+    detection logic is unaffected -- it only asserts the platform, not
+    which scraper handles it -- but config/scraper_config.yaml has two
+    groups (aem_bny, aem_cme) for this platform instead of one, and
+    src/reporting/check_scraper_coverage.py's CONFIG_GROUP_TO_PLATFORM
+    maps both back to "aem" so this script's own consistency check still
+    treats them as the same platform.
 
 Priority when multiple signals fire: notified (meta tag) > investis > investorroom
 > q4 > notified (link pattern) > aem
@@ -371,7 +388,8 @@ INVESTIS_FOOTER_RE = re.compile(
     re.IGNORECASE,
 )
 
-# AEM (scrape_aem.py's module docstring "Fingerprint" section): Adobe
+# AEM (scrape_aem_bny.py's / scrape_aem_cme.py's module docstring
+# "Fingerprint" sections): Adobe
 # Experience Manager's own client-library and DAM asset path conventions,
 # present on every AEM-rendered page regardless of the specific theme/
 # component library built on top of it (BNY's press-release cards, for
@@ -594,7 +612,8 @@ def _check_investis(html: str) -> bool:
 def _check_aem(html: str) -> bool:
     """AEM fingerprint: the page source references an ``/etc.clientlibs/``
     or ``/content/dam/`` asset path (AEM's own client-library and DAM asset
-    conventions -- see scrape_aem.py's module docstring). These are part of
+    conventions -- see scrape_aem_bny.py's/scrape_aem_cme.py's module
+    docstrings). These are part of
     AEM's platform tooling, not a theme choice, so they show up regardless
     of which component library (or bespoke widget) a given site's press-
     release listing actually uses.
@@ -747,7 +766,7 @@ def detect_platform(
     (creating parent directories as needed) before classification, mirroring
     every scraper's own --debug-dump-html flag (scrape_q4_ir.py,
     scrape_investis.py, scrape_investorroom.py, scrape_notified.py,
-    scrape_notified_gated.py, scrape_aem.py). Useful for sites this script
+    scrape_notified_gated.py, scrape_aem_bny.py, scrape_aem_cme.py). Useful for sites this script
     gets wrong (or a site not yet in sources.yaml at all, via --url): dump
     the page as fetched here -- same session/impersonation/redirect handling
     as the real detection run -- and hand the file to someone else to

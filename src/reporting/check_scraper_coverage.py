@@ -230,6 +230,14 @@ def missing_coverage_csv(missing_df: pd.DataFrame) -> str:
 # for investorroom, notified, notified_gated, investis, aem).
 CONFIG_GROUP_TO_PLATFORM = {
     "q4_ir": "q4",
+    # bny and cme both fingerprint as the "aem" platform (see
+    # detect_ir_platform.py / sources_utils.PLATFORMS) but no longer share
+    # a scraper module or a scraper_config.yaml group -- see
+    # scrape_aem_bny.py's and scrape_aem_cme.py's module docstrings for
+    # why. Both group names still need to resolve back to "aem" here so
+    # this consistency check doesn't flag them as a platform mismatch.
+    "aem_bny": "aem",
+    "aem_cme": "aem",
 }
 
 

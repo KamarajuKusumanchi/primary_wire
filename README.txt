@@ -101,7 +101,11 @@ platform share the same page structure:
     behind bot mitigation such as Akamai (e.g. TJX); same platform as
     scrape_notified.py, just a different way of getting past the gate
   * ''scrape_investis.py'' -- Investis Digital sites (e.g. Home Depot)
-  * ''scrape_aem.py'' -- Adobe Experience Manager sites (e.g. BNY)
+  * ''scrape_aem_bny.py'' -- BNY's Adobe Experience Manager site
+  * ''scrape_aem_cme.py'' -- CME Group's Adobe Experience Manager site
+    (a separate scraper from BNY's despite the same underlying platform --
+    each AEM site's listing/pagination/filter markup is bespoke; see
+    scrape_aem_cme.py's module docstring)
 
 See [[docs/scrapers.txt]] for what each scraper does, its usage examples,
 and its dependencies -- worth reading before running one of these or adding
@@ -153,7 +157,8 @@ functional but not yet complete, and more tooling is planned.
       scrape_notified.py       Scrape any Notified/Drupal IR site
       scrape_notified_gated.py  Scrape Notified/Drupal IR sites behind Akamai-style bot mitigation
       scrape_investis.py  Scrape any Investis Digital-powered IR site
-      scrape_aem.py       Scrape any Adobe Experience Manager-powered IR site
+      scrape_aem_bny.py   Scrape BNY's Adobe Experience Manager IR site
+      scrape_aem_cme.py   Scrape CME Group's Adobe Experience Manager IR site
       update_source.py    Interactively add or update an entry in sources.yaml
       update_release.py   Interactively add a press release to a daily CSV file
       reporting/          Read-only diagnostic scripts (see docs/reporting.txt)

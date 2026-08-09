@@ -1,24 +1,35 @@
 #!/usr/bin/env python3
 """
-scrape_aem.py
+scrape_aem_bny.py
 
-Scrape press-release listings from investor relations sites built on Adobe
-Experience Manager (AEM) and merge them into primary_wire's daily
-data/YYYY/YYYY-MM-DD.csv files.
+Scrape press-release listings from BNY's (The Bank of New York Mellon
+Corporation) investor-relations site and merge them into primary_wire's
+daily data/YYYY/YYYY-MM-DD.csv files.
 
-Default source: BNY (The Bank of New York Mellon Corporation)
   https://www.bny.com/corporate/global/en/investor-relations/press-releases.html
 
-Page structure (BNY)
---------------------
+This was split out of the former scrape_aem.py, which handled BNY and CME
+Group in one file on the theory that "same platform (AEM) => same
+scraper". That theory holds for the underlying CMS -- see the fingerprint
+note at the bottom of this docstring, both sites really do run on Adobe
+Experience Manager -- but AEM is a page-authoring platform, not a
+prepackaged press-release-listing widget: every AEM site's IR team builds
+its own bespoke listing markup, pagination control, and filter UI on top
+of it, and BNY's and CME's turned out to share basically none of that.
+See scrape_aem_cme.py's module docstring for the CME side and just how
+different it is; this file now only carries what's true for BNY.
+
+Page structure
+--------------
   1. Each press-release card is a bespoke widget, not Adobe Core
      Components' documented List/Teaser markup: a
      `<div class="list-item-tile">` containing a `<time class="list-item-
      header__date">` and a `<div class="title"><a href="...">headline</a>
-     </div>`. This is ITEM_SELECTOR_CASCADE's first entry; the Core
-     Component guesses and a same-host heuristic scan further down the
-     cascade are fallbacks for *other* AEM sites that may use different
-     markup.
+     </div>`. ITEM_SELECTOR_CASCADE's first entry is this exact class;
+     the rest of the cascade is generic Adobe Core Component / search-
+     result guesses, kept as a safety net in case BNY's own theme changes
+     out from under this scraper -- see is_probable_press_release_link()'s
+     same-host fallback for what happens if none of them match at all.
 
   2. Pagination is a bespoke numbered widget (`<ul class="pagination">` of
      `<label onclick="showDataOnPagination(N,this)">`), not a real link or
@@ -36,42 +47,10 @@ Page structure (BNY)
      reliable and cheaper than paginating through the entire unfiltered
      history and filtering client-side -- see _try_select_year().
 
-Page structure (CME Group)
----------------------------
-  1. Not an Adobe Core Components site at all under the hood -- CME's own
-     "cme*"-prefixed widget classes on top of AEM. Each press-release card
-     is `<li><div class="vcard column"><div class="vcard content">
-     <div class="cmeBrowseAllLeft"><p class="cmeBrowseAllTitle"><a
-     href="...">headline</a></p><p class="cmeBrowseAllDate">6 August,
-     2026</p></div></div></div></li>`, with every card an `<li>` directly
-     under `<ul id="cmeSearchFilterResults">`. ITEM_SELECTOR_CASCADE
-     matches on that id directly since a bare "li" would false-positive on
-     nav menus elsewhere on the page.
-  2. The dateline text is day-first ("6 August, 2026", not "August 6,
-     2026") -- DATE_PATTERNS in utils/scrape_utils.py has a dedicated
-     pattern for this order; don't assume every AEM/press-release theme
-     uses the US month-first convention BNY's does.
-  3. Pagination is a jQuery "bootpag" widget (`<ul class="pagination
-     bootpag">` of `<li data-lp="N"><a href="javascript:void(0);">...`),
-     with the "next" control being `<li class="next">` -- no aria-label,
-     no rel="next", and its accessible name ("Next \u203a") doesn't match a
-     bare "next" or "\u203a", so it needed its own entry in
-     _click_pagination_next()'s selector cascade.
-  4. No working in-page year filter was found -- there's a free-text
-     date-range picker (`input[name=start]`/`input[name=end]`), but it's a
-     JS-driven calendar widget, not a plain text field, and automating it
-     reliably without being able to test live against the site wasn't
-     attempted. So CME always falls back to the unfiltered paginate-and-
-     filter-client-side path -- see render_and_parse_year_pass()'s early-
-     stop-once-past-the-target-year logic, which makes that fallback both
-     correct (it won't stop before reaching the requested year) and cheap
-     (it won't keep paginating long after it has), independent of
-     --max-load-more.
-
-If BNY's markup changes, or another AEM site's differs, --item-selector
-overrides the selector cascade without touching code. Re-run with
---show-browser --debug-dump-html to inspect the current rendered page
-before assuming the selectors above still apply.
+If BNY's markup changes, --item-selector overrides the selector cascade
+without touching code. Re-run with --show-browser --debug-dump-html to
+inspect the current rendered page before assuming the selectors above
+still apply.
 
 Architecture
 ------------
@@ -79,11 +58,14 @@ Same shape as scrape_q4_ir.py: Playwright drives a real Chrome instance
 (headless by default) because AEM listings render via JS, then the fully
 rendered DOM is parsed with BeautifulSoup. No private/internal API is used
 -- this reads exactly what a human visiting the page would see, including
-clicking through "Load More" / paginated "Next" controls if present.
+clicking through paginated "Next" controls if present.
 
 Fingerprint (used by src/reporting/detect_ir_platform.py's aem check)
 -----------------------------------------------------------------------
-AEM sites are identifiable by:
+This confirms BNY genuinely IS built on Adobe Experience Manager (the
+"aem" platform label in detect_ir_platform.py / sources_utils.PLATFORMS is
+correct for this site -- what's split out here is the *scraper strategy*,
+not the platform classification):
   * Page source containing "/etc.clientlibs/" or "/content/dam/" asset paths
     (AEM's client-library and DAM asset conventions)
   * A `<meta name="cq:..."` or `<meta name="template"` tag referencing AEM's
@@ -105,43 +87,38 @@ Tried in this order for each listing-page item, first match wins:
      that happens to mention an unrelated date isn't mistaken for the
      card's real dateline.
   4. A date embedded in the detail-page URL itself, e.g. "/2026/01/15/..."
-     or "/2026-01-15-...". Used only as a last resort (see
-     resolve_publish_date()) since a URL slug's date is not guaranteed to
-     match the actual publish date on every AEM theme.
+     Used only as a last resort (see resolve_publish_date()) since a URL
+     slug's date is not guaranteed to match the actual publish date.
   5. (Opt-in via --fetch-detail-pages) fetch each still-undated item's own
      detail page in the same browser session and look there, the same
      fallback scrape_q4_ir.py uses.
 
 Usage
 -----
-  # Default: scrape BNY, dry-run (no files written)
-  python src/scrape_aem.py --dry-run
+  # Dry-run (no files written)
+  python src/scrape_aem_bny.py --dry-run
 
-  # Any AEM IR site by slug/ticker (looked up in sources.yaml)
-  python src/scrape_aem.py --slug bny --dry-run
-  python src/scrape_aem.py --ticker BNY --dry-run
+  # Scrape by slug/ticker (looked up in sources.yaml) or URL directly
+  python src/scrape_aem_bny.py --slug bny --dry-run
+  python src/scrape_aem_bny.py --ticker BNY --dry-run
+  python src/scrape_aem_bny.py --url https://www.bny.com/corporate/global/en/investor-relations/press-releases.html --dry-run
 
-  # Scrape by URL directly
-  python src/scrape_aem.py --url https://www.bny.com/corporate/global/en/investor-relations/press-releases.html --dry-run
-
-  # Restrict to a year or range (client-side filter; see module docstring
-  # on why this scraper does one full-history pass rather than an in-page
-  # year filter)
-  python src/scrape_aem.py --year 2025 --dry-run
-  python src/scrape_aem.py --start-year 2023 --end-year 2025 --dry-run
+  # Restrict to a year or range (uses the in-page year filter --
+  # see _try_select_year())
+  python src/scrape_aem_bny.py --year 2025 --dry-run
+  python src/scrape_aem_bny.py --start-year 2023 --end-year 2025 --dry-run
 
   # Fetch detail pages to resolve any dates the listing page didn't expose
-  python src/scrape_aem.py --fetch-detail-pages --dry-run
+  python src/scrape_aem_bny.py --fetch-detail-pages --dry-run
 
   # Watch the browser and save the rendered HTML for debugging selectors
-  python src/scrape_aem.py --show-browser --debug-dump-html /tmp/bny.html --dry-run
+  python src/scrape_aem_bny.py --show-browser --debug-dump-html /tmp/bny.html --dry-run
 
-  # Override the item-card CSS selector for a site whose markup doesn't
-  # match any of the built-in guesses (see ITEM_SELECTOR_CASCADE)
-  python src/scrape_aem.py --item-selector ".my-custom-card" --dry-run
+  # Override the item-card CSS selector if BNY's markup changes
+  python src/scrape_aem_bny.py --item-selector ".my-custom-card" --dry-run
 
   # Output as JSON
-  python src/scrape_aem.py --format json --output out.json --dry-run
+  python src/scrape_aem_bny.py --format json --output out.json --dry-run
 
 Requires
 --------
@@ -150,7 +127,7 @@ Chrome is assumed to already be installed; channel="chrome" reuses it
 directly, no `playwright install` download needed.
 
 Per README.txt's "Guidelines for automated contributions": run at most once
-a day. --polite-delay paces in-page interactions (load-more clicks,
+a day. --polite-delay paces in-page interactions (pagination clicks,
 detail-page fetches) so the site isn't hammered.
 """
 
@@ -199,7 +176,7 @@ DEFAULT_SLUG = "bny"
 DEFAULT_TICKER = "BNY"
 DEFAULT_URL = "https://www.bny.com/corporate/global/en/investor-relations/press-releases.html"
 
-logger = logging.getLogger("scrape_aem")
+logger = logging.getLogger("scrape_aem_bny")
 
 
 # ---------------------------------------------------------------------------
@@ -210,25 +187,19 @@ logger = logging.getLogger("scrape_aem")
 # locator both accept a comma-separated list and match any of them). Ordered
 # most-specific-and-most-likely-correct first:
 #
-#   1. BNY's own bespoke card widget (see module docstring's "Page structure
-#      (BNY)" section).
-#   2. CME's own bespoke card widget (see module docstring's "Page structure
-#      (CME Group)" section).
-#   3. Adobe Core Components' documented "List" component BEM classes.
-#   4. Adobe Core Components' documented "Teaser" component BEM classes.
-#   5. Generic "search result" class names used by AEM search/faceted-search
-#      widgets.
-#   6. Bare <article> -- a common semantic wrapper for a single result card
-#      regardless of the specific component library on top of it.
+#   1. BNY's own bespoke card widget (see module docstring's "Page
+#      structure" section) -- this is expected to match on essentially
+#      every real run.
+#   2-6. Generic Adobe Core Components / search-result / bare-<article>
+#      guesses, kept only as a safety net for if BNY's theme changes.
 #
 # Each entry here is a *container* selector (the card), not the link itself
 # -- parse_listing_page() finds the actual <a href> inside each matched
 # container. This is deliberately more tolerant than matching the anchor
 # directly: it survives a theme wrapping the headline in a nested <span>
-# or <h3>, as several IR-platform themes elsewhere in this repo do.
+# or <h3>.
 ITEM_SELECTOR_CASCADE: list[str] = [
     ".list-item-tile",  # BNY's press-release card -- see module docstring
-    "#cmeSearchFilterResults > li",  # CME's press-release card -- see module docstring
     ".cmp-list__item",
     ".cmp-teaser",
     "article.cmp-teaser",
@@ -243,12 +214,11 @@ ITEM_SELECTOR_CASCADE: list[str] = [
 ]
 DEFAULT_ITEM_SELECTOR = ", ".join(ITEM_SELECTOR_CASCADE)
 
-# Date-label CSS classes seen across AEM/press-release themes, tried on each
-# matched item container before falling back to a bare-text-node walk.
+# Date-label CSS classes tried on each matched item container before
+# falling back to a bare-text-node walk.
 ITEM_DATE_SELECTORS: list[str] = [
     "time",
     ".list-item-header__date",  # BNY's dateline element -- see module docstring
-    ".cmeBrowseAllDate",  # CME's dateline element -- see module docstring
     ".cmp-list__item-date",
     ".cmp-teaser__date",
     ".cmp-search__item-date",
@@ -261,9 +231,7 @@ ITEM_DATE_SELECTORS: list[str] = [
 
 # Known non-article paths on BNY's own investor-relations subnav, used to
 # keep the same-host heuristic fallback (see is_probable_press_release_link())
-# from mistaking a nav link for a press release. Harmless to leave in place
-# for other AEM sites; extend as needed for a new source's own known
-# non-article paths.
+# from mistaking a nav link for a press release.
 NAV_EXCLUDE_PATHS = frozenset({
     "corporate/global/en/investor-relations/overview.html",
     "corporate/global/en/investor-relations/press-releases.html",
@@ -285,15 +253,6 @@ NAV_EXCLUDE_PATHS = frozenset({
 })
 MIN_HEADLINE_TITLE_LEN = 20  # chars; a real press-release title clears this, a nav label doesn't
 
-# Safety ceiling for render_and_parse_year_pass()'s early-stop-once-past-
-# the-target-year fallback (see its docstring) -- only ever raises the
-# effective page-count cap above whatever --max-load-more already says, and
-# only for the specific case of a year filter that couldn't be applied
-# in-page. Exists purely to bound a request for a year the site has no
-# releases for at all; a real target year always stops well before this via
-# the date check, regardless of the site's total history length.
-_UNFILTERED_YEAR_HUNT_SAFETY_CAP = 300
-
 
 # ---------------------------------------------------------------------------
 # Data model
@@ -301,29 +260,19 @@ _UNFILTERED_YEAR_HUNT_SAFETY_CAP = 300
 
 @dataclass
 class NewsItem(_BaseNewsItem):
-    """AEM press-release item.
+    """BNY (AEM) press-release item.
 
     Inherits slug, ticker, title, url, publish_date, raw_date_text, and
-    publish_date_str from scrape_utils.NewsItem. No extra fields needed for
-    this platform.
+    publish_date_str from scrape_utils.NewsItem. No extra fields needed.
     """
 
 
 # ---------------------------------------------------------------------------
-# Date helpers (platform-specific)
+# Date helpers
 # ---------------------------------------------------------------------------
 
-# Two URL date-slug conventions seen across AEM sites:
-#   /2026/01/15/some-title.html   (path-segment date, common for AEM blogs/news)
-#   /2026-01-15-some-title.html   (hyphenated date prefix, InvestorRoom-style)
-# Two URL date-slug conventions seen across AEM sites:
-#   /2026/01/15/some-title.html   (path-segment date, common for AEM blogs/news)
-#   /2026/8/06/some-title.html    (same, but CME's own detail-page URLs don't
-#                                   zero-pad the month segment -- \d{1,2}
-#                                   rather than \d{2} below, or this
-#                                   date-from-URL fallback would silently
-#                                   never fire for CME at all)
-#   /2026-01-15-some-title.html   (hyphenated date prefix, InvestorRoom-style)
+# /2026/01/15/some-title.html   (path-segment date, common for AEM blogs/news)
+# /2026-01-15-some-title.html   (hyphenated date prefix, InvestorRoom-style)
 _URL_DATE_PATH_RE = re.compile(r"/(\d{4})/(\d{1,2})/(\d{1,2})(?:/|$)")
 _URL_DATE_SLUG_RE = re.compile(r"/(\d{4}-\d{2}-\d{2})-")
 
@@ -331,8 +280,8 @@ _URL_DATE_SLUG_RE = re.compile(r"/(\d{4}-\d{2}-\d{2})-")
 def date_from_url(url: str) -> Optional[date]:
     """Best-effort publish date parsed directly out of a detail-page URL.
 
-    Only used as a last resort (see resolve_publish_date()) -- not every AEM
-    theme's URL date actually matches the article's real publish date.
+    Only used as a last resort (see resolve_publish_date()) -- BNY's own
+    URL date is not guaranteed to match the article's real publish date.
     """
     m = _URL_DATE_PATH_RE.search(url)
     if m:
@@ -413,9 +362,9 @@ def resolve_publish_date(
 ) -> tuple[Optional[date], str]:
     """Reconcile the card's own date against one parsed out of the detail
     URL, preferring the card -- mirroring scrape_investorroom.py's
-    resolve_publish_date(), for the same reason: a URL-embedded date isn't
-    guaranteed to match the article's real publish date on every theme, so
-    it's kept only as a fallback for when the card itself has no date.
+    resolve_publish_date(): a URL-embedded date isn't guaranteed to match
+    the article's real publish date, so it's kept only as a fallback for
+    when the card itself has no date.
     """
     if card_date is not None:
         if url_date is not None and url_date != card_date:
@@ -436,15 +385,13 @@ def resolve_publish_date(
 def is_probable_press_release_link(href: str, base_url: str) -> bool:
     """Necessary-but-not-sufficient check for "might be a press-release
     detail link", used only as a last-resort fallback when none of
-    ITEM_SELECTOR_CASCADE matches anything on the page (i.e. the site's
-    markup doesn't match any of the guessed AEM component conventions).
+    ITEM_SELECTOR_CASCADE matches anything on the page (i.e. BNY's markup
+    has changed from what's documented above).
 
     Same-host, no query string/fragment, and not one of the known nav paths
     in NAV_EXCLUDE_PATHS. The caller (parse_listing_page()) still requires a
     headline-length title AND a real nearby date before accepting a link
-    found this way -- exactly the two-stage "bare-slug" confirmation
-    scrape_investorroom.py uses for the same reason (a same-host link alone
-    can't be told apart from an ordinary nav/footer link by shape).
+    found this way.
     """
     full_url = urljoin(base_url, href)
     parsed = urlsplit(full_url)
@@ -469,22 +416,11 @@ def is_confirmed_heuristic_item(title: str, card_date: Optional[date]) -> bool:
 # Browser helpers
 # ---------------------------------------------------------------------------
 
-# A plain, current desktop Chrome UA string. Playwright's own default UA in
-# headless mode is normally fine (modern "headless=new" Chromium no longer
-# advertises "HeadlessChrome/"), but we pin an explicit one anyway so the
-# browser's UA, its Client-Hints headers, and its actual rendering behavior
-# all agree with each other -- bot-mitigation CDNs like Akamai cross-check
-# these against one another, and any mismatch is itself a signal.
 _DESKTOP_CHROME_UA = (
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
     "(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
 )
 
-# Patched into every page before any site JS runs. navigator.webdriver=true
-# is the single most common automation tell that bot-mitigation scripts
-# check for -- Playwright (like Selenium/Puppeteer) sets it because it drives
-# the browser over CDP. Clearing it doesn't make the browser un-automated,
-# but it removes the cheapest, most widely-used detection signal.
 _STEALTH_INIT_SCRIPT = """
 Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
 """
@@ -496,25 +432,6 @@ def _launch_browser(p, headless: bool, browser_channel: str, timeout_ms: int):
     Same pattern as scrape_q4_ir.py's _launch_browser(): extracted to avoid
     duplicating the launch/configure block across render_listing_page() and
     fetch_missing_dates().
-
-    cmegroup.com (and presumably other AEM sites behind the same class of
-    CDN) runs Akamai Bot Manager in front of this page. Getting past it in
-    headless mode takes more than just "launch Chromium and go":
-      1. --disable-http2: without this, the very first navigation fails
-         outright with net::ERR_HTTP2_PROTOCOL_ERROR -- Akamai's HTTP/2
-         fingerprint check RSTs the stream before any HTML comes back.
-      2. --disable-blink-features=AutomationControlled: removes one of the
-         standard CDP-automation tells from the renderer.
-      3. A real desktop UA + matching viewport/locale/timezone/headers, and
-         patching navigator.webdriver via an init script: with HTTP/2 out of
-         the way, an unconfigured automated browser doesn't get RST anymore,
-         it just gets silently stalled (hangs past the goto timeout) --
-         Akamai's JS challenge either never resolves or the response is
-         withheld. Looking as close to a normal desktop Chrome session as
-         possible is what gets a response back at all.
-    None of this guarantees headless will get through -- if it still doesn't,
-    --show-browser / --fallback-to-visible is the documented fallback (see
-    scrape_and_filter()).
     """
     launch_kwargs: dict = {
         "headless": headless,
@@ -540,10 +457,7 @@ def _goto_with_retry(page: Page, url: str, timeout_ms: int, *, retries: int = 2)
     """page.goto() with a couple of retries on transient network-level
     failures (net::ERR_* -- connection resets, protocol errors, etc.), as
     opposed to PlaywrightTimeoutError which already gets its own handling
-    elsewhere. Bot-mitigation CDNs occasionally drop the very first
-    connection attempt from a fresh browser context even once HTTP/2 is
-    disabled (see _launch_browser()), so a bare retry with a short pause
-    clears most of these without needing a whole new browser instance.
+    elsewhere.
     """
     last_error: Optional[PlaywrightError] = None
     for attempt in range(1, retries + 2):
@@ -582,9 +496,8 @@ def _wait_for_items(page: Page, timeout_ms: int, item_selector: str) -> None:
     """Wait for at least one item-selector match to appear in the DOM.
 
     Uses direct selector polling rather than networkidle, which is
-    unreliable on JS-rendered content (analytics/consent scripts keep the
-    network busy well after the actual result cards have finished
-    rendering) -- same rationale as scrape_q4_ir.py's _wait_for_news_links().
+    unreliable on JS-rendered content -- same rationale as
+    scrape_q4_ir.py's _wait_for_news_links().
     """
     try:
         page.wait_for_selector(item_selector, timeout=timeout_ms, state="attached")
@@ -602,8 +515,7 @@ def _wait_for_list_change(
     poll_interval_ms: int = 200, settle_ms: int = 400,
 ) -> set[str]:
     """Poll until the rendered item-href set differs from *previous_hrefs*,
-    then return the new set. Same "has the list changed" signal
-    scrape_q4_ir.py uses in place of networkidle for in-page actions."""
+    then return the new set."""
     deadline = time.monotonic() + timeout_ms / 1000
     current = previous_hrefs
     while time.monotonic() < deadline:
@@ -620,80 +532,38 @@ def _wait_for_list_change(
     return current
 
 
-def _click_load_more(page: Page, timeout_ms: int) -> bool:
-    """Click a "load more" / "show more" / "view more" control if visible.
-    Returns True if clicked, False if no such control exists."""
-    button = page.get_by_role(
-        "button", name=re.compile(r"load more|show more|view more|load additional|see more", re.IGNORECASE)
-    )
-    if button.count() == 0:
-        button = page.get_by_text(
-            re.compile(r"load more|show more|view more|load additional|see more", re.IGNORECASE)
-        )
-    if button.count() == 0:
-        return False
-    try:
-        if not button.first.is_visible():
-            return False
-        button.first.click(timeout=timeout_ms)
-        return True
-    except PlaywrightTimeoutError:
-        return False
-
-
 def _click_pagination_next(page: Page, timeout_ms: int) -> bool:
-    """Click a "next page" control if one is visible and not disabled.
+    """Click BNY's "next page" control if one is visible and not disabled.
 
-    Layered selector cascade, most site-specific first:
+    BNY's own bespoke numbered-pagination widget: the right arrow is a
+    `<label>` (not an `<a>`/`<button>`, and with no accessible name -- it's
+    an inline SVG icon) whose class contains "keyboard_arrow_right",
+    alongside a handful of equally-plausible generic class-name guesses
+    ("chevron-right", "arrow-right", "pagination-next") kept as a safety
+    net, plus the standard accessible rel="next"/aria-label/"Next" name
+    conventions in case BNY's theme is ever rebuilt on top of ordinary
+    semantic markup. `:not(.disabled)` skips the arrow once BNY's own
+    widget marks it spent (the left arrow starts with a literal "disabled"
+    class on page 1).
 
-      1. BNY's own bespoke numbered-pagination widget: the right arrow is a
-         `<label>` (not an `<a>`/`<button>`, and with no accessible name --
-         it's an inline SVG icon) whose class contains
-         "keyboard_arrow_right", alongside a handful of equally-plausible
-         generic class-name guesses ("chevron-right", "arrow-right",
-         "pagination-next") for other AEM sites that might use a similarly
-         non-semantic control. `:not(.disabled)` skips it once BNY's own
-         widget marks it spent (the left arrow starts with a literal
-         "disabled" class on page 1).
-      2. CME's own "bootpag" jQuery pagination plugin: `<li class="next">`
-         wrapping a plain `<a href="javascript:void(0);">Next ›</a>` -- no
-         aria-label, no rel="next", and its accessible name ("Next ›")
-         doesn't fully match the bare "next"/"›"/"»" names case 4 below
-         looks for, so it needs its own entry. `:not(.disabled)` matters
-         here too: the same `<li class="next">` gains a "disabled" class
-         once the last page is reached.
-      3. rel="next" or an aria-label containing "next" (the standard,
-         accessible convention some AEM sites do implement properly).
-      4. A link/button whose accessible name is literally "Next", "›", or
-         "»" (kept from the original design, for sites that use ordinary
-         semantic markup).
+    Every match within a selector group (not just the first in DOM order)
+    is checked for visibility before moving to the next group -- an
+    unrelated, invisible element elsewhere on the page matching one of the
+    generic guesses should not stop this from finding the real, visible
+    control matched by a later group. (This exact failure mode is what
+    broke CME's pagination back when both sites shared one cascaded
+    selector list -- see scrape_aem_cme.py's docstring for that story; it
+    doesn't apply to BNY's own markup today, but the defensive per-match
+    visibility check is cheap to keep.)
 
     Returns False if none of the above is found or clickable, which the
     caller treats as "no more pages".
-
-    Bug this replaced (2026-08): the cascade used to be joined into a
-    *single* comma-separated selector and only ``.first`` (i.e. first in
-    DOM order) was tried. On CME that silently broke pagination after page
-    1: CME's navbar has an unrelated, closed "Create an Account" dropdown
-    item earlier in the DOM whose icon span carries a
-    ``class="icon-chevron-right"`` -- matching the generic
-    ``[class*='chevron-right']`` guess meant for *other* sites' arrow
-    icons. Because that span sits before the real `<li class="next">`
-    pagination control in the DOM, ``.first`` resolved to it every time,
-    found it invisible (the dropdown is closed), and returned False --
-    without ever looking at the real, visible "Next" control matched
-    later by the very same combined selector. So each selector group is
-    now tried in priority order, and *within* a group every match (not
-    just the first) is checked for visibility before giving up on that
-    group and moving to the next -- both restoring the documented
-    site-specific priority and skipping incidental false-positive
-    matches like CME's navbar icon."""
+    """
     selector_groups = [
         "[class*='keyboard_arrow_right']:not(.disabled)",
         "[class*='chevron-right']:not(.disabled)",
         "[class*='arrow-right']:not(.disabled)",
         "[class*='pagination-next']:not(.disabled)",
-        "li.next:not(.disabled) a",
         "a[rel='next']:not(.disabled)",
         "[aria-label*='next' i]:not(.disabled)",
     ]
@@ -724,24 +594,25 @@ def _click_pagination_next(page: Page, timeout_ms: int) -> bool:
 
 
 def _try_select_year(page: Page, year: int, timeout_ms: int) -> bool:
-    """Best-effort: apply an in-page year filter, if this site exposes one.
+    """Apply BNY's in-page "Filter by" year control.
 
-    BNY's "Filter by" control is a bespoke listbox widget, not a native
-    <select> -- a clickable `.list-filter-dropdown` container that reveals
-    a `<ul class="select_ul">` of `<li class="option">` entries on click,
-    each labeled with a plain 4-digit year (also carrying a `data-attr-val`
-    ending in "/<year>" as a second way to match, in case the visible label
-    text ever isn't a bare year on some other AEM site reusing this same
-    widget).
+    A bespoke listbox widget, not a native <select> -- a clickable
+    `.list-filter-dropdown` container that reveals a `<ul class=
+    "select_ul">` of `<li class="option">` entries on click, each labeled
+    with a plain 4-digit year (also carrying a `data-attr-val` ending in
+    "/<year>" as a second way to match, in case the visible label text
+    ever isn't a bare year).
 
-    Tries a real <select> first regardless, since a different AEM site
-    might implement the same "filter by year" idea with ordinary markup.
+    Tries a real <select> first regardless, in case BNY's theme is ever
+    rebuilt on top of ordinary markup.
 
-    Returns True if a year control was found and successfully clicked,
-    False otherwise. Not finding one is non-fatal: the caller falls back to
-    an unfiltered listing plus this scraper's own click-through pagination
-    across everything, which still gets there, just less efficiently -- see
-    scrape()'s docstring.
+    Returns True if the year control was found and successfully clicked,
+    False otherwise. Not finding one is non-fatal: the caller falls back
+    to an unfiltered listing plus this scraper's own click-through
+    pagination across everything, which still gets there, just less
+    efficiently -- see scrape()'s docstring. In practice this should
+    always succeed for BNY; a False return here is itself worth
+    investigating (the site's filter UI has likely changed).
     """
     year_str = str(year)
 
@@ -788,10 +659,10 @@ def _try_select_year(page: Page, year: int, timeout_ms: int) -> bool:
 def _dump_path_for_page(debug_dump_html: Optional[Path], page_num: int) -> Optional[Path]:
     """Return the path to save page *page_num*'s HTML to, or None if
     --debug-dump-html wasn't passed. Page 1 keeps the exact path given;
-    later pages get a "_page{N}" suffix inserted before the extension, since
-    BNY's pagination replaces the DOM's item list rather than appending to
-    it (see render_and_parse_year_pass()'s docstring), so a single dump
-    file can only ever show one page at a time."""
+    later pages get a "_page{N}" suffix inserted before the extension,
+    since BNY's pagination replaces the DOM's item list rather than
+    appending to it (see render_and_parse_year_pass()'s docstring), so a
+    single dump file can only ever show one page at a time."""
     if debug_dump_html is None:
         return None
     if page_num == 1:
@@ -824,38 +695,17 @@ def render_and_parse_year_pass(
     `.list-item-tile` cards in the DOM at once, regardless of how many
     total releases exist -- so a single final snapshot would only ever
     contain the *last* page visited, silently dropping every page before
-    it. This is very likely also the right assumption for other AEM sites
-    using a numbered-pagination widget rather than an infinite-scroll
-    "Load More" button (which DOES append, and is handled fine by
-    collecting duplicates away via seen_urls below rather than needing two
-    separate code paths).
+    it.
 
     year=None does one unfiltered pass over whatever the site shows by
-    default (BNY's default view: most recent releases across all years,
-    mixed) -- used when no --year/--start-year/--end-year/--since/--until
-    was given at all, so there's nothing to narrow by up front.
+    default (most recent releases across all years, mixed) -- used when
+    no --year/--start-year/--end-year/--since/--until was given at all.
 
-    Early-stop-once-past-the-target-year (unfiltered-fallback only)
-    -----------------------------------------------------------------
-    When *year* is given but no in-page year control could be applied (see
-    _try_select_year() -- true for CME, which has no working year filter at
-    all, only a JS date-range picker this scraper doesn't attempt to drive),
-    the listing is still sorted newest-first, so once an entire page's items
-    are all older than Jan 1 of *year*, every subsequent page can only be
-    older still -- there's nothing more to find for this year, and we stop
-    right there instead of trusting a fixed --max-load-more page count to
-    happen to land far enough back. This is both a correctness fix (a low
-    --max-load-more no longer risks silently missing a year that's simply
-    further back in an unfiltered listing than the default page count
-    reaches) and a politeness one (stops as soon as the answer is known,
-    rather than always walking exactly --max-load-more pages regardless of
-    where the year boundary actually falls).
-    _UNFILTERED_YEAR_HUNT_SAFETY_CAP is the hard ceiling for this case (a
-    plain --max-load-more only kicks in if it's higher, e.g. explicitly
-    raised): with a real stopping signal in hand the risk isn't stopping too
-    late, it's a request for a year the site has no releases for at all
-    (typo, or predates the site's history) spinning through its *entire*
-    history -- this caps that at a fixed, generous number of pages instead.
+    Unlike CME (see scrape_aem_cme.py), BNY's year filter reliably applies
+    server-side, so the "paginate through the unfiltered listing and stop
+    once every item is older than the target year" fallback below is a
+    defensive measure for if the filter UI ever breaks, not this
+    scraper's normal path.
     """
     with sync_playwright() as p:
         browser, page = _launch_browser(p, headless, browser_channel, timeout_ms)
@@ -874,16 +724,20 @@ def render_and_parse_year_pass(
                 _wait_for_list_change(page, before, change_timeout_ms, item_selector)
             else:
                 logger.warning(
-                    "Could not find/apply an in-page year filter for %d -- falling back to "
-                    "paginating through the unfiltered default listing, stopping once every "
-                    "item on a page is older than %d (see render_and_parse_year_pass()'s "
-                    "docstring on the early-stop this triggers).",
+                    "Could not find/apply BNY's in-page year filter for %d -- this is "
+                    "unexpected (BNY normally has one; the filter UI may have changed). "
+                    "Falling back to paginating through the unfiltered default listing, "
+                    "stopping once every item on a page is older than %d.",
                     year, year,
                 )
 
         effective_max_load_more = max_load_more
         if year is not None and not year_filter_applied:
-            effective_max_load_more = max(max_load_more, _UNFILTERED_YEAR_HUNT_SAFETY_CAP)
+            # Only relevant if the fallback above actually triggered -- see
+            # its warning. 300 is a generous but bounded safety cap so a
+            # request for a year BNY has no releases for (typo, or predates
+            # the site's history) doesn't spin through its entire history.
+            effective_max_load_more = max(max_load_more, 300)
 
         all_items: list[NewsItem] = []
         seen_urls: set[str] = set()
@@ -912,8 +766,7 @@ def render_and_parse_year_pass(
                 if dated and max(dated) < date(year, 1, 1):
                     logger.info(
                         "Page %d is entirely older than %d -- stopping this unfiltered "
-                        "pass early (every %d item on this listing has now been seen).",
-                        page_num, year, year,
+                        "pass early.", page_num, year,
                     )
                     break
 
@@ -926,9 +779,7 @@ def render_and_parse_year_pass(
                 break
 
             before = _current_item_hrefs(page, item_selector)
-            clicked = _click_load_more(page, timeout_ms)
-            if not clicked:
-                clicked = _click_pagination_next(page, timeout_ms)
+            clicked = _click_pagination_next(page, timeout_ms)
             if not clicked:
                 break
             time.sleep(polite_delay)
@@ -977,8 +828,7 @@ def parse_listing_page(
     Tries item_selector's container matches first (see ITEM_SELECTOR_CASCADE
     / DEFAULT_ITEM_SELECTOR); if that finds nothing at all, falls back to
     the same-host heuristic scan (is_probable_press_release_link() +
-    is_confirmed_heuristic_item()) over every link on the page -- see the
-    module docstring for why both exist.
+    is_confirmed_heuristic_item()) over every link on the page.
     """
     soup = BeautifulSoup(html, "lxml")
     items: list[NewsItem] = []
@@ -1016,9 +866,8 @@ def parse_listing_page(
     if not containers:
         logger.warning(
             "item_selector (%r) matched nothing; falling back to a same-host heuristic scan. "
-            "This usually means the site's markup doesn't match any of the built-in AEM "
-            "component guesses -- pass --item-selector (or --debug-dump-html to inspect the "
-            "rendered page and figure out the right one).",
+            "This usually means BNY's markup has changed -- pass --item-selector (or "
+            "--debug-dump-html to inspect the rendered page and figure out the right one).",
             item_selector,
         )
         for anchor in soup.find_all("a", href=True):
@@ -1092,8 +941,7 @@ def fetch_missing_dates(
     scrape_investorroom.py/scrape_notified.py) for the actual date-in-HTML
     heuristics, but fetches via a real Playwright page load rather than a
     plain HTTP GET, since AEM detail pages are typically client-rendered
-    just like the listing page -- mirroring scrape_q4_ir.py's
-    fetch_missing_dates(). Modifies *items* in place.
+    just like the listing page. Modifies *items* in place.
     """
     undated = [item for item in items if item.publish_date is None]
     if not undated:
@@ -1146,31 +994,19 @@ def resolve_source(
     """Resolve (url, slug, ticker, item_selector) from CLI args and
     sources.yaml.
 
-    listing_path is appended (via listing_path_suffix) onto a slug/ticker-
-    derived scrape URL (news_url if set, else ir_url -- see
-    utils.sources_utils.resolve_scrape_url()) -- only relevant for a future
-    AEM source whose sources.yaml record points at the IR site root rather
-    than the full press-releases listing URL directly. For BNY, news_url
-    already IS the complete press-releases.html listing page, so the
-    default (no suffix) leaves it untouched.
-
     listing_path precedence (highest wins):
       1. --listing-path on the CLI
       2. an "aem_listing_path" field on the matched sources.yaml record
-         (not part of the documented sources.yaml schema today -- add it to
-         a record only if a future AEM source actually needs it)
-      3. "" (use the resolved URL as-is)
+      3. "" (use the resolved URL as-is -- BNY's news_url already IS the
+         complete press-releases listing page)
 
     item_selector precedence (highest wins):
       1. --item-selector on the CLI
       2. an "aem_item_selector" field on the matched sources.yaml record
-         (same status as aem_listing_path above)
       3. DEFAULT_ITEM_SELECTOR
 
     Returns (url, slug, ticker, item_selector); url/slug/ticker are plain
-    strings (never None). Warns via this module's logger for any field that
-    could not be resolved (same behavior as the other scrapers'
-    resolve_source() wrappers).
+    strings (never None).
     """
     from utils.sources_utils import find_source, find_source_by_url, load_sources, resolve_source_identity
 
@@ -1211,7 +1047,6 @@ def build_arg_parser() -> argparse.ArgumentParser:
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter,
     )
 
-    # Shared: --url/--slug/--ticker, year/date filters, --format/--output/--dry-run
     add_common_args(parser)
 
     source = parser.add_argument_group("source")
@@ -1227,15 +1062,14 @@ def build_arg_parser() -> argparse.ArgumentParser:
     source.add_argument(
         "--item-selector", default=None, metavar="CSS_SELECTOR",
         help=(
-            "CSS selector for one press-release card container (default: a cascade of "
-            "common AEM Core Component and search-result class names -- see "
-            "ITEM_SELECTOR_CASCADE in this file's source). Overrides an "
-            "'aem_item_selector' sources.yaml field for this run. Use --debug-dump-html "
-            "to inspect the rendered page if the default doesn't match anything."
+            "CSS selector for one press-release card container (default: BNY's known "
+            "'.list-item-tile' card plus a handful of generic Adobe Core Component "
+            "guesses as a safety net -- see ITEM_SELECTOR_CASCADE in this file's source). "
+            "Overrides an 'aem_item_selector' sources.yaml field for this run. Use "
+            "--debug-dump-html to inspect the rendered page if the default doesn't match."
         ),
     )
 
-    # Override --data-dir default (matches scrape_q4_ir.py/scrape_investorroom.py)
     out = parser.add_argument_group("output")
     out.add_argument(
         "--data-dir", type=Path, default=DATA_DIR,
@@ -1266,7 +1100,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
     )
     browser.add_argument(
         "--change-timeout", type=int, default=8_000,
-        help="Timeout in ms to wait for the item list to change after a load-more/next "
+        help="Timeout in ms to wait for the item list to change after a pagination "
              "click (default: 8000)",
     )
     browser.add_argument(
@@ -1276,7 +1110,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
     )
     browser.add_argument(
         "--max-load-more", type=int, default=20,
-        help="Safety cap on load-more/pagination clicks per run (default: 20)",
+        help="Safety cap on pagination clicks per run (default: 20)",
     )
     browser.add_argument(
         "--debug-dump-html", type=Path,
@@ -1306,18 +1140,6 @@ def scrape(
     _try_select_year()), or a single unfiltered pass over the default view
     when no --year/--start-year/--end-year/--since/--until was given at
     all. Mirrors scrape_investorroom.py's per-year-pass design.
-
-    Filtering server-side via the in-page control (when *years* is given)
-    is both more reliable and far cheaper than paginating through a site's
-    entire unfiltered history and filtering client-side -- see
-    render_and_parse_year_pass()'s docstring for what happens if a
-    requested year's control can't be found (falls back to the unfiltered
-    walk, still bounded by --max-load-more).
-
-    Note --since/--until (arbitrary date ranges, not necessarily aligned to
-    whole years) fall through to a single unfiltered pass here since there's
-    no in-page date-range control to drive -- finalize_and_output() still
-    applies them afterward, same as always.
     """
     years_to_visit: list[Optional[int]] = sorted(years) if years else [None]
 
@@ -1355,9 +1177,7 @@ def scrape_and_filter(
 
     Split out from main() so a caller other than the command line --
     scrape_all.py -- can invoke it directly and get the scraped items back
-    as a normal return value, matching every other scraper in this repo
-    (scrape_investorroom.py, scrape_notified.py, scrape_q4_ir.py). See
-    finalize_and_output()'s docstring for what write= controls.
+    as a normal return value, matching every other scraper in this repo.
     """
     parser = build_arg_parser()
     args = parser.parse_args(argv)
@@ -1378,11 +1198,6 @@ def scrape_and_filter(
     try:
         all_items = scrape(url, slug, ticker, years, args, item_selector)
     except PlaywrightTimeoutError:
-        # A hung goto() -- as opposed to zero items coming back from a page
-        # that *did* load -- is just as much a bot-mitigation symptom (see
-        # _launch_browser()'s docstring), so it gets the same fallback
-        # treatment below rather than a bare crash. Only swallow it here if
-        # we can actually retry; otherwise let it propagate as before.
         if not (args.fallback_to_visible and args.headless):
             raise
         logger.warning("Headless run timed out navigating -- likely blocked by bot mitigation.")
@@ -1412,17 +1227,12 @@ def scrape_and_filter(
                 "individual press-release pages.", undated_count,
             )
 
-    # Filters, always previews, and writes CSV/JSON per --format; see
-    # finalize_and_output()'s docstring for the three standardized
-    # behaviors this shares with scrape_investorroom.py/scrape_notified.py/
-    # scrape_q4_ir.py (preview-always, --format both, --output default
-    # path), and for what write= does.
     filtered = finalize_and_output(
         all_items,
         years=years, since=args.since, until=args.until, limit=None,
         format=args.format, output=args.output, dry_run=args.dry_run,
         data_dir=args.data_dir,
-        default_json_path=REPO_ROOT / "aem_news.json",
+        default_json_path=REPO_ROOT / "bny_news.json",
         write=write,
     )
     if not filtered:
@@ -1432,12 +1242,7 @@ def scrape_and_filter(
 
 
 def main(argv: Optional[list[str]] = None) -> int:
-    """CLI entry point for standalone invocation (``python src/scrape_aem.py ...``).
-
-    Thin wrapper around scrape_and_filter(); see that function's docstring
-    for the write= behavior scrape_all.py relies on when calling it directly
-    instead of going through this main().
-    """
+    """CLI entry point for standalone invocation (``python src/scrape_aem_bny.py ...``)."""
     return_code, _items = scrape_and_filter(argv)
     return return_code
 

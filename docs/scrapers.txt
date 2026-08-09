@@ -264,11 +264,22 @@ rather than a confirmed requirement the way it is for scrape_notified.py's
 AbbVie default -- see the module docstring if plain ''requests'' turns out
 to work fine and this needs revisiting.
 
-===== scrape_aem.py =====
+===== scrape_aem_bny.py =====
 
-Collects press release links from any investor relations site built on
-Adobe Experience Manager (AEM). BNY (The Bank of New York Mellon
-Corporation) is the first and, so far, only confirmed site.
+Collects press release links from BNY's (The Bank of New York Mellon
+Corporation) investor-relations site, which is built on Adobe Experience
+Manager (AEM).
+
+Until 2026-08 this lived in one shared scrape_aem.py alongside CME Group,
+on the theory that "same underlying platform => same scraper". Both sites
+really do fingerprint as AEM (see src/reporting/detect_ir_platform.py),
+but AEM is a page-authoring platform, not a prepackaged press-release-
+listing widget: every AEM site's IR team builds its own bespoke listing
+markup, pagination control, and filter UI on top of it, and BNY's and
+CME's turned out to share almost none of that -- different card markup,
+different pagination widgets, and (see below) BNY has a working in-page
+year filter while CME doesn't. They're now two separate scrapers; see
+scrape_aem_cme.py below for the CME side.
 
 AEM listings render via JS, so -- like Q4 -- this scraper drives Chrome via
 Playwright, then parses the rendered DOM with BeautifulSoup. BNY's own
@@ -281,35 +292,96 @@ control, which this scraper drives directly (server-side filtering) rather
 than paginating through the entire unfiltered history and filtering
 client-side.
 
-''--item-selector'' overrides the built-in selector cascade for a future
-AEM source whose markup doesn't match BNY's bespoke cards or any of the
-Adobe Core Component guesses also in that cascade.
+''--item-selector'' overrides the built-in selector cascade if BNY's own
+markup changes out from under this scraper.
 
 Usage:
 
-  # BNY, dry-run
-  python src/scrape_aem.py --dry-run
+  # Dry-run
+  python src/scrape_aem_bny.py --dry-run
 
-  # Any AEM IR site by slug, ticker, or URL
-  python src/scrape_aem.py --slug bny --dry-run
-  python src/scrape_aem.py --ticker BNY --dry-run
-  python src/scrape_aem.py \
+  # By slug, ticker, or URL
+  python src/scrape_aem_bny.py --slug bny --dry-run
+  python src/scrape_aem_bny.py --ticker BNY --dry-run
+  python src/scrape_aem_bny.py \
       --url https://www.bny.com/corporate/global/en/investor-relations/press-releases.html \
       --dry-run
 
   # Restrict to a year or range (drives the in-page year filter directly)
-  python src/scrape_aem.py --year 2025 --dry-run
-  python src/scrape_aem.py --start-year 2023 --end-year 2025 --dry-run
+  python src/scrape_aem_bny.py --year 2025 --dry-run
+  python src/scrape_aem_bny.py --start-year 2023 --end-year 2025 --dry-run
 
   # Fetch detail pages to resolve any dates the listing page didn't expose
-  python src/scrape_aem.py --fetch-detail-pages --dry-run
+  python src/scrape_aem_bny.py --fetch-detail-pages --dry-run
 
   # Watch the browser and save the rendered HTML for debugging selectors
-  python src/scrape_aem.py --show-browser --debug-dump-html /tmp/bny.html --dry-run
+  python src/scrape_aem_bny.py --show-browser --debug-dump-html /tmp/bny.html --dry-run
 
-  # Override the item-card CSS selector for a site whose markup doesn't
-  # match any of the built-in guesses
-  python src/scrape_aem.py --item-selector ".my-custom-card" --dry-run
+  # Override the item-card CSS selector if BNY's markup doesn't match the
+  # built-in guesses
+  python src/scrape_aem_bny.py --item-selector ".my-custom-card" --dry-run
+
+Requires:
+
+  pip install playwright beautifulsoup4 lxml
+
+Chrome is assumed to already be installed. No ''playwright install'' download
+is needed.
+
+===== scrape_aem_cme.py =====
+
+Collects press release links from CME Group's investor-relations /
+media-room site, also built on Adobe Experience Manager (AEM) -- see
+scrape_aem_bny.py above for why this is a separate scraper from BNY's
+despite sharing the same underlying platform.
+
+Same Playwright-drives-Chrome-then-BeautifulSoup-parses-the-DOM shape as
+scrape_aem_bny.py, but nothing about the actual markup is shared: CME's
+cards are ''#cmeSearchFilterResults > li'' (not Adobe Core Components,
+not BNY's ''.list-item-tile''), its dateline text is day-first ("6
+August, 2026"), its pagination is a jQuery "bootpag" widget rather than
+BNY's numbered-label widget, and pages are 30 cards each rather than 10.
+
+Unlike BNY, CME has no confirmed working in-page year filter. By default
+this scraper paginates the unfiltered, newest-first listing and stops
+once an entire page is older than the requested year -- correct, but
+expensive for an old year (reaching October 2023 from today's listing
+took 11 pages / ~330 cards in testing). CME does have a free-text
+date-range picker in its "Refine Your Search" panel; ''--use-date-filter''
+drives it directly instead, but that code path is new and UNVERIFIED
+against the live site -- it's opt-in for that reason, and falls back
+automatically to the unfiltered walk if the site doesn't visibly respond
+to it. Verify with ''--show-browser --use-date-filter'' before relying on
+it for a real run.
+
+Usage:
+
+  # Dry-run
+  python src/scrape_aem_cme.py --dry-run
+
+  # By slug, ticker, or URL
+  python src/scrape_aem_cme.py --slug cme --dry-run
+  python src/scrape_aem_cme.py --ticker CME --dry-run
+  python src/scrape_aem_cme.py \
+      --url https://www.cmegroup.com/media-room/press-releases.html \
+      --dry-run
+
+  # Restrict to a year (unfiltered walk-and-stop by default)
+  python src/scrape_aem_cme.py --year 2024 --dry-run
+
+  # Same, but try the (unverified) in-page date-range filter first --
+  # verify with --show-browser before trusting this for a real run
+  python src/scrape_aem_cme.py --year 2024 --use-date-filter --show-browser --dry-run
+
+  # Fetch detail pages to resolve any dates the listing page didn't expose
+  python src/scrape_aem_cme.py --fetch-detail-pages --dry-run
+
+  # Watch the browser and save the rendered HTML for debugging selectors
+  python src/scrape_aem_cme.py --show-browser --debug-dump-html /tmp/cme.html --dry-run
+
+  # Override the item-card CSS selector if CME's markup doesn't match the
+  # built-in default
+  python src/scrape_aem_cme.py --item-selector ".my-custom-card" --dry-run
 
 Requires:
 

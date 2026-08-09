@@ -95,7 +95,24 @@ investis:
     - slug: allegion
     - slug: sysco
 
-aem:
-  scraper: scrape_aem
+# AEM (Adobe Experience Manager) is one *platform* (see
+# src/reporting/detect_ir_platform.py / src/utils/sources_utils.PLATFORMS
+# -- both bny and cme genuinely fingerprint as AEM), but every AEM site's
+# IR team builds its own bespoke listing/pagination/filter markup on top
+# of it, so there is no single "AEM scraper" the way there is for
+# q4/notified/investorroom/investis. Each site therefore gets its own
+# scraper module and its own group here (aem_bny / aem_cme rather than one
+# shared "aem" group) -- see scrape_aem_bny.py's and scrape_aem_cme.py's
+# module docstrings for what differs and why. Both groups map back to the
+# single "aem" platform for detect_ir_platform.py's consistency check via
+# CONFIG_GROUP_TO_PLATFORM in src/reporting/check_scraper_coverage.py,
+# same mechanism already used for q4_ir -> q4.
+aem_bny:
+  scraper: scrape_aem_bny
   sources:
     - slug: bny
+
+#aem_cme:
+#  scraper: scrape_aem_cme
+#  sources:
+#    - slug: cme

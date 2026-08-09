@@ -260,7 +260,14 @@ PLATFORMS: dict[str, Platform] = {
     "aem": Platform(
         listing_field="aem_listing_path",
         default_listing_path="",
-        scraper_module="scrape_aem",
+        # Not a single scraper module: AEM is a page-authoring platform,
+        # not a prepackaged press-release-listing widget, so each AEM site
+        # gets its own scraper (bny -> scrape_aem_bny, cme -> scrape_aem_cme
+        # -- see those modules' docstrings for why one shared scraper.py
+        # didn't hold up). describe_platforms() below prints this as-is
+        # rather than appending ".py" the way it does for every other
+        # platform's single scraper_module.
+        scraper_module="scrape_aem_bny.py, scrape_aem_cme.py (one scraper per site; see PLATFORMS['aem'])",
         description="Adobe Experience Manager sites (/etc.clientlibs/, /content/dam/ asset paths)",
     ),
 }
@@ -288,8 +295,16 @@ def describe_platforms() -> str:
     lines = []
     for name in platform_names():
         p = PLATFORMS[name]
-        scraper = p.scraper_module + ".py" if p.scraper_module else "(no scraper -- detection only)"
-        lines.append(f"{name:15} {scraper:28} {p.description}")
+        if not p.scraper_module:
+            scraper = "(no scraper -- detection only)"
+        elif p.scraper_module.endswith(".py") or " " in p.scraper_module:
+            # Already a fully-formed display string (e.g. "aem"'s
+            # multi-scraper note above) -- don't mangle it by appending
+            # another ".py".
+            scraper = p.scraper_module
+        else:
+            scraper = p.scraper_module + ".py"
+        lines.append(f"{name:15} {scraper:60} {p.description}")
     return "\n".join(lines)
 
 

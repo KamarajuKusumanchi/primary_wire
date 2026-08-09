@@ -90,7 +90,7 @@ def test_parse_date_still_handles_unabbreviated_and_other_formats():
 # ---------------------------------------------------------------------------
 # parse_date() -- day-first "6 August, 2026" dateline order, e.g. CME
 # Group's own press-release listing (cmegroup.com, ".cmeBrowseAllDate"
-# cards -- see scrape_aem.py's module docstring). Confirmed against a real
+# cards -- see scrape_aem_cme.py's module docstring). Confirmed against a real
 # --debug-dump-html capture of CME's listing page: every card there reads
 # "6 August, 2026", not BNY-style "August 6, 2026".
 # ---------------------------------------------------------------------------
