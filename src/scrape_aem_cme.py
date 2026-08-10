@@ -816,6 +816,7 @@ def render_and_parse_year_pass(
         page_num = 1
 
         while True:
+            print(f"Scraping: {page.url}")
             html = page.content()
             dump_path = _dump_path_for_page(debug_dump_html, page_num)
             if dump_path:
