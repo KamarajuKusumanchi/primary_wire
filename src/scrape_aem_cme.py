@@ -196,13 +196,25 @@ try:
 except ImportError:
     sys.exit("Missing dependency. Install with: pip install playwright")
 
+from utils.scrape_aem_utils import (
+    current_item_hrefs as _current_item_hrefs,
+    dump_path_for_page as _dump_path_for_page,
+    extract_item_date as _shared_extract_item_date,
+    extract_title as _extract_title,
+    fetch_missing_dates,
+    first_link_in as _first_link_in,
+    goto_with_retry as _goto_with_retry,
+    launch_browser as _launch_browser,
+    resolve_publish_date,
+    resolve_source as _shared_resolve_source,
+    wait_for_items as _wait_for_items,
+    wait_for_list_change as _wait_for_list_change,
+)
 from utils.scrape_utils import (
     NewsItem as _BaseNewsItem,
     add_common_args,
     dedupe_by_url,
-    extract_date_from_detail_html,
     finalize_and_output,
-    parse_date,
     parse_year_args,
 )
 
@@ -295,219 +307,30 @@ def date_from_url(url: str) -> Optional[date]:
     return None
 
 
-def is_bare_date_text(text: str, raw_match: str) -> bool:
-    """True if *text* is (almost) entirely *raw_match* and not a longer
-    sentence that merely happens to contain a date somewhere in it.
-
-    Same rule scrape_investorroom.py uses -- see its docstring for why a
-    naive "first date-like substring in the card" approach is unreliable
-    (headlines and summary snippets routinely mention unrelated dates).
-    """
-    remainder = text.replace(raw_match, "", 1)
-    return remainder.strip(" \t\r\n-\u2013\u2014|\u00b7\u2022.,:") == ""
-
-
 def extract_item_date(container, anchor) -> tuple[Optional[date], str]:
-    """Find a publish date inside one item's card, trying (in order):
+    """Find a publish date inside one item's card.
 
-      1. A <time> element's `datetime` attribute, then its display text.
-      2. Other common date-label CSS classes (ITEM_DATE_SELECTORS),
-         including CME's own ".cmeBrowseAllDate".
-      3. A bare-date text-node walk of the whole container, excluding any
-         text that belongs to the headline anchor itself.
-
-    Returns (None, "") if nothing parseable was found in the card at all;
-    the caller falls back to a URL-embedded date, and finally to a
-    detail-page fetch if --fetch-detail-pages was passed.
+    Thin wrapper around utils.scrape_aem_utils.extract_item_date() binding
+    it to CME's own ITEM_DATE_SELECTORS (which includes CME's dateline
+    class, ".cmeBrowseAllDate") -- see that function's docstring for the
+    fallback order tried.
     """
-    time_tag = container.find("time")
-    if time_tag is not None:
-        dt_attr = time_tag.get("datetime", "")
-        if dt_attr:
-            d, raw = parse_date(dt_attr)
-            if d:
-                return d, raw
-        d, raw = parse_date(time_tag.get_text(strip=True))
-        if d:
-            return d, raw
-
-    for sel in ITEM_DATE_SELECTORS:
-        el = container.select_one(sel)
-        if el is None or el is time_tag:
-            continue
-        d, raw = parse_date(el.get_text(strip=True))
-        if d:
-            return d, raw
-
-    own_text_nodes = set(anchor.find_all(string=True)) if anchor is not None else set()
-    for text_node in container.find_all(string=True):
-        if text_node in own_text_nodes:
-            continue
-        candidate = text_node.strip()
-        if not candidate:
-            continue
-        d, raw = parse_date(candidate)
-        if d and is_bare_date_text(candidate, raw):
-            return d, raw
-
-    return None, ""
+    return _shared_extract_item_date(container, anchor, ITEM_DATE_SELECTORS)
 
 
-def resolve_publish_date(
-    card_date: Optional[date], card_raw_text: str, url_date: Optional[date], url_for_logging: str,
-) -> tuple[Optional[date], str]:
-    """Reconcile the card's own date against one parsed out of the detail
-    URL, preferring the card -- a URL-embedded date isn't guaranteed to
-    match the article's real publish date, so it's kept only as a
-    fallback for when the card itself has no date.
-    """
-    if card_date is not None:
-        if url_date is not None and url_date != card_date:
-            logger.warning(
-                "URL date (%s) disagrees with card date (%s) for %s -- using the card date.",
-                url_date, card_date, url_for_logging,
-            )
-        return card_date, card_raw_text
-    if url_date is not None:
-        return url_date, url_date.isoformat()
-    return None, ""
+# resolve_publish_date() itself is imported from utils.scrape_aem_utils --
+# identical logic between CME and BNY, no site-specific bit needed.
 
 
 # ---------------------------------------------------------------------------
 # Browser helpers
 # ---------------------------------------------------------------------------
 
-_DESKTOP_CHROME_UA = (
-    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
-    "(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
-)
-
-_STEALTH_INIT_SCRIPT = """
-Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
-"""
-
-
-def _launch_browser(p, headless: bool, browser_channel: str, timeout_ms: int):
-    """Launch a Chromium browser and return a configured Page.
-
-    cmegroup.com runs Akamai Bot Manager in front of this page. Getting
-    past it in headless mode takes more than just "launch Chromium and
-    go":
-      1. --disable-http2: without this, the very first navigation fails
-         outright with net::ERR_HTTP2_PROTOCOL_ERROR -- Akamai's HTTP/2
-         fingerprint check RSTs the stream before any HTML comes back.
-      2. --disable-blink-features=AutomationControlled: removes one of the
-         standard CDP-automation tells from the renderer.
-      3. A real desktop UA + matching viewport/locale/timezone/headers, and
-         patching navigator.webdriver via an init script: with HTTP/2 out of
-         the way, an unconfigured automated browser doesn't get RST anymore,
-         it just gets silently stalled (hangs past the goto timeout) --
-         Akamai's JS challenge either never resolves or the response is
-         withheld. Looking as close to a normal desktop Chrome session as
-         possible is what gets a response back at all.
-    None of this guarantees headless will get through -- if it still doesn't,
-    --show-browser / --fallback-to-visible is the documented fallback (see
-    scrape_and_filter()).
-    """
-    launch_kwargs: dict = {
-        "headless": headless,
-        "args": ["--disable-http2", "--disable-blink-features=AutomationControlled"],
-    }
-    if browser_channel:
-        launch_kwargs["channel"] = browser_channel
-    browser = p.chromium.launch(**launch_kwargs)
-    context = browser.new_context(
-        user_agent=_DESKTOP_CHROME_UA,
-        viewport={"width": 1920, "height": 1080},
-        locale="en-US",
-        timezone_id="America/New_York",
-        extra_http_headers={"Accept-Language": "en-US,en;q=0.9"},
-    )
-    context.add_init_script(_STEALTH_INIT_SCRIPT)
-    page = context.new_page()
-    page.set_default_timeout(timeout_ms)
-    return browser, page
-
-
-def _goto_with_retry(page: Page, url: str, timeout_ms: int, *, retries: int = 2) -> None:
-    """page.goto() with a couple of retries on transient network-level
-    failures (net::ERR_* -- connection resets, protocol errors, etc.), as
-    opposed to PlaywrightTimeoutError which already gets its own handling
-    elsewhere. Akamai occasionally drops the very first connection attempt
-    from a fresh browser context even once HTTP/2 is disabled (see
-    _launch_browser()), so a bare retry with a short pause clears most of
-    these without needing a whole new browser instance.
-    """
-    last_error: Optional[PlaywrightError] = None
-    for attempt in range(1, retries + 2):
-        try:
-            page.goto(url, wait_until="domcontentloaded", timeout=timeout_ms)
-            return
-        except PlaywrightTimeoutError:
-            raise
-        except PlaywrightError as exc:
-            last_error = exc
-            logger.warning(
-                "Navigation to %s failed (attempt %d/%d): %s", url, attempt, retries + 1, exc,
-            )
-            if attempt <= retries:
-                time.sleep(2.0)
-    assert last_error is not None
-    raise last_error
-
-
-def _current_item_hrefs(page: Page, item_selector: str) -> set[str]:
-    """Return the set of detail-page hrefs currently rendered, one per
-    matched item-selector element."""
-    return set(
-        href for href in page.locator(item_selector).evaluate_all(
-            """els => els.map(e => {
-                const a = e.tagName === 'A' ? e : e.querySelector('a[href]');
-                return a ? a.getAttribute('href') : null;
-            })"""
-        )
-        if href
-    )
-
-
-def _wait_for_items(page: Page, timeout_ms: int, item_selector: str) -> None:
-    """Wait for at least one item-selector match to appear in the DOM.
-
-    Uses direct selector polling rather than networkidle, which is
-    unreliable on JS-rendered content -- same rationale as
-    scrape_q4_ir.py's _wait_for_news_links().
-    """
-    try:
-        page.wait_for_selector(item_selector, timeout=timeout_ms, state="attached")
-    except PlaywrightTimeoutError:
-        logger.warning(
-            "Timed out after %dms waiting for '%s'. The page may be slow, blocked, or use "
-            "markup this scraper's selector cascade doesn't recognize -- continuing so "
-            "--debug-dump-html can still capture what actually loaded.",
-            timeout_ms, item_selector,
-        )
-
-
-def _wait_for_list_change(
-    page: Page, previous_hrefs: set[str], timeout_ms: int, item_selector: str,
-    poll_interval_ms: int = 200, settle_ms: int = 400,
-) -> set[str]:
-    """Poll until the rendered item-href set differs from *previous_hrefs*,
-    then return the new set."""
-    deadline = time.monotonic() + timeout_ms / 1000
-    current = previous_hrefs
-    while time.monotonic() < deadline:
-        current = _current_item_hrefs(page, item_selector)
-        if current != previous_hrefs:
-            time.sleep(settle_ms / 1000)
-            return _current_item_hrefs(page, item_selector)
-        time.sleep(poll_interval_ms / 1000)
-    logger.warning(
-        "Item list did not change within %dms after the last action. Proceeding with "
-        "whatever is currently rendered (expected if this was the last page).",
-        timeout_ms,
-    )
-    return current
+# _launch_browser(), _goto_with_retry(), _current_item_hrefs(),
+# _wait_for_items(), and _wait_for_list_change() are all imported from
+# utils.scrape_aem_utils -- identical between CME and BNY (same Akamai
+# bot-mitigation workaround, same generic polling logic), no site-specific
+# bit needed. See that module's docstring for the shared rationale.
 
 
 def _click_pagination_next(page: Page, timeout_ms: int) -> bool:
@@ -721,15 +544,8 @@ def _try_apply_cme_date_range(
 # Listing-page rendering
 # ---------------------------------------------------------------------------
 
-def _dump_path_for_page(debug_dump_html: Optional[Path], page_num: int) -> Optional[Path]:
-    """Return the path to save page *page_num*'s HTML to, or None if
-    --debug-dump-html wasn't passed. Page 1 keeps the exact path given;
-    later pages get a "_page{N}" suffix inserted before the extension."""
-    if debug_dump_html is None:
-        return None
-    if page_num == 1:
-        return debug_dump_html
-    return debug_dump_html.with_name(f"{debug_dump_html.stem}_page{page_num}{debug_dump_html.suffix}")
+# _dump_path_for_page() is imported from utils.scrape_aem_utils --
+# identical between CME and BNY.
 
 
 def render_and_parse_year_pass(
@@ -885,26 +701,8 @@ def render_and_parse_year_pass(
 # Listing-page parsing
 # ---------------------------------------------------------------------------
 
-def _first_link_in(container) -> Optional[object]:
-    """Return the container itself if it IS an <a>, else its first
-    descendant <a href>, else None."""
-    if getattr(container, "name", None) == "a" and container.get("href"):
-        return container
-    return container.find("a", href=True)
-
-
-def _extract_title(container, anchor) -> str:
-    """Return the display title for one item's card.
-
-    Prefers the anchor's own text; falls back to a heading element inside
-    the container."""
-    title = anchor.get_text(separator=" ", strip=True)
-    if title:
-        return title
-    heading = container.find(["h1", "h2", "h3", "h4"])
-    if heading is not None:
-        return heading.get_text(separator=" ", strip=True)
-    return ""
+# _first_link_in() and _extract_title() are imported from
+# utils.scrape_aem_utils -- identical between CME and BNY.
 
 
 def parse_listing_page(
@@ -982,51 +780,8 @@ def parse_listing_page(
 # Detail-page date fallback
 # ---------------------------------------------------------------------------
 
-def fetch_missing_dates(
-    items: list[NewsItem], headless: bool, browser_channel: str, timeout_ms: int, polite_delay: float,
-) -> None:
-    """Fill in publish_date for items the listing-page parse left undated,
-    by visiting each one's own detail page in the same browser session.
-    Modifies *items* in place.
-    """
-    undated = [item for item in items if item.publish_date is None]
-    if not undated:
-        return
-
-    logger.info("Fetching detail pages for %d undated item(s) to resolve publish dates ...", len(undated))
-
-    with sync_playwright() as p:
-        browser, page = _launch_browser(p, headless, browser_channel, timeout_ms)
-
-        for i, item in enumerate(undated):
-            if i > 0:
-                time.sleep(polite_delay)
-            logger.info("  [%d/%d] %s", i + 1, len(undated), item.url)
-            try:
-                _goto_with_retry(page, item.url, timeout_ms)
-                try:
-                    page.wait_for_selector("h1, h2, h3, time", timeout=timeout_ms, state="visible")
-                except PlaywrightTimeoutError:
-                    pass
-                html = page.content()
-                d, raw = extract_date_from_detail_html(html)
-                if d:
-                    item.publish_date = d
-                    item.raw_date_text = raw or f"(detail page: {d.isoformat()})"
-                    logger.debug("    -> %s", d)
-                else:
-                    logger.warning("    -> no date found on detail page: %s", item.url)
-            except Exception as exc:
-                logger.warning("    -> failed to fetch %s: %s", item.url, exc)
-
-        browser.close()
-
-    still_missing = sum(1 for item in undated if item.publish_date is None)
-    if still_missing:
-        logger.warning(
-            "%d item(s) still have no date after detail-page fetch; they will be "
-            "skipped in CSV output.", still_missing,
-        )
+# fetch_missing_dates() is imported directly from utils.scrape_aem_utils --
+# identical between CME and BNY, same signature.
 
 
 # ---------------------------------------------------------------------------
@@ -1038,50 +793,16 @@ def resolve_source(
     listing_path: Optional[str] = None, item_selector: Optional[str] = None,
 ) -> tuple[str, str, str, str]:
     """Resolve (url, slug, ticker, item_selector) from CLI args and
-    sources.yaml.
+    sources.yaml, bound to CME's own defaults.
 
-    listing_path precedence (highest wins):
-      1. --listing-path on the CLI
-      2. an "aem_listing_path" field on the matched sources.yaml record
-      3. "" (use the resolved URL as-is -- CME's sources.yaml news_url is
-         already the complete listing URL)
-
-    item_selector precedence (highest wins):
-      1. --item-selector on the CLI
-      2. an "aem_item_selector" field on the matched sources.yaml record
-      3. DEFAULT_ITEM_SELECTOR
-
-    Returns (url, slug, ticker, item_selector); url/slug/ticker are plain
-    strings (never None).
+    Thin wrapper around utils.scrape_aem_utils.resolve_source() -- see its
+    docstring for the full listing_path/item_selector precedence rules.
     """
-    from utils.sources_utils import find_source, find_source_by_url, load_sources, resolve_source_identity
-
-    peeked_record: Optional[dict] = None
-    try:
-        sources = load_sources()
-        if slug:
-            peeked_record = find_source(sources, slug, field="slug")
-        elif ticker:
-            peeked_record = find_source(sources, ticker, field="ticker")
-        elif url:
-            peeked_record = find_source_by_url(sources, url)
-    except Exception as exc:
-        logger.warning("Could not pre-load sources.yaml (%s); using defaults.", exc)
-
-    if not listing_path:
-        listing_path = (peeked_record.get("aem_listing_path") if peeked_record else None) or ""
-    if not item_selector:
-        item_selector = (
-            (peeked_record.get("aem_item_selector") if peeked_record else None) or DEFAULT_ITEM_SELECTOR
-        )
-
-    url, slug, ticker, _record, _extra_query_params = resolve_source_identity(
-        url, slug, ticker,
+    return _shared_resolve_source(
+        url, slug, ticker, listing_path, item_selector,
+        default_item_selector=DEFAULT_ITEM_SELECTOR,
         default_slug=DEFAULT_SLUG, default_ticker=DEFAULT_TICKER, default_url=DEFAULT_URL,
-        listing_path_suffix=listing_path, logger=logger,
     )
-
-    return url, slug, ticker, item_selector
 
 
 # ---------------------------------------------------------------------------
