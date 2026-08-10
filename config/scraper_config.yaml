@@ -112,7 +112,7 @@ aem_bny:
   sources:
     - slug: bny
 
-#aem_cme:
-#  scraper: scrape_aem_cme
-#  sources:
-#    - slug: cme
+aem_cme:
+  scraper: scrape_aem_cme
+  sources:
+    - slug: cme
