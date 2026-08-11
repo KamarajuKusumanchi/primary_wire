@@ -6,6 +6,14 @@ Detect which IR (investor relations) platform powers each company's IR site
 by fetching the page and inspecting its HTML for documented fingerprints.
 No hardcoded hostname lists — every classification is evidence-based.
 
+This module reports two related but distinct things per slug: a
+*platform* (the page fingerprint actually found -- q4, notified, investis,
+etc.) and a *strategy* (which specific scraper -- src/scrape_*.py --
+should handle it). Most platforms have exactly one strategy of the same
+name; a few (notified, aem) have more than one. See "Platform vs.
+strategy" above GATED_SLUGS, further down this file, for the full
+explanation.
+
 Supported platforms (and their fingerprints, as documented by each scraper)
 ---------------------------------------------------------------------------
 The canonical list of platform names and their scraper modules lives in
@@ -55,7 +63,9 @@ investis  (scrape_investis.py)
     that heuristic, or every Investis site would be misclassified as
     "notified" instead. See _check_investis() and the priority note below.
 
-notified_gated  (scrape_notified_gated.py)
+notified_gated  (scrape_notified_gated.py; strategy "notified_gated", still
+                  platform "notified" -- see "Platform vs. strategy" above
+                  GATED_SLUGS)
   * Same underlying markup/fingerprints as notified above -- these are
     Notified/Drupal sites that are ALSO protected by bot mitigation (e.g.
     Akamai) strict enough to block the year-filter widget for plain/headless
@@ -64,11 +74,13 @@ notified_gated  (scrape_notified_gated.py)
   * There is no general-purpose signal yet to detect "gated" automatically
     (that would mean probing bot-mitigation behavior, not just page
     content) -- for now this is a hardcoded override by slug, applied AFTER
-    the normal notified/investorroom/q4 signal checks below. See
-    GATED_SLUGS. Real sub-classification signals are future work.
+    the normal notified/investorroom/q4 signal checks below, and only
+    changes the *strategy* column, not platform (see determine_strategy()).
+    See GATED_SLUGS. Real sub-classification signals are future work.
 
 aem  (scrape_aem_bny.py, scrape_aem_cme.py -- one scraper per site, not one
-      shared module; see below)
+      shared module; strategy "aem_bny"/"aem_cme" per slug, still platform
+      "aem" -- see below and "Platform vs. strategy" above GATED_SLUGS)
   * Page source containing an "/etc.clientlibs/" or "/content/dam/" asset
     path -- Adobe Experience Manager's own client-library and DAM asset
     conventions, present regardless of which component library or bespoke
@@ -83,12 +95,17 @@ aem  (scrape_aem_bny.py, scrape_aem_cme.py -- one scraper per site, not one
     scrape_aem_bny.py's and scrape_aem_cme.py's module docstrings for the
     specifics -- different card markup, different pagination widgets,
     BNY has a working in-page year filter and CME doesn't). This module's
-    detection logic is unaffected -- it only asserts the platform, not
-    which scraper handles it -- but config/scraper_config.yaml has two
+    HTML-fingerprint detection logic is unaffected -- it only asserts the
+    platform, not which scraper handles it -- but the *strategy* column
+    goes further, via a hardcoded slug override (AEM_BNY_SLUGS/
+    AEM_CME_SLUGS -- same manual-override pattern as GATED_SLUGS above,
+    for the same reason: which bespoke AEM scraper applies isn't something
+    a page fingerprint can tell you). config/scraper_config.yaml has two
     groups (aem_bny, aem_cme) for this platform instead of one, and
-    src/reporting/check_scraper_coverage.py's CONFIG_GROUP_TO_PLATFORM
-    maps both back to "aem" so this script's own consistency check still
-    treats them as the same platform.
+    src/reporting/check_scraper_coverage.py's STRATEGY_TO_PLATFORM maps
+    both back to "aem" so this script's own consistency check still knows
+    they're the same platform even while comparing on the finer-grained
+    strategy.
 
 Priority when multiple signals fire: notified (meta tag) > investis > investorroom
 > q4 > notified (link pattern) > aem
@@ -109,7 +126,13 @@ patterns. aem is checked last of all: its asset-path signal is Adobe's own
 platform tooling rather than listing-page markup, so it's not expected to
 overlap with any other platform's signal, but it's still ordered after
 every listing-markup-specific check on general principle.
-notified_gated overrides a "notified" result for slugs in GATED_SLUGS.
+This priority order governs the *platform* column only. The *strategy*
+column is derived from platform afterwards, by determine_strategy():
+notified_gated overrides a "notified" platform result to strategy
+"notified_gated" for slugs in GATED_SLUGS; aem_bny/aem_cme override an
+"aem" platform result the same way for slugs in AEM_BNY_SLUGS/
+AEM_CME_SLUGS; q4 always becomes strategy "q4_ir". See "Platform vs.
+strategy" above GATED_SLUGS.
 
 unknown
   * No signal matched.
@@ -153,15 +176,30 @@ Usage
 
 Output
 ------
-CSV with header row: slug,ticker,platform,scrape_url
+CSV with header row: slug,ticker,platform,strategy,scrape_url
+
+platform is what this module's page-fingerprint checks actually found
+(q4, investorroom, notified, investis, aem, or unknown). strategy is
+which specific scraper (src/scrape_*.py) should handle this slug -- for
+most sources this is just *platform* again (one platform, one scraper),
+but three cases split further: a bot-gated Notified slug (GATED_SLUGS)
+gets strategy "notified_gated" while platform stays "notified"; every Q4
+slug gets strategy "q4_ir" (matching the "q4_ir" scraper_config.yaml
+group) while platform stays "q4"; and an AEM slug gets strategy
+"aem_bny"/"aem_cme" once it's in AEM_BNY_SLUGS/AEM_CME_SLUGS (else just
+"aem", meaning "known platform, no scraper assigned yet") while platform
+stays "aem" throughout. See determine_strategy() and the "Platform vs.
+strategy" comment above GATED_SLUGS for the full mapping.
+
 scrape_url is the full press-release *listing* URL for the detected
-platform -- the site root actually fetched for detection (news_url if
-set, else ir_url; see resolve_scrape_url()) plus that platform's listing
-path (sources.yaml's "news_path" for q4, "news_releases_path" for
-investorroom/notified/notified_gated/investis; see resolve_listing_url(),
-or run --list-platforms for the current field/default per platform) -- so
-it's directly pasteable into a browser to see the same page the platform
-was detected from, e.g. https://news.lockheedmartin.com/news-releases?category=788
+platform/strategy -- the site root actually fetched for detection
+(news_url if set, else ir_url; see resolve_scrape_url()) plus that
+platform's listing path (sources.yaml's "news_path" for q4,
+"news_releases_path" for investorroom/notified/notified_gated/investis;
+see resolve_listing_url()/_resolve_listing_platform(), or run
+--list-platforms for the current field/default per platform) -- so it's
+directly pasteable into a browser to see the same page the platform was
+detected from, e.g. https://news.lockheedmartin.com/news-releases?category=788
 rather than just https://news.lockheedmartin.com/. For "unknown" rows,
 there's no reliable listing path to join, so scrape_url falls back to the
 bare site root. For the handful of sources where news_url differs from
@@ -173,11 +211,12 @@ companion script, e.g.:
   python src/print_csv_table.py reports/latest/ir_platform.csv
 
 With --all, any disagreement between config/scraper_config.yaml (which
-slugs have a hand-verified scraper for a given platform) and this run's
-own freshly detected platform for that slug is printed to stderr as
-"warning: ..." lines -- see check_scraper_config_consistency(). This never
-touches stdout, so `invoke ir-platform` (which captures this script's
-stdout straight into reports/latest/ir_platform.csv) still gets a clean
+slugs have a hand-verified scraper -- i.e. a strategy -- configured for
+them) and this run's own freshly detected strategy for that slug is
+printed to stderr as "warning: ..." lines -- see
+check_scraper_config_consistency(). This never touches stdout, so
+`invoke ir-platform` (which captures this script's stdout straight into
+reports/latest/ir_platform.csv) still gets a clean
 CSV; the warnings show up as tasks.py's separately-printed stderr output.
 
 Requires
@@ -215,15 +254,15 @@ from utils.sources_utils import (  # noqa: E402
     resolve_listing_url,
     resolve_scrape_url,
 )
-# CONFIG_GROUP_TO_PLATFORM/load_scraper_config are check_scraper_coverage.py's
+# STRATEGY_TO_PLATFORM/load_scraper_config are check_scraper_coverage.py's
 # (already battle-tested there) machinery for turning config/scraper_config.yaml
-# into slug->platform facts, notably the "q4_ir" group -> "q4" platform-name
-# translation -- reused here rather than re-derived, so the two scripts can't
-# quietly disagree about what a scraper_config.yaml group name means. See
-# check_scraper_config_consistency() below for why detect_ir_platform.py needs
-# this too.
+# into slug->strategy->platform facts, notably the "q4_ir" group -> "q4"
+# platform-name translation -- reused here rather than re-derived, so the two
+# scripts can't quietly disagree about what a scraper_config.yaml group name
+# means. See check_scraper_config_consistency() below for why
+# detect_ir_platform.py needs this too.
 from reporting.check_scraper_coverage import (  # noqa: E402
-    CONFIG_GROUP_TO_PLATFORM,
+    STRATEGY_TO_PLATFORM,
     SCRAPER_CONFIG_PATH as DEFAULT_SCRAPER_CONFIG_YAML,
     load_scraper_config,
 )
@@ -397,6 +436,58 @@ INVESTIS_FOOTER_RE = re.compile(
 # this fingerprint doesn't depend on that markup at all).
 AEM_ASSET_PATH_RE = re.compile(r"/etc\.clientlibs/|/content/dam/", re.IGNORECASE)
 
+# ---------------------------------------------------------------------------
+# Platform vs. strategy
+# ---------------------------------------------------------------------------
+#
+# A "platform" (PLATFORM_* above) is what the page-fingerprint checks in
+# this module actually detect -- evidence read off the page itself, e.g.
+# "this page carries a Drupal generator meta tag" -> platform "notified".
+#
+# A "strategy" is which specific scraper module (src/scrape_*.py) should be
+# used to scrape a given slug. Most platforms have exactly one strategy,
+# with the same name as the platform (e.g. "investorroom" -> "investorroom"
+# -> scrape_investorroom.py). Two platforms currently have more than one:
+#
+#   - notified: GATED_SLUGS below need scrape_notified_gated.py's
+#     headed-browser step instead of scrape_notified.py's plain-HTTP
+#     pagination -- see module docstring's "notified_gated" entry. Strategy
+#     "notified_gated" for those slugs, "notified" for everyone else.
+#   - aem: bny and cme both fingerprint as "aem" but, as the module
+#     docstring's "aem" entry explains, share no scraper module at all --
+#     each site gets its own bespoke scraper (scrape_aem_bny.py,
+#     scrape_aem_cme.py). Strategy "aem_bny" / "aem_cme" per the slug sets
+#     below; any as-yet-unassigned AEM slug (most of them, today -- see
+#     TODO below) just gets strategy "aem", meaning "known platform, no
+#     scraper written for it yet".
+#
+# determine_strategy() below is the one place this platform -> strategy
+# expansion happens; STRATEGY_TO_PLATFORM (imported from
+# check_scraper_coverage.py) is its inverse, going from a
+# scraper_config.yaml group name (== a strategy name) back down to the
+# platform it rolls up to.
+#
+# None of GATED_SLUGS/AEM_BNY_SLUGS/AEM_CME_SLUGS below is derived from page
+# content -- there's no general-purpose signal yet for "this Notified site
+# is bot-gated" or "this AEM site is bny's vs. cme's bespoke markup", since
+# both require something more than a static fingerprint check (probing bot
+# mitigation, or writing/matching a scraper for the specific site). These
+# are manual, temporary overrides keyed by slug; add to them once you've
+# confirmed (by hand, or once a scraper is written) that a slug needs a
+# given strategy.
+#
+# TODO: AEM_BNY_SLUGS/AEM_CME_SLUGS are the one hardcoded exception to this
+# module's "no hardcoded hostname lists -- every classification is
+# evidence-based" philosophy (see module docstring's opening line). For now
+# that's fine (there are only two AEM scrapers to choose between), but if a
+# third AEM site gets its own scraper, consider deriving the strategy from
+# something in the codebase itself (e.g. which scrape_aem_*.py module a
+# slug is configured under in scraper_config.yaml) rather than growing a
+# third hardcoded set here.
+STRATEGY_Q4_IR = "q4_ir"
+STRATEGY_AEM_BNY = "aem_bny"
+STRATEGY_AEM_CME = "aem_cme"
+
 # Slugs known to be Notified/Drupal sites gated by bot mitigation strict
 # enough to need scrape_notified_gated.py's headed-browser step (see module
 # docstring's "notified_gated" entry). This is a manual, temporary list --
@@ -406,6 +497,66 @@ AEM_ASSET_PATH_RE = re.compile(r"/etc\.clientlibs/|/content/dam/", re.IGNORECASE
 # headless vs. headed Chrome, as documented in scrape_notified_gated.py)
 # that a site needs the gated variant.
 GATED_SLUGS = {"tjx", "robinhood", "caseys"}
+
+# Slugs scraped by scrape_aem_bny.py / scrape_aem_cme.py respectively --
+# both are "aem" platform, but each site gets its own bespoke scraper (see
+# the "Platform vs. strategy" note above and this module's "aem" docstring
+# entry for why there's no single shared AEM scraper). An AEM slug not in
+# either set below has strategy "aem" (known platform, no scraper written
+# for it yet), not an error.
+AEM_BNY_SLUGS = {"bny"}
+AEM_CME_SLUGS = {"cme"}
+
+
+def determine_strategy(platform: str, slug: str) -> str:
+    """Map a detected *platform* + *slug* to the scraping strategy that
+    should handle it -- see "Platform vs. strategy" above.
+
+    Defaults to *platform* itself: the common case is one platform, one
+    strategy, sharing a name (e.g. "investorroom" -> "investorroom",
+    "unknown" -> "unknown"). The three platform-specific overrides:
+
+      - notified + slug in GATED_SLUGS -> "notified_gated"
+      - q4 -> always "q4_ir" (there's only one Q4 scraper today, but this
+        keeps the strategy column visibly distinct from the platform
+        column even in the single-strategy case, and leaves room for a
+        second Q4 strategy later without a rename)
+      - aem + slug in AEM_BNY_SLUGS -> "aem_bny"; slug in AEM_CME_SLUGS ->
+        "aem_cme"; any other aem slug -> "aem" unchanged (no scraper
+        assigned yet)
+    """
+    slug_l = slug.strip().lower()
+    if platform == PLATFORM_NOTIFIED and slug_l in GATED_SLUGS:
+        return PLATFORM_NOTIFIED_GATED
+    if platform == PLATFORM_Q4:
+        return STRATEGY_Q4_IR
+    if platform == PLATFORM_AEM:
+        if slug_l in AEM_BNY_SLUGS:
+            return STRATEGY_AEM_BNY
+        if slug_l in AEM_CME_SLUGS:
+            return STRATEGY_AEM_CME
+        return platform
+    return platform
+
+
+def _resolve_listing_platform(platform: str, strategy: str) -> str:
+    """Return the value to hand utils.sources_utils.resolve_listing_url()
+    for this row.
+
+    resolve_listing_url() is keyed by utils.sources_utils.PLATFORMS, whose
+    granularity mostly matches *platform* -- except for notified_gated,
+    which has its own registry entry (a different default listing path
+    than plain notified) despite being a *strategy* value here, not a
+    platform value. Every other strategy (q4_ir, aem_bny, aem_cme) shares
+    its listing-path field/default with its parent platform (there's no
+    separate PLATFORMS entry for them), so passing the strategy there
+    instead of the platform would silently lose the field lookup rather
+    than finding a more specific one -- resolve_listing_url() falls back
+    to the bare site root for any key it doesn't recognize.
+    """
+    if strategy == PLATFORM_NOTIFIED_GATED:
+        return strategy
+    return platform
 
 # ---------------------------------------------------------------------------
 # news_path handling
@@ -731,12 +882,13 @@ def detect_platform(
     ir_url: str, session, timeout: int, slug: str = "",
     news_path: str = "", news_details_segment: str = "",
     debug_dump_html: Optional[Path] = None,
-) -> str:
-    """Fetch *ir_url* (or its news_path sub-page, if given) and return the
-    detected platform name.
+) -> tuple[str, str]:
+    """Fetch *ir_url* (or its news_path sub-page, if given) and return
+    (platform, strategy) -- see "Platform vs. strategy" above GATED_SLUGS
+    for what each means.
 
-    Returns 'unknown' on any network or HTTP error so callers always get a
-    string rather than an exception.
+    Returns ('unknown', 'unknown') on any network or HTTP error so callers
+    always get a pair of strings rather than an exception.
 
     ``session`` is a session built by new_session() -- always required, and
     always the caller's own, never a shared/global one. See new_session()'s
@@ -756,11 +908,15 @@ def detect_platform(
     Q4 themes that customize the "-details" path segment (e.g. Netflix's
     "press-release-details") are still recognized.
 
-    *slug*, if given and present in GATED_SLUGS, promotes a "notified"
-    result to "notified_gated" (see module docstring and GATED_SLUGS --
-    there's no content-based signal for "gated" yet, so this is a manual
-    override keyed by slug rather than something detect_platform_from_html
-    can determine from the page alone).
+    *slug*, if given, is passed to determine_strategy() to resolve the
+    returned *strategy* value -- e.g. promoting a "notified" platform
+    result to a "notified_gated" strategy for slugs in GATED_SLUGS, or an
+    "aem" platform result to "aem_bny"/"aem_cme" for slugs in
+    AEM_BNY_SLUGS/AEM_CME_SLUGS (see module docstring and
+    determine_strategy() -- there's no content-based signal for either of
+    these yet, so both are manual overrides keyed by slug rather than
+    something detect_platform_from_html can determine from the page
+    alone).
 
     *debug_dump_html*, if given, saves the raw fetched HTML to that path
     (creating parent directories as needed) before classification, mirroring
@@ -774,7 +930,7 @@ def detect_platform(
     there's no HTML yet at that point.
     """
     if not ir_url:
-        return PLATFORM_UNKNOWN
+        return PLATFORM_UNKNOWN, PLATFORM_UNKNOWN
     fetch_url = _join_news_path(ir_url, news_path)
     try:
         final_url, html = fetch_html(fetch_url, session, timeout=timeout)
@@ -789,12 +945,12 @@ def detect_platform(
         )
     except Exception as exc:
         logger.warning("fetch failed for %s: %s", fetch_url, exc)
-        return PLATFORM_UNKNOWN
+        return PLATFORM_UNKNOWN, PLATFORM_UNKNOWN
 
-    if platform == PLATFORM_NOTIFIED and slug.strip().lower() in GATED_SLUGS:
-        logger.debug("Gated-slug override: %s → notified_gated", slug)
-        return PLATFORM_NOTIFIED_GATED
-    return platform
+    strategy = determine_strategy(platform, slug)
+    if strategy != platform:
+        logger.debug("Slug override: %s → strategy %s", slug, strategy)
+    return platform, strategy
 
 # ---------------------------------------------------------------------------
 # sources.yaml helpers
@@ -897,21 +1053,26 @@ def find_row(df: pd.DataFrame, query: str) -> Optional[pd.Series]:
 # ---------------------------------------------------------------------------
 
 def detect_platforms_parallel(df: pd.DataFrame, workers: int, timeout: int) -> pd.DataFrame:
-    """Detect IR platform for every row in *df*, using a thread pool.
+    """Detect IR platform (and strategy) for every row in *df*, using a
+    thread pool.
 
-    Returns a new DataFrame with columns: slug, ticker, platform, scrape_url.
-    Rows retain the same order as *df*. Detection fetches each row's
-    resolved scrape URL (news_url if set, else ir_url -- see
+    Returns a new DataFrame with columns: slug, ticker, platform, strategy,
+    scrape_url -- see "Platform vs. strategy" above GATED_SLUGS for what
+    the two columns mean and how they can differ (e.g. platform "notified"
+    with strategy "notified_gated" for a bot-gated slug, or platform "aem"
+    with strategy "aem_bny"/"aem_cme" once a slug's bespoke scraper is
+    known). Rows retain the same order as *df*. Detection fetches each
+    row's resolved scrape URL (news_url if set, else ir_url -- see
     resolve_scrape_url()), but the output's scrape_url column reports the
-    full press-release *listing* URL for the detected platform instead --
-    see resolve_listing_url() -- so a reader can paste this column
-    directly into a browser and land on the same listing page the platform
-    was detected from (and that a scraper would parse), rather than just
-    the site root. (Previously this reported the bare resolved scrape URL
-    unconditionally, which for InvestorRoom/Notified sources with a
-    non-default news_releases_path -- e.g. Lockheed Martin's
-    "news-releases?category=788" -- looked plausible but wasn't the actual
-    listing page.)
+    full press-release *listing* URL for the detected platform/strategy
+    instead -- see resolve_listing_url() and _resolve_listing_platform()
+    -- so a reader can paste this column directly into a browser and land
+    on the same listing page the platform was detected from (and that a
+    scraper would parse), rather than just the site root. (Previously this
+    reported the bare resolved scrape URL unconditionally, which for
+    InvestorRoom/Notified sources with a non-default news_releases_path --
+    e.g. Lockheed Martin's "news-releases?category=788" -- looked
+    plausible but wasn't the actual listing page.)
     """
     rows = df[
         ["slug", "ticker", "ir_url", "news_url", "news_path",
@@ -919,9 +1080,9 @@ def detect_platforms_parallel(df: pd.DataFrame, workers: int, timeout: int) -> p
     ].to_dict("records")
 
     # Pre-allocate results list so we can fill by index (preserves order)
-    results = [None] * len(rows)
+    results: list[Optional[tuple[str, str]]] = [None] * len(rows)
 
-    def detect_one(idx_row: tuple[int, dict]) -> tuple[int, str]:
+    def detect_one(idx_row: tuple[int, dict]) -> tuple[int, str, str]:
         idx, row = idx_row
         # One session per row, opened and closed right here -- see
         # new_session()'s docstring for why this can't be a session shared
@@ -930,25 +1091,27 @@ def detect_platforms_parallel(df: pd.DataFrame, workers: int, timeout: int) -> p
         # not a paginated scrape, so there's no keep-alive benefit being
         # given up by not caching it.
         with new_session() as session:
-            platform = detect_platform(
+            platform, strategy = detect_platform(
                 resolve_scrape_url(row), session, timeout=timeout, slug=row.get("slug", ""),
                 news_path=row.get("news_path", ""),
                 news_details_segment=row.get("news_details_segment", ""),
             )
-        return idx, platform
+        return idx, platform, strategy
 
     with concurrent.futures.ThreadPoolExecutor(max_workers=workers) as pool:
         futures = {pool.submit(detect_one, (i, r)): i for i, r in enumerate(rows)}
         for future in concurrent.futures.as_completed(futures):
-            idx, platform = future.result()
-            results[idx] = platform
+            idx, platform, strategy = future.result()
+            results[idx] = (platform, strategy)
 
     result_df = df[["slug", "ticker"]].copy()
-    result_df["platform"] = results
+    result_df["platform"] = [platform for platform, _ in results]
+    result_df["strategy"] = [strategy for _, strategy in results]
     result_df["scrape_url"] = [
-        resolve_listing_url(r, platform) for r, platform in zip(rows, results)
+        resolve_listing_url(r, _resolve_listing_platform(platform, strategy))
+        for r, (platform, strategy) in zip(rows, results)
     ]
-    return result_df[["slug", "ticker", "platform", "scrape_url"]]
+    return result_df[["slug", "ticker", "platform", "strategy", "scrape_url"]]
 
 # ---------------------------------------------------------------------------
 # Cross-check against config/scraper_config.yaml
@@ -973,28 +1136,37 @@ def detect_platforms_parallel(df: pd.DataFrame, workers: int, timeout: int) -> p
 def load_configured_platforms(
     scraper_config_path: Path = DEFAULT_SCRAPER_CONFIG_YAML,
 ) -> pd.DataFrame:
-    """Return a (slug, platform) DataFrame of every slug configured in scraper_config.yaml.
+    """Return a (slug, strategy, platform) DataFrame of every slug configured
+    in scraper_config.yaml.
 
-    One row per source entry across every group in *scraper_config_path*,
-    with the group name translated to the matching detect_platform() name
-    via check_scraper_coverage.CONFIG_GROUP_TO_PLATFORM (e.g. "q4_ir" ->
-    "q4") -- reused from there rather than re-derived here, so this
-    translation can't quietly drift from check_scraper_coverage.py's copy.
-    A slug appearing under more than one group (a scraper_config.yaml bug
+    One row per source entry across every group in *scraper_config_path*.
+    The scraper_config.yaml group name a slug is configured under (e.g.
+    "notified", "notified_gated", "q4_ir", "aem_bny") IS the strategy name
+    -- no translation needed for that column. "platform" is that same
+    group name translated down to the matching detect_platform() platform
+    name via check_scraper_coverage.STRATEGY_TO_PLATFORM (e.g. "q4_ir" ->
+    "q4", "aem_bny"/"aem_cme" -> "aem", "notified_gated" -> "notified") --
+    reused from there rather than re-derived here, so this translation
+    can't quietly drift from check_scraper_coverage.py's copy. A slug
+    appearing under more than one group (a scraper_config.yaml bug
     check_scraper_coverage.py already flags) contributes one row per group
     it's under; check_scraper_config_consistency() below will then report
     a mismatch for whichever of those rows doesn't match the detected
-    platform, which is a reasonable side effect rather than something this
+    strategy, which is a reasonable side effect rather than something this
     function needs to special-case.
     """
     config = load_scraper_config(scraper_config_path)
     rows = [
-        {"slug": entry["slug"], "platform": CONFIG_GROUP_TO_PLATFORM.get(group_name, group_name)}
+        {
+            "slug": entry["slug"],
+            "strategy": group_name,
+            "platform": STRATEGY_TO_PLATFORM.get(group_name, group_name),
+        }
         for group_name, group in (config or {}).items()
         for entry in group.get("sources", [])
         if entry.get("slug")
     ]
-    return pd.DataFrame(rows, columns=["slug", "platform"])
+    return pd.DataFrame(rows, columns=["slug", "strategy", "platform"])
 
 
 def check_scraper_config_consistency(
@@ -1004,17 +1176,24 @@ def check_scraper_config_consistency(
     """Return human-readable mismatch messages between scraper_config.yaml and *result_df*.
 
     *result_df* is this run's freshly detected (slug, ticker, platform,
-    scrape_url) DataFrame (detect_platforms_parallel()'s return value).
-    Every slug configured in scraper_config.yaml is expected to appear in
-    *result_df* with the SAME platform value scraper_config.yaml asserts
-    for it (see the module comment above for why). Two kinds of problems
-    are reported, each as one message:
+    strategy, scrape_url) DataFrame (detect_platforms_parallel()'s return
+    value). Every slug configured in scraper_config.yaml is expected to
+    appear in *result_df* with the SAME strategy value scraper_config.yaml
+    asserts for it (see the module comment above for why) -- comparison is
+    on strategy rather than platform because strategy is the finer-grained,
+    actually-actionable fact ("is this slug configured under the scraper
+    that will actually work for it"); a platform-only comparison would
+    miss e.g. a bny-configured slug that would now fingerprint as needing
+    the cme scraper instead, since both are platform "aem". Two kinds of
+    problems are reported, each as one message:
 
       - a configured slug missing from *result_df* entirely (e.g. removed
         or renamed in sources.yaml since scraper_config.yaml was last
-        updated -- this run has no opinion on its platform at all)
+        updated -- this run has no opinion on its platform/strategy at all)
       - a configured slug present in *result_df* under a DIFFERENT
-        platform than scraper_config.yaml asserts
+        strategy than scraper_config.yaml asserts (the platform each
+        asserts is included in the message for context, even when the
+        platforms themselves happen to agree)
 
     Returns an empty list when everything configured agrees, which is the
     expected steady state. This deliberately does not attempt the
@@ -1029,29 +1208,32 @@ def check_scraper_config_consistency(
         return []
 
     merged = configured.merge(
-        result_df[["slug", "platform"]], on="slug", how="left",
+        result_df[["slug", "platform", "strategy"]], on="slug", how="left",
         suffixes=("_configured", "_detected"),
     )
 
     messages: list[str] = []
-    for _, row in merged[merged["platform_detected"].isna()].iterrows():
+    for _, row in merged[merged["strategy_detected"].isna()].iterrows():
         messages.append(
-            f"slug '{row['slug']}' is configured in scraper_config.yaml for "
-            f"platform '{row['platform_configured']}' but was not found in "
-            "this run's detection results (renamed or removed from "
+            f"slug '{row['slug']}' is configured in scraper_config.yaml under "
+            f"strategy '{row['strategy_configured']}' (platform "
+            f"'{row['platform_configured']}') but was not found in this "
+            "run's detection results (renamed or removed from "
             "sources.yaml?)"
         )
 
     mismatched = merged[
-        merged["platform_detected"].notna()
-        & (merged["platform_detected"] != merged["platform_configured"])
+        merged["strategy_detected"].notna()
+        & (merged["strategy_detected"] != merged["strategy_configured"])
     ]
     for _, row in mismatched.iterrows():
         messages.append(
-            f"slug '{row['slug']}' is configured in scraper_config.yaml for "
-            f"platform '{row['platform_configured']}' but was detected as "
-            f"'{row['platform_detected']}' -- scraper_config.yaml may be "
-            "stale, or platform detection may have regressed"
+            f"slug '{row['slug']}' is configured in scraper_config.yaml under "
+            f"strategy '{row['strategy_configured']}' (platform "
+            f"'{row['platform_configured']}') but was detected as strategy "
+            f"'{row['strategy_detected']}' (platform '{row['platform_detected']}') "
+            "-- scraper_config.yaml may be stale, or platform/strategy "
+            "detection may have regressed"
         )
 
     return messages
@@ -1231,27 +1413,30 @@ def main(argv: Optional[list[str]] = None) -> int:
         return 1
 
     with new_session() as session:
-        platform = detect_platform(
+        platform, strategy = detect_platform(
             scrape_url, session, timeout=args.timeout, slug=slug,
             news_path=news_path, news_details_segment=news_details_segment,
             debug_dump_html=args.debug_dump_html,
         )
-    # Report the full listing URL now that the platform is known -- e.g.
-    # https://news.lockheedmartin.com/news-releases?category=788 rather
-    # than just https://news.lockheedmartin.com/ -- see
-    # resolve_listing_url(). row (when matched) carries news_releases_path
-    # for this; a bare --url with no sources.yaml match has no such field,
-    # so it falls back to the un-joined scrape_url for any known platform.
+    # Report the full listing URL now that the platform/strategy is known
+    # -- e.g. https://news.lockheedmartin.com/news-releases?category=788
+    # rather than just https://news.lockheedmartin.com/ -- see
+    # resolve_listing_url() and _resolve_listing_platform(). row (when
+    # matched) carries news_releases_path for this; a bare --url with no
+    # sources.yaml match has no such field, so it falls back to the
+    # un-joined scrape_url for any known platform.
     listing_url = resolve_listing_url(
-        row.to_dict() if row is not None else {"ir_url": scrape_url}, platform
+        row.to_dict() if row is not None else {"ir_url": scrape_url},
+        _resolve_listing_platform(platform, strategy),
     )
     result = pd.DataFrame([{
         "slug":        slug,
         "ticker":      ticker,
         "platform":    platform,
+        "strategy":    strategy,
         "scrape_url":  listing_url,
     }])
-    print_csv(result[["slug", "ticker", "platform", "scrape_url"]])
+    print_csv(result[["slug", "ticker", "platform", "strategy", "scrape_url"]])
     return 0
 
 

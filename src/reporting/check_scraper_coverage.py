@@ -221,28 +221,42 @@ def missing_coverage_csv(missing_df: pd.DataFrame) -> str:
     return missing_df.to_csv(index=False, lineterminator="\n")
 
 
-# scraper_config.yaml group names that don't match the platform name
-# detect_ir_platform.py's detect_platform() assigns for the same platform.
-# The canonical list of valid platform names is utils.sources_utils.
-# PLATFORMS (see that registry's own comment) -- not retyped here, so this
-# comment can't go stale the way a hand-copied list would. Every group not
-# listed here is assumed to already match its platform name 1:1 (true today
-# for investorroom, notified, notified_gated, investis, aem).
-CONFIG_GROUP_TO_PLATFORM = {
+# scraper_config.yaml group names ARE strategy names (e.g. "q4_ir",
+# "aem_bny", "notified_gated") -- see detect_ir_platform.py's module
+# docstring for the platform/strategy distinction this maps between: a
+# "platform" is what detect_ir_platform.py's page-fingerprint checks find
+# (q4, notified, aem, ...); a "strategy" is which specific scraper actually
+# handles a given slug (q4_ir, notified_gated, aem_bny, aem_cme, ...) --
+# several strategies can share one platform. STRATEGY_TO_PLATFORM maps a
+# scraper_config.yaml group name (== strategy name) down to its platform
+# name, for the handful of groups where those differ. The canonical list of
+# valid platform names is utils.sources_utils.PLATFORMS (see that
+# registry's own comment) -- not retyped here, so this comment can't go
+# stale the way a hand-copied list would. Every group not listed here is
+# assumed to already match its platform name 1:1 (true today for
+# investorroom, notified, investis).
+STRATEGY_TO_PLATFORM = {
     "q4_ir": "q4",
     # bny and cme both fingerprint as the "aem" platform (see
     # detect_ir_platform.py / sources_utils.PLATFORMS) but no longer share
     # a scraper module or a scraper_config.yaml group -- see
     # scrape_aem_bny.py's and scrape_aem_cme.py's module docstrings for
-    # why. Both group names still need to resolve back to "aem" here so
-    # this consistency check doesn't flag them as a platform mismatch.
+    # why. Both strategy/group names still need to resolve back to "aem"
+    # here so this consistency check doesn't flag them as a platform
+    # mismatch.
     "aem_bny": "aem",
     "aem_cme": "aem",
+    # notified_gated is the same Notified/Drupal platform as "notified",
+    # just scraped with scrape_notified_gated.py's headed-browser step
+    # instead of scrape_notified.py's plain-HTTP pagination -- see
+    # detect_ir_platform.py's GATED_SLUGS. The group name itself is the
+    # strategy; this entry only supplies the platform it rolls up to.
+    "notified_gated": "notified",
 }
 
 
 def _assert_config_group_mapping_valid() -> None:
-    """Fail fast if CONFIG_GROUP_TO_PLATFORM points at an unregistered platform.
+    """Fail fast if STRATEGY_TO_PLATFORM points at an unregistered platform.
 
     Guards against the same class of drift detect_ir_platform.py's
     _assert_platforms_registered() catches: someone renames or removes a
@@ -252,10 +266,10 @@ def _assert_config_group_mapping_valid() -> None:
     erroring. Called once at import time (see call just below).
     """
     known = set(platform_names())
-    bad = {v for v in CONFIG_GROUP_TO_PLATFORM.values() if v not in known}
+    bad = {v for v in STRATEGY_TO_PLATFORM.values() if v not in known}
     if bad:
         raise AssertionError(
-            f"CONFIG_GROUP_TO_PLATFORM maps a scraper_config.yaml group to "
+            f"STRATEGY_TO_PLATFORM maps a scraper_config.yaml group/strategy to "
             f"platform(s) {sorted(bad)}, which utils.sources_utils.PLATFORMS "
             "doesn't recognize. Fix the mapping, or add the platform to "
             "PLATFORMS in src/utils/sources_utils.py if it's newly added."
@@ -297,7 +311,7 @@ def platform_breakdown(
 
     "configured" counts *covered* sources.yaml slugs, grouped by the
     scraper_config.yaml group they're configured under (mapped to the
-    matching detect_platform() name via CONFIG_GROUP_TO_PLATFORM, e.g.
+    matching detect_platform() platform name via STRATEGY_TO_PLATFORM, e.g.
     "q4_ir" -> "q4"). Every group in scraper_config.yaml is fully
     enumerated, so a platform with no configured sources is a real 0
     here, not a gap in measurement -- "configured" is always filled.
@@ -323,7 +337,7 @@ def platform_breakdown(
     configured_counts = (
         pd.Series(
             [
-                CONFIG_GROUP_TO_PLATFORM.get(group, group)
+                STRATEGY_TO_PLATFORM.get(group, group)
                 for record in covered
                 for group in groups_by_slug.get(record.get("slug", ""), [])
             ],
