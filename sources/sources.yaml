@@ -126,6 +126,10 @@ sources:
     name: Ameriprise Financial, Inc.
     ticker: AMP
     ir_url: https://ir.ameriprise.com/
+  - slug: amgen
+    name: Amgen Inc.
+    ticker: AMGN
+    ir_url: https://investors.amgen.com/
   - slug: analog-devices
     name: Analog Devices, Inc.
     news_releases_path: press-releases
@@ -297,6 +301,10 @@ sources:
     name: Cisco Systems, Inc.
     ticker: CSCO
     ir_url: https://investor.cisco.com/
+  - slug: citigroup
+    name: Citigroup Inc.
+    ticker: C
+    ir_url: https://www.citigroup.com/global/investors
   - slug: cme
     name: CME Group Inc.
     ticker: CME
@@ -358,6 +366,10 @@ sources:
     name: Crown Castle Inc.
     ticker: CCI
     ir_url: https://investor.crowncastle.com/
+  - slug: csx
+    name: CSX Corporation
+    ticker: CSX
+    ir_url: https://investors.csx.com/
   - slug: cummins
     name: Cummins Inc.
     ticker: CMI
@@ -687,6 +699,10 @@ sources:
     name: The J. M. Smucker Company
     ticker: SJM
     ir_url: https://investors.jmsmucker.com/
+  - slug: jack-henry
+    name: Jack Henry & Associates, Inc.
+    ticker: JKHY
+    ir_url: https://ir.jackhenry.com/
   - slug: jb-hunt
     name: J.B. Hunt Transport Services, Inc.
     ticker: JBHT
@@ -868,6 +884,11 @@ sources:
     name: NIKE, Inc.
     ticker: NKE
     ir_url: https://investors.nike.com/
+  - slug: northern-trust
+    name: Northern Trust Corporation
+    ticker: NTRS
+    ir_url: 
+      https://www.northerntrust.com/united-states/about-us/investor-relations
   - slug: norwegian-cruise-line
     name: Norwegian Cruise Line Holdings Ltd.
     ticker: NCLH
@@ -1174,6 +1195,10 @@ sources:
     ticker: WDAY
     ir_url: https://investor.workday.com/
     news_path: news-and-events/press-releases/default.aspx
+  - slug: xylem
+    name: Xylem Inc.
+    ticker: XYL
+    ir_url: https://www.xylem.com/en-us/investors/
   - slug: yum-brands
     name: Yum! Brands, Inc.
     ticker: YUM

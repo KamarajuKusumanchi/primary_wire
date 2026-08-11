@@ -14,6 +14,7 @@ amazon,AMZN,unknown,unknown,https://ir.aboutamazon.com/
 amcor,AMCR,unknown,unknown,https://www.amcor.com/investors
 amd,AMD,notified,notified,https://ir.amd.com/news-events/press-releases
 ameriprise,AMP,q4,q4_ir,https://ir.ameriprise.com/news/default.aspx
+amgen,AMGN,notified,notified,https://investors.amgen.com/news-releases
 analog-devices,ADI,notified,notified,https://investor.analog.com/press-releases
 apa,APA,notified,notified,https://investor.apacorp.com/news-releases
 apollo,APO,notified,notified,https://ir.apollo.com/news-events/press-releases
@@ -54,6 +55,7 @@ cigna,CI,unknown,unknown,https://investors.thecignagroup.com/
 cinfin,CINF,investorroom,investorroom,https://investors.cinfin.com/news-releases
 cintas,CTAS,unknown,unknown,https://www.cintas.com/investors/
 cisco,CSCO,q4,q4_ir,https://investor.cisco.com/news/default.aspx
+citigroup,C,unknown,unknown,https://www.citigroup.com/global/investors
 cme,CME,aem,aem_cme,https://www.cmegroup.com/media-room/press-releases.html
 cms-energy,CMS,notified,notified,https://www.cmsenergy.com/investor-relations/news-releases
 cognizant,CTSH,q4,q4_ir,https://investors.cognizant.com/news/default.aspx
@@ -68,6 +70,7 @@ costco,COST,q4,q4_ir,https://investor.costco.com/news/default.aspx
 criver,CRL,notified,notified,https://ir.criver.com/news-releases
 crowdstrike,CRWD,notified,notified,https://ir.crowdstrike.com/press-releases
 crown-castle,CCI,notified,notified,https://investor.crowncastle.com/news-releases
+csx,CSX,q4,q4_ir,https://investors.csx.com/news/default.aspx
 cummins,CMI,unknown,unknown,https://investor.cummins.com/
 cvs,CVS,q4,q4_ir,https://investors.cvshealth.com/news/default.aspx
 danaher,DHR,investorroom,investorroom,https://investors.danaher.com/press-releases
@@ -146,6 +149,7 @@ intuit,INTU,notified,notified,https://investors.intuit.com/news-releases
 intuitive-surgical,ISRG,notified,notified,https://isrg.intuitive.com/news-releases
 iqvia,IQV,unknown,unknown,https://ir.iqvia.com/
 j-m-smucker,SJM,q4,q4_ir,https://investors.jmsmucker.com/news/default.aspx
+jack-henry,JKHY,notified,notified,https://ir.jackhenry.com/news-releases
 jb-hunt,JBHT,investis,investis,https://investor.jbhunt.com/news-releases
 jp-morgan-chase,JPM,aem,aem,https://www.jpmorganchase.com/ir
 keycorp,KEY,unknown,unknown,https://investor.key.com/
@@ -187,6 +191,7 @@ netflix,NFLX,q4,q4_ir,https://ir.netflix.net/investor-news-and-events/financial-
 newmont,NEM,unknown,unknown,https://www.newmont.com/investors/
 news-corp,NWSA,notified,notified,https://investors.newscorp.com/news-releases
 nike,NKE,unknown,unknown,https://investors.nike.com/
+northern-trust,NTRS,aem,aem,https://www.northerntrust.com/united-states/about-us/investor-relations
 norwegian-cruise-line,NCLH,notified,notified,https://www.nclhltd.com/investors/news-releases
 nrg,NRG,notified,notified,https://investors.nrg.com/news-releases
 nvidia,NVDA,aem,aem,https://investor.nvidia.com/news/press-releases/default.aspx
@@ -260,6 +265,7 @@ warner-bros-discovery,WBD,q4,q4_ir,https://ir.wbd.com/news/default.aspx
 western-digital,WDC,notified,notified,https://investor.wdc.com/news-releases
 weyerhaeuser,WY,investorroom,investorroom,https://investor.weyerhaeuser.com/news-releases
 workday,WDAY,q4,q4_ir,https://investor.workday.com/news-and-events/press-releases/default.aspx
+xylem,XYL,unknown,unknown,https://www.xylem.com/en-us/investors/
 yum-brands,YUM,unknown,unknown,https://investors.yum.com/
 zebra,ZBRA,q4,q4_ir,https://investors.zebra.com/news/default.aspx
 zimmer-biomet,ZBH,investis,investis,https://investor.zimmerbiomet.com/news-releases

@@ -1,7 +1,7 @@
 
 S&P 500 companies:  503
-Covered in sources: 260
-Missing:            243
+Covered in sources: 266
+Missing:            237
 
 Missing tickers:
   A
@@ -14,7 +14,6 @@ Missing tickers:
   AIG
   ALGN
   AME
-  AMGN
   AMT
   AON
   AOS
@@ -39,7 +38,6 @@ Missing tickers:
   BRO
   BSX
   BXP
-  C
   CAH
   CAT
   CB
@@ -61,7 +59,6 @@ Missing tickers:
   CPT
   CRH
   CSGP
-  CSX
   CVNA
   CVX
   D
@@ -124,7 +121,6 @@ Missing tickers:
   J
   JBL
   JCI
-  JKHY
   JNJ
   KDP
   KEYS
@@ -158,7 +154,6 @@ Missing tickers:
   NI
   NOC
   NSC
-  NTRS
   NUE
   NVR
   NWS
@@ -244,6 +239,5 @@ Missing tickers:
   WTW
   WYNN
   XEL
-  XYL
   XYZ
   ZTS
