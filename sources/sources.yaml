@@ -1116,6 +1116,10 @@ sources:
     name: VeriSign, Inc.
     ticker: VRSN
     ir_url: https://investor.verisign.com/
+  - slug: verisk-analytics
+    name: Verisk Analytics, Inc.
+    ticker: VRSK
+    ir_url: https://investor.verisk.com/
   - slug: verizon
     name: Verizon Communications Inc.
     ticker: VZ
