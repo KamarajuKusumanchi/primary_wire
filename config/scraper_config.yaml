@@ -50,6 +50,7 @@ notified:
     - slug: marriott-international
     - slug: virtu
     - slug: generac
+    - slug: datadog
 
 notified_gated:
   scraper: scrape_notified_gated
