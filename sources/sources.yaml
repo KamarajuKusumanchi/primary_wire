@@ -766,6 +766,12 @@ sources:
     name: LyondellBasell Industries NV
     ticker: LYB
     ir_url: https://investors.lyondellbasell.com/
+  - slug: marathon-petroleum
+    name: Marathon Petroleum Corporation
+    ticker: MPC
+    ir_url: https://ir.marathonpetroleum.com/
+    news_url: 
+      https://ir.marathonpetroleum.com/investor/news-releases/default.aspx
   - slug: marriott-international
     name: Marriott International
     ticker: MAR

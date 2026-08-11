@@ -1,7 +1,7 @@
 
 S&P 500 companies:  503
-Covered in sources: 256
-Missing:            247
+Covered in sources: 257
+Missing:            246
 
 Missing tickers:
   A
@@ -151,7 +151,6 @@ Missing tickers:
   MMM
   MNST
   MOS
-  MPC
   MRSH
   MTB
   MTD
