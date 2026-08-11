@@ -711,6 +711,10 @@ sources:
     name: KLA Corporation
     ticker: KLAC
     ir_url: https://ir.kla.com/
+  - slug: kroger
+    name: Kroger Company (The)
+    ticker: KR
+    ir_url: https://ir.kroger.com/
   - slug: l3harris
     name: L3Harris Technologies, Inc.
     ticker: LHX
@@ -766,6 +770,10 @@ sources:
     name: LyondellBasell Industries NV
     ticker: LYB
     ir_url: https://investors.lyondellbasell.com/
+  - slug: maac
+    name: Mid-America Apartment Communities, Inc.
+    ticker: MAA
+    ir_url: https://ir.maac.com/
   - slug: marathon-petroleum
     name: Marathon Petroleum Corporation
     ticker: MPC
