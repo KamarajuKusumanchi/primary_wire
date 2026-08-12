@@ -88,6 +88,8 @@ q4_ir:
       args: [--show-browser]
     - slug: quest-diagnostics
       args: [--show-browser]
+    - slug: jabil
+      args: [--show-browser]
 
 investis:
   scraper: scrape_investis
