@@ -345,6 +345,10 @@ sources:
     ticker: GLW
     ir_url: https://investor.corning.com/
     news_path: news-and-events/news/default.aspx
+  - slug: corpay
+    name: Corpay, Inc.
+    ticker: CPAY
+    ir_url: https://investor.corpay.com/
   - slug: corteva
     name: Corteva, Inc.
     ticker: CTVA
@@ -378,6 +382,10 @@ sources:
     name: CVS Health Corporation
     ticker: CVS
     ir_url: https://investors.cvshealth.com/
+  - slug: d-r-horton
+    name: D.R. Horton, Inc.
+    ticker: DHI
+    ir_url: https://investor.drhorton.com/
   - slug: danaher
     name: Danaher Corporation
     ticker: DHR
@@ -854,6 +862,10 @@ sources:
     name: Molson Coors Beverage Company
     ticker: TAP
     ir_url: https://ir.molsoncoors.com/
+  - slug: mondelez-international
+    name: Mondelez International, Inc.
+    ticker: MDLZ
+    ir_url: https://ir.mondelezinternational.com/
   - slug: monolithic-power
     name: Monolithic Power Systems, Inc.
     ticker: MPWR
