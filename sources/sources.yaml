@@ -517,6 +517,10 @@ sources:
     ticker: FDXF
     ir_url: https://ir.fedexfreight.com/
     news_releases_path: news-events/press-releases
+  - slug: ferguson
+    name: Ferguson Enterprises Inc.
+    ticker: FERG
+    ir_url: https://www.corporate.ferguson.com/investor/
   - slug: fico
     name: Fair Isaac Corporation
     ticker: FICO
@@ -699,6 +703,10 @@ sources:
     name: The J. M. Smucker Company
     ticker: SJM
     ir_url: https://investors.jmsmucker.com/
+  - slug: jabil
+    name: Jabil Inc.
+    ticker: JBL
+    ir_url: https://investors.jabil.com/
   - slug: jack-henry
     name: Jack Henry & Associates, Inc.
     ticker: JKHY
