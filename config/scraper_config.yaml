@@ -51,6 +51,7 @@ notified:
     - slug: virtu
     - slug: generac
     - slug: datadog
+    - slug: gartner
 
 notified_gated:
   scraper: scrape_notified_gated

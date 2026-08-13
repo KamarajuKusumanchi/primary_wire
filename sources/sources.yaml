@@ -598,6 +598,7 @@ sources:
     name: Gartner, Inc.
     ticker: IT
     ir_url: https://investor.gartner.com/
+    news_releases_path: press-releases
   - slug: ge-healthcare
     name: GE HealthCare Technologies Inc.
     ticker: GEHC
