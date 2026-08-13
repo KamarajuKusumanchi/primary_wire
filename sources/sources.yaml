@@ -63,6 +63,10 @@
 
 sources:
 
+  - slug: 3m
+    name: 3M Company
+    ticker: MMM
+    ir_url: https://investors.3m.com/
   - slug: abbott
     name: Abbott Laboratories
     ticker: ABT
@@ -181,6 +185,10 @@ sources:
     name: Assurant, Inc.
     ticker: AIZ
     ir_url: https://ir.assurant.com/
+  - slug: at-and-t
+    name: AT&T Inc.
+    ticker: T
+    ir_url: https://investors.att.com/
   - slug: atmos-energy
     name: Atmos Energy Corporation
     ticker: ATO
@@ -268,6 +276,10 @@ sources:
     name: CDW Corporation
     ticker: CDW
     ir_url: https://investor.cdw.com/
+  - slug: cencora
+    name: Cencora, Inc.
+    ticker: COR
+    ir_url: https://investor.amerisourcebergen.com/
   - slug: centene
     name: Centene Corporation
     ticker: CNC
@@ -285,6 +297,10 @@ sources:
     name: Chipotle Mexican Grill, Inc.
     ticker: CMG
     ir_url: https://ir.chipotle.com/
+  - slug: chubb
+    name: Chubb Limited
+    ticker: CB
+    ir_url: https://investors.chubb.com/
   - slug: ciena
     name: Ciena Corporation
     ticker: CIEN
@@ -336,6 +352,10 @@ sources:
     ir_url: https://investors.coca-colacompany.com/
     news_releases_path: news-events/press-releases
     first_page_index: 1
+  - slug: con-edison
+    name: Consolidated Edison, Inc.
+    ticker: ED
+    ir_url: https://investor.conedison.com/
   - slug: conagra
     name: Conagra Brands, Inc.
     ticker: CAG
@@ -452,6 +472,10 @@ sources:
     name: Dover Corporation
     ticker: DOV
     ir_url: https://www.dovercorporation.com/investors
+  - slug: dupont
+    name: DuPont de Nemours, Inc.
+    ticker: DD
+    ir_url: https://www.investors.dupont.com/
   - slug: eaton
     name: Eaton Corporation, PLC
     ticker: ETN
@@ -592,6 +616,10 @@ sources:
     name: Generac Holdings Inc.
     ticker: GNRC
     ir_url: https://investors.generac.com/
+  - slug: general-mills
+    name: General Mills, Inc.
+    ticker: GIS
+    ir_url: https://investors.generalmills.com/
   - slug: genuine-parts
     name: Genuine Parts Company
     ticker: GPC
@@ -743,6 +771,10 @@ sources:
     name: KeyCorp
     ticker: KEY
     ir_url: https://investor.key.com/
+  - slug: keysight
+    name: Keysight Technologies, Inc.
+    ticker: KEYS
+    ir_url: https://investor.keysight.com/
   - slug: kimco-realty
     name: Kimco Realty Corporation
     ticker: KIM
@@ -849,6 +881,10 @@ sources:
     name: McDonald's Corporation
     ticker: MCD
     ir_url: https://corporate.mcdonalds.com/corpmcd/investors.html
+  - slug: mckesson
+    name: McKesson Corporation
+    ticker: MCK
+    ir_url: https://investor.mckesson.com/
   - slug: medtronic
     name: Medtronic plc.
     ticker: MDT
@@ -1125,6 +1161,10 @@ sources:
     name: Texas Instruments Incorporated
     ticker: TXN
     ir_url: https://investor.ti.com/
+  - slug: texas-pacific
+    name: Texas Pacific Land Corporation
+    ticker: TPL
+    ir_url: https://www.texaspacific.com/investors
   - slug: the-trade-desk
     name: The Trade Desk, Inc.
     ticker: TTD
@@ -1222,6 +1262,10 @@ sources:
     name: Warner Bros. Discovery, Inc.
     ticker: WBD
     ir_url: https://ir.wbd.com/
+  - slug: wec-energy
+    name: WEC Energy Group, Inc.
+    ticker: WEC
+    ir_url: https://investor.wecenergygroup.com/
   - slug: western-digital
     name: Western Digital Corporation
     ticker: WDC
@@ -1230,6 +1274,10 @@ sources:
     name: Weyerhaeuser Company
     ticker: WY
     ir_url: https://investor.weyerhaeuser.com/
+  - slug: willis-towers-watson
+    name: Willis Towers Watson Public Limited Company
+    ticker: WTW
+    ir_url: https://investors.wtwco.com/
   - slug: workday
     name: Workday, Inc.
     ticker: WDAY
