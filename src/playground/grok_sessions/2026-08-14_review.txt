@@ -1,0 +1,126 @@
+2026-08-14 12:30 AM
+
+Prompt:
+Please review https://github.com/KamarajuKusumanchi/primary_wire/archive/refs/heads/master.zip and tell me what you think? What are the next steps? What are some things that can be done to make the code more scalable and extendable? How to improve the design and the underlying code? Is there anything worth refactoring? Any comments that are not inline with the code? Ignore files in src/playground , src/prototypes from your review.
+
+Response:
+**Overall impression**
+
+This is a thoughtful, well-motivated project with unusually high-quality documentation and a clear sense of purpose. The decision to scrape primary IR pages (instead of wire services or EDGAR) is sound, the polite-scraping guidelines are mature, and the platform-oriented design (Q4, InvestorRoom, Notified, Investis, AEM) is the right abstraction.
+
+The codebase shows real engineering care: shared utilities (`scrape_utils`, `sources_utils`, `csv_utils`), a platform registry that is treated as the single source of truth, good regression tests for date-parsing edge cases, smoke-test support in `scrape_all.py`, and extensive module-level docs that explain *why* decisions were made. That is rarer than it should be.
+
+It is still early-stage and shows the typical growing pains of a scraper collection that has been evolving organically.
+
+### Strengths
+
+- Excellent documentation (`README.txt`, `docs/scrapers.txt`, module docstrings). The “why” is explained, not just the “how”.
+- Sensible separation of concerns: sources.yaml for durable facts, scraper_config.yaml for runtime orchestration, shared helpers for CLI/date/CSV logic.
+- Platform registry in `sources_utils.PLATFORMS` + runtime assertions in the detector is a good anti-drift pattern.
+- Date parsing is more robust than average (handles trailing periods on abbreviated months, first-vs-last match, multiple formats).
+- `scrape_all.py` already anticipates future parallelism (batched merge, pure return values from `run_scraper`).
+- Tests exist and cover non-trivial cases (especially date parsing and year filtering).
+- Clear contribution and politeness guidelines.
+
+### Comment / code mismatches
+
+1. **`publish_time` is already implemented but the docs still treat it as future work**
+   README.txt says:
+   > A `publish_time` column is planned for a future release… For now, `publish_date` holds a plain date only.
+
+   Reality: `csv_utils.CSV_FIELDS` already includes `publish_time`, `NewsItem` has the field, scrapers populate it, and sorting logic handles it. This is the most obvious doc/code drift.
+
+2. Several module docstrings still describe older behaviour (e.g. CDW needing `--fetch-detail-pages`) that later comments or code have superseded. The long narrative comments are valuable, but they need occasional pruning so they do not contradict the current code path.
+
+3. `scrape_notified_gated.py` still carries “temporary, single-source” language while the config already lists multiple gated sources (TJX, Robinhood, Casey’s).
+
+### Design and architecture observations
+
+**Current shape**
+Each platform has its own ~800–1200-line script. Shared plumbing (argparse, year filtering, output, CSV merge, source resolution) has been extracted, but the core scrape logic (pagination, link classification, date extraction, bot-mitigation strategies) is still largely per-file. AEM being split into two site-specific scrapers is an honest acknowledgment that the platform is too heterogeneous.
+
+**Main scalability / extensibility limits**
+
+1. **Adding a new platform is still heavy.** Even with the registry, you still need a new multi-hundred-line script, fingerprint functions, docs section, and config entries. The common “fetch → parse listing → optional detail fallback → filter → output” skeleton is repeated.
+
+2. **Monolithic scraper files.** Large files make it harder to see the pure parsing logic versus Playwright/curl_cffi orchestration versus CLI.
+
+3. **Bot-mitigation strategies are ad-hoc.** Headed Playwright, `curl_cffi` JA3 impersonation, `--fallback-to-visible`, form-token extraction, etc. are all useful, but they are scattered. A small strategy or transport layer would make new gated sites easier.
+
+4. **Data model is still minimal.** Only URLs + metadata. That is intentional and good for legal/size reasons, but there is no versioning of the schema, no soft-delete / “last seen”, and no easy way to record scraper confidence or extraction method.
+
+5. **No abstraction for “listing page walker”.** Offset pagination, page-number pagination, year-filter widgets, “Load more”, and pure client-side year filtering are all reimplemented.
+
+### Concrete recommendations for scalability and extensibility
+
+**High-value next steps (ordered roughly by leverage)**
+
+1. **Fix the `publish_time` documentation immediately** and decide whether the column should be required or optional in the schema.
+
+2. **Extract a thin scraper base / protocol**
+   Something like:
+   ```python
+   class BaseScraper(Protocol):
+       def resolve_source(...) -> SourceIdentity: ...
+       def scrape_listing(...) -> list[NewsItem]: ...
+       def fetch_detail_date(...) -> ...: ...
+   ```
+   Keep the existing free functions; just make the common orchestration path explicit so new platforms implement fewer pieces from scratch.
+
+3. **Factor transport / rendering strategies**
+   - `HttpTransport` (requests / curl_cffi)
+   - `BrowserTransport` (Playwright headless / headed / fallback)
+   - Optional `TokenExtractor` for gated Drupal views
+   Most scrapers would then become “which transport + which parser”.
+
+4. **Push more durable facts into `sources.yaml`**
+   Already started (`needs_detail_page_dates`, `news_releases_path`, etc.). Continue: pagination style, preferred date source (listing vs detail vs URL), bot-mitigation profile, item CSS selectors, etc. This reduces the amount of code that has to change when a site tweaks its theme.
+
+5. **Make AEM a family, not two one-offs**
+   Keep site-specific parsers, but share the Playwright session management, year-filter driving, and card-collection loop that already lives in `scrape_aem_utils.py`. The current split is pragmatic; the goal is to make the *next* AEM site cheap.
+
+6. **Introduce a small internal “scrape result” object** that carries items + diagnostics (pages fetched, dates from listing vs detail, blocked?, etc.). Useful for the reporting suite and for regression tests.
+
+7. **Parallelism in `scrape_all.py`**
+   The design already anticipates a `ThreadPoolExecutor`. The batched merge is the right foundation. Start with a modest worker pool and per-domain rate limiting.
+
+8. **Schema and data-layer hardening**
+   - Explicit schema version or at least a documented changelog for the CSV columns.
+   - Consider adding `scraped_at` or `source_scraper` later if you want auditability.
+   - Keep the pure-CSV + git model; it is a feature.
+
+9. **Testing strategy**
+   - More pure unit tests on the parsers (feed them saved HTML fixtures).
+   - Keep the live regression tests behind the marker (already done).
+   - Add a “golden HTML” directory so selector breakage is caught without hitting the live site every time.
+
+10. **Packaging / install experience**
+    - `pyproject.toml` is already modern (uv-friendly). Consider making the scrapers installable entry points so users do not have to remember `python src/...`.
+    - Document the Playwright + system Chrome expectation more prominently; it is a common source of friction.
+
+### Refactoring opportunities (worth doing)
+
+- **Date & time utilities** are already in a good place; keep them centralized.
+- **Link classification / URL pattern matching** (especially Q4 and InvestorRoom) can be pulled into small pure functions that are easy to unit-test.
+- **Repeated “resolve source identity from slug/ticker/url + sources.yaml”** logic appears in multiple scrapers; the helpers in `sources_utils` are the right home—make sure every scraper uses the same path.
+- Long narrative comments that describe historical debugging journeys are valuable for maintainers but should be moved to `docs/` or shortened once the current behaviour is stable. They currently make the modules harder to scan.
+- `scrape_notified.py` / `scrape_notified_gated.py` share a lot via `scrape_notified_utils`; consider whether the gated path can be an optional strategy on the same scraper rather than a separate entry point (or keep them separate but make the shared surface even larger).
+
+### Things that are *not* problems (or are deliberate)
+
+- Storing only URLs is the correct legal and practical choice.
+- One CSV per day is simple and git-friendly.
+- Platform-specific scrapers (instead of one giant generic scraper) is the right call given how divergent the sites are.
+- Using both Playwright and `curl_cffi` is pragmatic; pure-requests is not viable for several of these hosts.
+
+### Suggested near-term roadmap
+
+1. Sync docs with reality (`publish_time`, gated sources, CDW date extraction).
+2. Extract transport strategies and a minimal scraper protocol.
+3. Grow the set of durable facts in `sources.yaml` so fewer sites need custom code.
+4. Add HTML fixture-based unit tests for the parsers.
+5. Light parallelism + per-domain throttling in `scrape_all.py`.
+6. Continue expanding coverage via the existing platforms before inventing new ones.
+
+**Bottom line**
+This is solid, purposeful work with unusually good documentation and a clear architectural direction. The main risks are the size of the individual scraper modules and the remaining duplication of orchestration/pagination logic. Addressing those will make the project much easier to extend as more S&P 500 (and government) sources are added. The foundation is already better than most personal data-collection projects.
