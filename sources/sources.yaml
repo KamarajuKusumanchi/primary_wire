@@ -504,6 +504,10 @@ sources:
     name: Edison International
     ticker: EIX
     ir_url: https://www.edison.com/investors
+  - slug: elevance-health
+    name: Elevance Health, Inc.
+    ticker: ELV
+    ir_url: https://ir.elevancehealth.com/
   - slug: eli-lilly
     name: Eli Lilly and Company
     ticker: LLY
@@ -796,6 +800,10 @@ sources:
     name: Kimco Realty Corporation
     ticker: KIM
     ir_url: https://investors.kimcorealty.com/
+  - slug: kinder-morgan
+    name: Kinder Morgan, Inc.
+    ticker: KMI
+    ir_url: https://ir.kindermorgan.com/
   - slug: kkr
     name: KKR & Co. Inc.
     ticker: KKR
@@ -1039,6 +1047,10 @@ sources:
     name: PepsiCo, Inc.
     ticker: PEP
     ir_url: https://www.pepsico.com/investors
+  - slug: pg-and-e
+    name: PG&E Corporation
+    ticker: PCG
+    ir_url: https://investor.pgecorp.com/
   - slug: ptc
     name: PTC Inc.
     ticker: PTC
@@ -1078,6 +1090,10 @@ sources:
     name: Royal Caribbean Cruises Ltd.
     ticker: RCL
     ir_url: https://www.rclinvestor.com/
+  - slug: s-p-global
+    name: S&P Global Inc.
+    ticker: SPGI
+    ir_url: https://investor.spglobal.com/
   - slug: salesforce
     name: Salesforce, Inc.
     ticker: CRM
@@ -1102,6 +1118,10 @@ sources:
     name: The Sherwin-Williams Company
     ticker: SHW
     ir_url: https://investors.sherwin-williams.com/
+  - slug: simon
+    name: Simon Property Group, Inc.
+    ticker: SPG
+    ir_url: https://investors.simon.com/
   - slug: skyworks
     name: Skyworks Solutions, Inc.
     ticker: SWKS
