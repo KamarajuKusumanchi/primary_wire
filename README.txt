@@ -1,15 +1,5 @@
 ====== primary_wire ======
 
-**Work in progress.** This project is at an early stage. Coverage is sparse —
-Coverage relative to the S&P 500 is incomplete — see
-''reports/latest/missing_tickers.txt'' for the current count of covered vs.
-missing tickers. Press release links are added manually on an ad hoc basis,
-with a small and growing set of sources covered by automated scrapers (see
-''Scrapers'' below). If you are interested in helping expand coverage,
-contributions are welcome. (That report counts only current S&P 500
-tickers — see [[docs/sources.txt]] for why it doesn't match a raw count of
-''sources.yaml'' entries.)
-
 ==== Goal ====
 
 Build an open, community-maintained aggregator of official press release links,
@@ -56,6 +46,17 @@ the relationship between press releases and market behavior currently requires
 either expensive data subscriptions or a lot of manual work. A clean, open,
 structured index of primary sources lowers that barrier and makes the research
 itself easier to reproduce and share.
+
+==== Status ====
+
+**Work in progress.** This project is at an early stage. Coverage relative to
+the S&P 500 is incomplete — see ''reports/latest/missing_tickers.txt'' for the
+current count of covered vs. missing tickers. Press release links are added
+manually on an ad hoc basis, with a small and growing set of sources covered
+by automated scrapers (see ''Scrapers'' below). If you are interested in
+helping expand coverage, contributions are welcome. (That report counts only
+current S&P 500 tickers — see [[docs/sources.txt]] for why it doesn't match a
+raw count of ''sources.yaml'' entries.)
 
 ==== Scope ====
 
