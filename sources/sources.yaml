@@ -214,6 +214,10 @@ sources:
     name: Baxter International Inc.
     ticker: BAX
     ir_url: https://investor.baxter.com/
+  - slug: becton-dickinson
+    name: Becton, Dickinson and Company
+    ticker: BDX
+    ir_url: https://investors.bd.com/
   - slug: bio-techne
     name: Bio-Techne Corporation
     ticker: TECH
@@ -377,10 +381,18 @@ sources:
     name: Corteva, Inc.
     ticker: CTVA
     ir_url: https://investors.corteva.com/
+  - slug: costar
+    name: CoStar Group, Inc.
+    ticker: CSGP
+    ir_url: https://investors.costargroup.com/
   - slug: costco
     name: Costco Wholesale Corporation
     ticker: COST
     ir_url: https://investor.costco.com/
+  - slug: crh
+    name: CRH PLC
+    ticker: CRH
+    ir_url: https://www.crh.com/investors/
   - slug: criver
     name: Charles River Laboratories International, Inc.
     ticker: CRL
@@ -520,6 +532,10 @@ sources:
     name: Erie Indemnity Company
     ticker: ERIE
     ir_url: https://www.erieinsurance.com/investors
+  - slug: evergy
+    name: Evergy, Inc.
+    ticker: EVRG
+    ir_url: https://investors.evergy.com/
   - slug: exelon
     name: Exelon Corporation
     ticker: EXC
@@ -1144,6 +1160,10 @@ sources:
     name: Take-Two Interactive Software, Inc.
     ticker: TTWO
     ir_url: https://www.take2games.com/ir
+  - slug: tapestry
+    name: Tapestry, Inc.
+    ticker: TPR
+    ir_url: https://investors.tapestry.com/
   - slug: te-connectivity
     name: TE Connectivity plc
     ticker: TEL
