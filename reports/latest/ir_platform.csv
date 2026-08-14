@@ -35,6 +35,7 @@ autozone,AZO,notified,notified,https://about.autozone.com/investor-overview/news
 avery-dennison,AVY,q4,q4_ir,https://investors.averydennison.com/news/default.aspx
 axon,AXON,investorroom,investorroom,https://investor.axon.com/press-releases
 baxter,BAX,q4,q4_ir,https://investor.baxter.com/news/default.aspx
+becton-dickinson,BDX,notified,notified,https://investors.bd.com/news-releases
 bio-techne,TECH,notified,notified,https://investors.bio-techne.com/press-releases
 biogen,BIIB,notified,notified,https://investors.biogen.com/news-releases
 blackstone,BX,unknown,unknown,https://ir.blackstone.com/
@@ -73,7 +74,9 @@ constellation-brands,STZ,notified,notified,https://ir.cbrands.com/news-releases
 corning,GLW,q4,q4_ir,https://investor.corning.com/news-and-events/news/default.aspx
 corpay,CPAY,notified,notified,https://investor.corpay.com/news-releases
 corteva,CTVA,notified,notified,https://investors.corteva.com/news-releases
+costar,CSGP,notified,notified,https://investors.costargroup.com/news-releases
 costco,COST,q4,q4_ir,https://investor.costco.com/news/default.aspx
+crh,CRH,unknown,unknown,https://www.crh.com/investors/
 criver,CRL,notified,notified,https://ir.criver.com/news-releases
 crowdstrike,CRWD,notified,notified,https://ir.crowdstrike.com/press-releases
 crown-castle,CCI,notified,notified,https://investor.crowncastle.com/news-releases
@@ -101,6 +104,7 @@ eaton,ETN,notified,notified,https://www.eaton.com/us/en-us/company/investor-rela
 ebay,EBAY,q4,q4_ir,https://investors.ebayinc.com/news/default.aspx
 ecolab,ECL,q4,q4_ir,https://investor.ecolab.com/news/default.aspx
 edison-international,EIX,unknown,unknown,https://www.edison.com/investors
+elevance-health,ELV,unknown,unknown,https://ir.elevancehealth.com/
 eli-lilly,LLY,notified,notified,https://investor.lilly.com/news-releases
 emcor,EME,unknown,unknown,https://emcorgroup.com/investor-relations
 emerson,EMR,notified,notified,https://ir.emerson.com/news-releases
@@ -108,6 +112,7 @@ eog-resources,EOG,investorroom,investorroom,https://investors.eogresources.com/n
 eqt,EQT,q4,q4_ir,https://ir.eqt.com/news/default.aspx
 equifax,EFX,notified,notified,https://investor.equifax.com/news-releases
 erie-indemnity,ERIE,unknown,unknown,https://www.erieinsurance.com/investors
+evergy,EVRG,notified,notified,https://investors.evergy.com/news-releases
 exelon,EXC,notified,notified,https://investors.exeloncorp.com/news-releases
 expedia,EXPE,q4,q4_ir,https://ir.expediagroup.com/news/default.aspx
 extra-space,EXR,q4,q4_ir,https://ir.extraspace.com/news/default.aspx
@@ -169,6 +174,7 @@ jp-morgan-chase,JPM,aem,aem,https://www.jpmorganchase.com/ir
 keycorp,KEY,unknown,unknown,https://investor.key.com/
 keysight,KEYS,unknown,unknown,https://investor.keysight.com/
 kimco-realty,KIM,unknown,unknown,https://investors.kimcorealty.com/
+kinder-morgan,KMI,q4,q4_ir,https://ir.kindermorgan.com/news/default.aspx
 kkr,KKR,unknown,unknown,https://ir.kkr.com/
 kla,KLAC,notified,notified,https://ir.kla.com/news-releases
 kroger,KR,q4,q4_ir,https://ir.kroger.com/news/default.aspx
@@ -195,7 +201,7 @@ mckesson,MCK,q4,q4_ir,https://investor.mckesson.com/news/default.aspx
 medtronic,MDT,investorroom,investorroom,https://investorrelations.medtronic.com/news-releases
 merck,MRK,unknown,unknown,https://www.merck.com/investor-relations/
 meta,META,q4,q4_ir,https://investor.atmeta.com/home/default.aspx/news/default.aspx
-micron,MU,notified,notified,https://investors.micron.com/news-releases
+micron,MU,q4,q4_ir,https://investors.micron.com/news/default.aspx
 microsoft,MSFT,unknown,unknown,https://news.microsoft.com/source/tag/investor-relations/
 moderna,MRNA,unknown,unknown,https://investors.modernatx.com/
 molson-coors,TAP,q4,q4_ir,https://ir.molsoncoors.com/news/default.aspx
@@ -225,6 +231,7 @@ paramount,PSKY,notified,notified,https://ir.paramount.com/press-releases
 parker,PH,notified,notified,https://investors.parker.com/news-releases
 paypal,PYPL,q4,q4_ir,https://investor.pypl.com/news/default.aspx
 pepsi,PEP,unknown,unknown,https://www.pepsico.com/investors
+pg-and-e,PCG,unknown,unknown,https://investor.pgecorp.com/
 ptc,PTC,q4,q4_ir,https://investor.ptc.com/news/default.aspx
 qualcomm,QCOM,unknown,unknown,https://investor.qualcomm.com/
 quanta-services,PWR,notified,notified,https://investors.quantaservices.com/news-releases
@@ -234,12 +241,14 @@ robinhood,HOOD,notified,notified_gated,https://investors.robinhood.com/press-rel
 rollins,ROL,notified,notified,https://www.rollins.com/investors/news-releases
 ross-stores,ROST,notified,notified,https://investors.rossstores.com/news-releases
 royal-caribbean,RCL,investorroom,investorroom,https://www.rclinvestor.com/news-releases
+s-p-global,SPGI,unknown,unknown,https://investor.spglobal.com/
 salesforce,CRM,q4,q4_ir,https://investor.salesforce.com/news/default.aspx
 sandisk,SNDK,notified,notified,https://investor.sandisk.com/news-releases
 sba-communications,SBAC,unknown,unknown,https://ir.sbasite.com/
 seagate,STX,q4,q4_ir,https://investors.seagate.com/news/default.aspx
 servicenow,NOW,unknown,unknown,https://investor.servicenow.com/
 sherwin-williams,SHW,unknown,unknown,https://investors.sherwin-williams.com/
+simon,SPG,notified,notified,https://investors.simon.com/news-releases
 skyworks,SWKS,notified,notified,https://investors.skyworksinc.com/press-releases
 slb,SLB,notified,notified,https://investorcenter.slb.com/news-releases
 smurfit-westrock,SW,q4,q4_ir,http://investors.smurfitwestrock.com/news/default.aspx
@@ -254,6 +263,7 @@ sysco,SYY,investis,investis,https://investors.sysco.com/annual-reports-and-sec-f
 t-mobile,TMUS,q4,q4_ir,https://investor.t-mobile.com/news/default.aspx
 t-rowe-price,TROW,notified,notified,https://investors.troweprice.com/news-releases
 take-two-games,TTWO,unknown,unknown,https://www.take2games.com/ir
+tapestry,TPR,notified,notified,https://investors.tapestry.com/news-releases
 te-connectivity,TEL,notified,notified,https://investors.te.com/news-releases
 teradyne,TER,notified,notified,https://investors.teradyne.com/news-events/press-releases
 tesla,TSLA,unknown,unknown,https://ir.tesla.com/
