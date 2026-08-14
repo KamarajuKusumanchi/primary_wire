@@ -1102,6 +1102,7 @@ sources:
     name: Sandisk Corporation
     ticker: SNDK
     ir_url: https://investor.sandisk.com/
+    news_releases_path: news-events/news-releases
   - slug: sba-communications
     name: SBA Communications Corporation
     ticker: SBAC
