@@ -52,6 +52,7 @@ notified:
     - slug: generac
     - slug: datadog
     - slug: gartner
+    - slug: sandisk
 
 notified_gated:
   scraper: scrape_notified_gated
