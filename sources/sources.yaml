@@ -368,6 +368,11 @@ sources:
     name: Constellation Brands, Inc.
     ticker: STZ
     ir_url: https://ir.cbrands.com/
+  - slug: copart
+    name: Copart, Inc.
+    ticker: CPRT
+    ir_url: 
+      https://www.copart.com/content/us/en/investor-relations/investor-relations
   - slug: corning
     name: Corning Incorporated
     ticker: GLW
@@ -1185,6 +1190,10 @@ sources:
     name: Tapestry, Inc.
     ticker: TPR
     ir_url: https://investors.tapestry.com/
+  - slug: targa-resources
+    name: Targa Resources Corp.
+    ticker: TRGP
+    ir_url: https://www.targaresources.com/investors
   - slug: te-connectivity
     name: TE Connectivity plc
     ticker: TEL
