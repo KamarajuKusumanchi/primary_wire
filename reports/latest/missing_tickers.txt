@@ -19,13 +19,13 @@ Missing tickers:
   AOS
   APD
   APH
-  AVB
   AWK
   AXP
   BA
   BAC
   BALL
   BBY
+  BE
   BF-B
   BG
   BKR
@@ -50,7 +50,6 @@ Missing tickers:
   COF
   COO
   COP
-  CPRT
   CPT
   CVNA
   CVX
@@ -65,7 +64,6 @@ Missing tickers:
   EG
   EL
   EQIX
-  EQR
   ES
   ESS
   ETR
@@ -101,6 +99,7 @@ Missing tickers:
   IBKR
   IDXX
   IEX
+  ILMN
   IRM
   IVZ
   J
@@ -139,6 +138,7 @@ Missing tickers:
   ODFL
   OKE
   OTIS
+  P
   PANW
   PAYX
   PEG
@@ -158,6 +158,7 @@ Missing tickers:
   PSA
   PSX
   Q
+  RDDT
   REG
   REGN
   RF
@@ -169,7 +170,6 @@ Missing tickers:
   RSG
   RTX
   SBUX
-  SCHW
   SNA
   SRE
   STE
@@ -181,7 +181,6 @@ Missing tickers:
   TFC
   TGT
   TKO
-  TRGP
   TRMB
   TSN
   TXT
@@ -195,6 +194,7 @@ Missing tickers:
   VLO
   VLTO
   VMC
+  VMRK
   VTRS
   WAT
   WELL
