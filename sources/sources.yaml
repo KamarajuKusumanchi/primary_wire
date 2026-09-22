@@ -293,6 +293,11 @@ sources:
     name: CF Industries Holdings, Inc.
     ticker: CF
     ir_url: https://investor.cfindustries.com/
+  - slug: charles-schwab
+    name: The Charles Schwab Corporation
+    ticker: SCHW
+    ir_url: https://www.aboutschwab.com/investor-relations
+    news_url: https://pressroom.aboutschwab.com/press-releases/default.aspx
   - slug: charter
     name: Charter Communications, Inc.
     ticker: CHTR
