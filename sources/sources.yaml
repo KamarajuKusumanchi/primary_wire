@@ -550,6 +550,10 @@ sources:
     name: Evergy, Inc.
     ticker: EVRG
     ir_url: https://investors.evergy.com/
+  - slug: everpure
+    name: Everpure, Inc.
+    ticker: P
+    ir_url: https://investor.everpuredata.com/
   - slug: exelon
     name: Exelon Corporation
     ticker: EXC
