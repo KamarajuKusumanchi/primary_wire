@@ -251,6 +251,10 @@ sources:
     name: Booking Holdings Inc.
     ticker: BKNG
     ir_url: https://ir.bookingholdings.com/
+  - slug: boston-scientific
+    name: Boston Scientific Corporation
+    ticker: BSX
+    ir_url: https://investors.bostonscientific.com/
   - slug: broadcom
     name: Broadcom Inc.
     ticker: AVGO
@@ -381,6 +385,10 @@ sources:
     name: Constellation Brands, Inc.
     ticker: STZ
     ir_url: https://ir.cbrands.com/
+  - slug: constellation-energy
+    name: Constellation Energy Corporation
+    ticker: CEG
+    ir_url: https://investors.constellationenergy.com/
   - slug: copart
     name: Copart, Inc.
     ticker: CPRT
@@ -885,6 +893,10 @@ sources:
       categories: (1) Investor and Financial News (2) Uncategorized. To
       minimize the noise, only the first category (category=788) is scraped
       for now.
+  - slug: loews
+    name: Loews Corporation
+    ticker: L
+    ir_url: https://loews.com/investors/
   - slug: lowes
     name: Lowe's Companies, Inc.
     ticker: LOW
@@ -1081,6 +1093,10 @@ sources:
     name: PG&E Corporation
     ticker: PCG
     ir_url: https://investor.pgecorp.com/
+  - slug: phillips-66
+    name: Phillips 66
+    ticker: PSX
+    ir_url: https://investor.phillips66.com/
   - slug: ptc
     name: PTC Inc.
     ticker: PTC
@@ -1280,6 +1296,10 @@ sources:
     name: Ulta Beauty, Inc.
     ticker: ULTA
     ir_url: https://www.ulta.com/investor
+  - slug: union-pacific
+    name: Union Pacific Corporation
+    ticker: UNP
+    ir_url: https://investor.unionpacific.com/
   - slug: united-airlines
     name: United Airlines Holdings, Inc.
     ticker: UAL
@@ -1293,6 +1313,10 @@ sources:
     name: Universal Health Services, Inc.
     ticker: UHS
     ir_url: https://ir.uhs.com/
+  - slug: ups
+    name: United Parcel Service, Inc.
+    ticker: UPS
+    ir_url: https://investors.ups.com/
   - slug: ventas
     name: Ventas, Inc.
     ticker: VTR
@@ -1342,6 +1366,10 @@ sources:
     name: WEC Energy Group, Inc.
     ticker: WEC
     ir_url: https://investor.wecenergygroup.com/
+  - slug: welltower
+    name: Welltower Inc.
+    ticker: WELL
+    ir_url: https://welltower.com/investors/
   - slug: western-digital
     name: Western Digital Corporation
     ticker: WDC
