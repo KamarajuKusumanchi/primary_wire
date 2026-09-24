@@ -232,6 +232,10 @@ sources:
     name: Blackstone Inc.
     ticker: BX
     ir_url: https://ir.blackstone.com/
+  - slug: bloom-energy
+    name: Bloom Energy Corporation
+    ticker: BE
+    ir_url: https://investor.bloomenergy.com/
   - slug: bls
     name: U.S. Bureau of Labor Statistics
     ir_url: https://www.bls.gov/newsrelease/
