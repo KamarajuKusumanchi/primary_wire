@@ -940,6 +940,10 @@ sources:
     name: Meta Platforms, Inc.
     ticker: META
     ir_url: https://investor.atmeta.com/home/default.aspx
+  - slug: mgm-resorts
+    name: MGM Resorts International
+    ticker: MGM
+    ir_url: https://investors.mgmresorts.com/
   - slug: micron
     name: Micron Technology, Inc.
     ticker: MU
