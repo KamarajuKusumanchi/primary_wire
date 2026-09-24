@@ -738,6 +738,10 @@ sources:
     name: Illinois Tool Works Inc.
     ticker: ITW
     ir_url: https://investor.itw.com/
+  - slug: illumina
+    name: Illumina, Inc.
+    ticker: ILMN
+    ir_url: https://investor.illumina.com/
   - slug: incyte
     name: Incyte Corporation
     ticker: INCY
