@@ -901,6 +901,10 @@ sources:
     name: Lowe's Companies, Inc.
     ticker: LOW
     ir_url: https://corporate.lowes.com/investors
+  - slug: lululemon
+    name: lululemon athletica inc.
+    ticker: LULU
+    ir_url: https://corporate.lululemon.com/investors
   - slug: lumentum
     name: Lumentum Holdings Inc.
     ticker: LITE
@@ -1354,6 +1358,10 @@ sources:
     name: Vistra Corp.
     ticker: VST
     ir_url: https://investor.vistracorp.com/
+  - slug: vivmark-residential
+    name: AvalonBay Communities, Inc.
+    ticker: VMRK
+    ir_url: https://investors.vivmarkresidential.com/
   - slug: wabtec
     name: Westinghouse Air Brake Technologies Corporation
     ticker: WAB

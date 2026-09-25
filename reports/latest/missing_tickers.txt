@@ -1,7 +1,7 @@
 
 S&P 500 companies:  503
-Covered in sources: 310
-Missing:            193
+Covered in sources: 312
+Missing:            191
 
 Missing tickers:
   A
@@ -105,7 +105,6 @@ Missing tickers:
   KVUE
   LEN
   LNT
-  LULU
   LUV
   LYV
   MA
@@ -183,7 +182,6 @@ Missing tickers:
   VLO
   VLTO
   VMC
-  VMRK
   VTRS
   WAT
   WFC
