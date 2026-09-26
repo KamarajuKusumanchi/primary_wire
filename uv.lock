@@ -916,6 +916,7 @@ version = "0.1.0"
 source = { virtual = "." }
 dependencies = [
     { name = "csvkit" },
+    { name = "curl-cffi" },
     { name = "ddgs" },
     { name = "greenlet" },
     { name = "lxml" },
@@ -937,6 +938,7 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "csvkit" },
+    { name = "curl-cffi" },
     { name = "ddgs" },
     { name = "greenlet", specifier = ">=3.4.0" },
     { name = "invoke", marker = "extra == 'dev'" },

@@ -1,0 +1,89 @@
+==== about this file ====
+
+This is a chronological log of notable decisions made on this project --
+what was done, why, and (where relevant) what was tried first and didn't
+work. Entries can be about any part of the project, not tied to any one
+file.
+
+===== How this differs from a changelog =====
+
+A changelog (e.g. docs/changelog.txt, if one exists) is outward-facing: it
+tells someone using the software what's different in a given version --
+features added, bugs fixed, behavior changed. It's written for a reader
+who doesn't care how you got there, just what the end state is.
+
+This file is the opposite: it's inward-facing, for future-me (or anyone
+else digging into the history later) trying to understand *why* something
+is the way it is. Entries here capture reasoning and process -- including
+dead ends -- not just a summary of the end result. Where a changelog would
+say "added curl_cffi", this file explains why it needed to be added and
+what the alternatives were.
+
+Entries are appended in order, oldest first. Each one is headed with a
+short title and the date.
+
+===== If this file grows too large =====
+
+If this becomes unwieldy over time, split it by year instead of by topic
+(e.g. docs/decisions-2026.txt, docs/decisions-2027.txt) -- decisions here
+are read chronologically, not looked up by subject, so time is the more
+natural axis to split on.
+
+
+====== migrating from requirements.txt ======
+today | 2026-06-23
+Initially, I was using the requirements.txt file to manage the dependencies.
+But one shortcoming of the requirements.txt approach is that there is no way
+to specify the minimum python version used by the project.
+
+The modern approach to specify both requirements and minimum python version
+is to use pyproject.toml instead of requirements.txt.
+
+The equivalent of
+  uv pip install -r requirements.txt
+is
+  uv sync --extra dev
+
+The equivalent of
+  deactivate && uv venv --clear && source .venv/Scripts/activate && uv pip install -r requirements.txt
+is
+  deactivate && uv venv --clear && uv sync --extra dev && source .venv/Scripts/activate
+
+====== recreate the environment from scratch ======
+  deactivate && uv venv --clear --system-certs && uv sync --extra dev --reinstall --system-certs && source .venv/Scripts/activate
+
+
+====== lower minimum Python from 3.14 to 3.12 ======
+today | 2026-07-06
+Initially I was running Python 3.14.5, and pyproject.toml specified
+  requires-python = ">=3.14"
+That floor was tighter than necessary: the code doesn't use any
+features beyond what 3.12 provides. Lowered it to
+  requires-python = ">=3.12"
+and switched my local venv to 3.12 to match, then refreshed uv.lock.
+
+Check the current version
+  python --version
+  Python 3.14.5
+
+Recreate the environment on 3.12
+  deactivate && uv venv --clear --system-certs --python 3.12 && uv sync --extra dev --reinstall --system-certs && source .venv/Scripts/activate
+
+Verify afterward
+  uv run python --version
+  Python 3.12.13
+
+Confirm uv.lock picked up the new floor
+  grep requires-python uv.lock
+  requires-python = ">=3.12"
+
+
+====== add curl_cffi as an explicit dependency ======
+today | 2026-09-26
+curl_cffi is currently getting installed as a transitive dependency of yfinance
+package. But it should be added as an explicit dependency since some scraping
+code (ex:- src/reporting/detect_ir_platform.py) imports it.
+
+Update pyproject.toml, adding curl_cffi to the main dependencies list and run
+  uv lock
+  uv sync --extra dev

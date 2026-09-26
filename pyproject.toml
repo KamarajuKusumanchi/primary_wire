@@ -22,6 +22,9 @@ dependencies = [
     "lxml",
     "requests",
 
+    # Used in scraping code
+    "curl_cffi",
+
     # greenlet is a transitive dependency: csvkit -> sqlalchemy -> greenlet .
     # Pin to a version with Windows wheels; 3.2.x dropped them and requires
     # MSVC to build from source; they returned in 3.4.0
@@ -104,48 +107,5 @@ addopts = "-m 'not regression'"
 # Run tests:
 #   uv run pytest
 #
-# ====== migrating from requirements.txt ======
-# today | 2026-06-23
-# Initially, I was using the requirements.txt file to manage the dependencies.
-# But one shortcoming of the requirements.txt approach is that there is no way
-# to specify the minimum python version used by the project.
-#
-# The modern approach to specify both requirements and minimum python version
-# is to use pyproject.toml instead of requirements.txt.
-#
-# The equivalent of
-#   uv pip install -r requirements.txt
-# is
-#   uv sync --extra dev
-#
-# The equivalent of
-#   deactivate && uv venv --clear && source .venv/Scripts/activate && uv pip install -r requirements.txt
-# is
-#   deactivate && uv venv --clear && uv sync --extra dev && source .venv/Scripts/activate
-#
-# ====== recreate the nevironment from scratch ======
+# ====== recreate the environment from scratch ======
 #   deactivate && uv venv --clear --system-certs && uv sync --extra dev --reinstall --system-certs && source .venv/Scripts/activate
-#
-# ====== lower minimum Python from 3.14 to 3.12 ======
-# today | 2026-07-06
-# Initially I was running Python 3.14.5, and pyproject.toml specified
-#   requires-python = ">=3.14"
-# That floor was tighter than necessary: the code doesn't use any
-# features beyond what 3.12 provides. Lowered it to
-#   requires-python = ">=3.12"
-# and switched my local venv to 3.12 to match, then refreshed uv.lock.
-#
-# Check the current version
-#   python --version
-#   Python 3.14.5
-#
-# Recreate the environment on 3.12
-#   deactivate && uv venv --clear --system-certs --python 3.12 && uv sync --extra dev --reinstall --system-certs && source .venv/Scripts/activate
-#
-# Verify afterward
-#   uv run python --version
-#   Python 3.12.13
-#
-# Confirm uv.lock picked up the new floor
-#   grep requires-python uv.lock
-#   requires-python = ">=3.12"
