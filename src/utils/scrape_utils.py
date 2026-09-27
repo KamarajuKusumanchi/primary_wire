@@ -6,6 +6,14 @@ Shared utilities for primary_wire's scraper scripts
 
 Public API
 ----------
+CURL_CFFI_IMPERSONATE : str -- curl_cffi Chrome impersonation profile shared
+                               by every TLS-fingerprinting scraper's
+                               new_session(); the one place to bump when a
+                               profile stops working (e.g. "chrome124" ->
+                               "chrome150")
+CURL_CFFI_IMPERSONATE_CHROME_VERSION : str -- Chrome version number derived
+                               from CURL_CFFI_IMPERSONATE, for the
+                               plain-requests fallback User-Agent string
 DATE_PATTERNS        : list of (compiled re, list[str]) -- date regex + strptime formats
 TIME_RE               : compiled re matching a clock-time-with-timezone string
 NewsItem             : base dataclass for a scraped press-release item
@@ -49,6 +57,48 @@ except ImportError:
     BeautifulSoup = None  # extract_date_from_detail_html() raises a clear error if actually called
 
 logger = logging.getLogger(__name__)
+
+
+# ---------------------------------------------------------------------------
+# curl_cffi Chrome impersonation
+# ---------------------------------------------------------------------------
+#
+# Every scraper that talks to a TLS-fingerprinting IR site (Notified/Drupal
+# sites like AbbVie, and defensively Investis) does so via
+# curl_cffi.requests.Session(impersonate=CURL_CFFI_IMPERSONATE) rather than
+# plain ``requests``, so the JA3/JA4 TLS fingerprint + HTTP/2 SETTINGS match
+# a real Chrome build closely enough to avoid being blocked/reset.
+#
+# This value used to be a literal "chrome124" hardcoded independently in
+# detect_ir_platform.py, scrape_investis.py, and scrape_notified_utils.py.
+# curl_cffi's impersonation profiles trail real Chrome releases and
+# eventually stop working against sites that tighten their fingerprinting
+# (e.g. AbbVie/Notified starting to reset "chrome124" connections with
+# HTTP/2 error 0x2 INTERNAL_ERROR) -- when that happens the fix is bumping
+# to a newer profile curl_cffi ships (see `curl_cffi.requests.session
+# .BrowserType` for the full list of valid values, or
+# src/prototypes/list_curl_cffi_profiles.py in this repo). Centralizing the
+# value here means that bump is a one-line, one-file change instead of a
+# grep-and-replace across every scraper -- and any scraper that's missed
+# fails loudly (ImportError) rather than silently going on impersonating a
+# now-blocked Chrome version.
+#
+# NOTE: src/prototypes/check_abbvie_http2_reliability.py and
+# check_abbvie_impersonate_profiles.py are one-off diagnostic scripts (the
+# latter deliberately iterates over *several* hardcoded profile strings,
+# "chrome124" among them, to compare them against each other) and are
+# intentionally left alone -- they're not part of the production scraper
+# path this constant governs.
+CURL_CFFI_IMPERSONATE = "chrome150"
+
+# The plain-``requests`` fallback path (used only when curl_cffi isn't
+# installed -- see detect_ir_platform.py's new_session()) sends a
+# hand-built User-Agent string that should still claim the same Chrome
+# version as CURL_CFFI_IMPERSONATE above, so the two fallback strategies
+# never disagree about which Chrome they're pretending to be. Derived
+# from CURL_CFFI_IMPERSONATE (e.g. "chrome150" -> "150") rather than a
+# second hardcoded literal, so there's still only one place to update.
+CURL_CFFI_IMPERSONATE_CHROME_VERSION = CURL_CFFI_IMPERSONATE.removeprefix("chrome")
 
 
 # ---------------------------------------------------------------------------

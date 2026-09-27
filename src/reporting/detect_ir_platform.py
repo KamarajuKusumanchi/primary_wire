@@ -254,6 +254,10 @@ from utils.sources_utils import (  # noqa: E402
     resolve_listing_url,
     resolve_scrape_url,
 )
+from utils.scrape_utils import (  # noqa: E402
+    CURL_CFFI_IMPERSONATE,
+    CURL_CFFI_IMPERSONATE_CHROME_VERSION,
+)
 # STRATEGY_TO_PLATFORM/load_scraper_config are check_scraper_coverage.py's
 # (already battle-tested there) machinery for turning config/scraper_config.yaml
 # into slug->strategy->platform facts, notably the "q4_ir" group -> "q4"
@@ -619,10 +623,15 @@ def new_session():
     own ``with new_session() as session:`` block.
     """
     if _HTTP_BACKEND == "curl_cffi":
-        # impersonate="chrome124" sets JA3/JA4 + HTTP/2 SETTINGS to match
-        # a real Chrome 124 client, bypassing TLS-fingerprint blocks.
-        logger.debug("HTTP backend: curl_cffi (Chrome impersonation)")
-        return requests.Session(impersonate="chrome124")
+        # CURL_CFFI_IMPERSONATE (utils/scrape_utils.py) sets JA3/JA4 +
+        # HTTP/2 SETTINGS to match a real Chrome client, bypassing
+        # TLS-fingerprint blocks. See that constant's comment in
+        # scrape_utils.py for why/how to bump it and which scrapers share it.
+        logger.debug(
+            "HTTP backend: curl_cffi (Chrome impersonation: %s)",
+            CURL_CFFI_IMPERSONATE,
+        )
+        return requests.Session(impersonate=CURL_CFFI_IMPERSONATE)
 
     logger.warning(
         "curl_cffi not installed — falling back to plain requests. "
@@ -634,7 +643,7 @@ def new_session():
         "User-Agent": (
             "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
             "AppleWebKit/537.36 (KHTML, like Gecko) "
-            "Chrome/124.0.0.0 Safari/537.36"
+            f"Chrome/{CURL_CFFI_IMPERSONATE_CHROME_VERSION}.0.0.0 Safari/537.36"
         ),
         "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
         "Accept-Language": "en-US,en;q=0.9",

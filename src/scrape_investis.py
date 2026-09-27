@@ -141,6 +141,7 @@ from utils.sources_utils import (
     resolve_source_identity,
 )
 from utils.scrape_utils import (
+    CURL_CFFI_IMPERSONATE,
     NewsItem as _BaseNewsItem,
     add_common_args,
     add_network_and_debug_args,
@@ -239,7 +240,11 @@ def new_session():
     thread the result through explicitly as the ``session`` argument below,
     rather than reaching for a global or a threading.local().
     """
-    return requests.Session(impersonate="chrome124")
+    # CURL_CFFI_IMPERSONATE (utils/scrape_utils.py) sets the TLS fingerprint
+    # + HTTP/2 SETTINGS to match a real Chrome client, bypassing
+    # TLS-fingerprint blocks. See that constant's comment in scrape_utils.py
+    # for why/how to bump it and which scrapers share it.
+    return requests.Session(impersonate=CURL_CFFI_IMPERSONATE)
 
 
 def fetch_html(url: str, session, timeout: int = 30) -> str:

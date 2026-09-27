@@ -47,7 +47,7 @@ try:
 except ImportError:
     sys.exit("Missing dependency. Install with: pip install beautifulsoup4 lxml")
 
-from utils.scrape_utils import parse_date, parse_time
+from utils.scrape_utils import CURL_CFFI_IMPERSONATE, parse_date, parse_time
 
 logger = logging.getLogger(__name__)
 
@@ -110,9 +110,11 @@ def new_session():
     across an unrelated call, and needs no cleanup bookkeeping beyond the
     caller's own ``with new_session() as session:`` block.
     """
-    # impersonate="chrome124" sets the TLS fingerprint + HTTP/2 SETTINGS
-    # to match a real Chrome 124 client, bypassing TLS-fingerprint blocks.
-    return requests.Session(impersonate="chrome124")
+    # CURL_CFFI_IMPERSONATE (utils/scrape_utils.py) sets the TLS fingerprint
+    # + HTTP/2 SETTINGS to match a real Chrome client, bypassing
+    # TLS-fingerprint blocks. See that constant's comment in scrape_utils.py
+    # for why/how to bump it and which scrapers share it.
+    return requests.Session(impersonate=CURL_CFFI_IMPERSONATE)
 
 
 def fetch_html(url: str, session, timeout: int = 30) -> str:
