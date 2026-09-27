@@ -96,4 +96,4 @@ I wanted to upgrade yfinance from 1.4.1 to 1.7.0 and curl-cffi 0.15.0 -> 0.16.3
 Instead of upgrading each, I upgraded all the packages to their latest versions
 in one shot by doing
   uv lock --upgrade
-  uv sync
+  uv sync --extra dev
