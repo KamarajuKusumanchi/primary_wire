@@ -79,10 +79,18 @@ sources:
     name: Accenture plc
     ticker: ACN
     ir_url: https://investor.accenture.com/
+  - slug: adobe
+    name: Adobe Inc.
+    ticker: ADBE
+    ir_url: https://www.adobe.com/investor-relations/
   - slug: adp
     name: Automatic Data Processing, Inc.
     ticker: ADP
     ir_url: https://investors.adp.com/
+  - slug: aes
+    name: The AES Corporation
+    ticker: AES
+    ir_url: https://www.aes.com/investors
   - slug: aflac
     name: AFLAC Incorporated
     ticker: AFL
@@ -222,6 +230,10 @@ sources:
     name: Becton, Dickinson and Company
     ticker: BDX
     ir_url: https://investors.bd.com/
+  - slug: berkshire-hathaway
+    name: Berkshire Hathaway Inc.
+    ticker: BRK-B
+    ir_url: https://www.berkshirehathaway.com/
   - slug: bio-techne
     name: Bio-Techne Corporation
     ticker: TECH
@@ -1135,6 +1147,10 @@ sources:
     ir_url: https://ir.questdiagnostics.com/
     news_path: press-releases/default.aspx
     news_details_segment: press-release-details
+  - slug: realty-income
+    name: Realty Income Corporation
+    ticker: O
+    ir_url: https://www.realtyincome.com/investors
   - slug: revvity
     name: Revvity, Inc.
     ticker: RVTY
