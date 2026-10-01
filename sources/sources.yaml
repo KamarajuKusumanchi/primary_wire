@@ -87,6 +87,10 @@ sources:
     name: AFLAC Incorporated
     ticker: AFL
     ir_url: https://investors.aflac.com/
+  - slug: airbnb
+    name: Airbnb, Inc.
+    ticker: ABNB
+    ir_url: https://investors.airbnb.com/
   - slug: akamai
     name: Akamai Technologies, Inc.
     ticker: AKAM
@@ -271,6 +275,10 @@ sources:
     name: Cadence Design Systems, Inc.
     ticker: CDNS
     ir_url: https://investor.cadence.com/
+  - slug: capital-one
+    name: Capital One Financial Corporation
+    ticker: COF
+    ir_url: https://investor.capitalone.com/
   - slug: carrier
     name: Carrier Global Corporation
     ticker: CARR
@@ -342,6 +350,10 @@ sources:
     name: Citigroup Inc.
     ticker: C
     ir_url: https://www.citigroup.com/global/investors
+  - slug: clorox
+    name: The Clorox Company
+    ticker: CLX
+    ir_url: https://investors.thecloroxcompany.com/
   - slug: cme
     name: CME Group Inc.
     ticker: CME
@@ -649,6 +661,10 @@ sources:
     ticker: IT
     ir_url: https://investor.gartner.com/
     news_releases_path: press-releases
+  - slug: ge-aerospace
+    name: GE Aerospace
+    ticker: GE
+    ir_url: https://www.geaerospace.com/investor-relations
   - slug: ge-healthcare
     name: GE HealthCare Technologies Inc.
     ticker: GEHC
@@ -1362,6 +1378,10 @@ sources:
     name: AvalonBay Communities, Inc.
     ticker: VMRK
     ir_url: https://investors.vivmarkresidential.com/
+  - slug: vulcan-materials
+    name: Vulcan Materials Company
+    ticker: VMC
+    ir_url: https://www.vulcanmaterials.com/investors
   - slug: wabtec
     name: Westinghouse Air Brake Technologies Corporation
     ticker: WAB
@@ -1395,6 +1415,10 @@ sources:
     ticker: WDAY
     ir_url: https://investor.workday.com/
     news_path: news-and-events/press-releases/default.aspx
+  - slug: wynn-resorts
+    name: Wynn Resorts, Limited
+    ticker: WYNN
+    ir_url: https://investors.wynnresorts.com/
   - slug: xylem
     name: Xylem Inc.
     ticker: XYL
