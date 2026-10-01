@@ -97,3 +97,42 @@ Instead of upgrading each, I upgraded all the packages to their latest versions
 in one shot by doing
   uv lock --upgrade
   uv sync --extra dev
+
+
+==== invalid peer certificate error ====
+today | 2026-10-01
+
+Got the following error when trying to upgrade the lock file
+
+$ uv lock --upgrade
+⠇ primary-wire==0.1.0                                                                                                                                                                                              × Request failed after 3 retries in 7.4s
+  ├─▶ Failed to fetch: `https://pypi.org/simple/lxml/`
+  ├─▶ error sending request for url (https://pypi.org/simple/lxml/)
+  ├─▶ client error (Connect)
+  ╰─▶ invalid peer certificate: UnknownIssuer
+  help: Consider enabling use of system TLS certificates with the `--system-certs` command-line flag
+
+The following worked.
+
+$ uv lock --upgrade --system-certs
+
+
+==== invalid peer certificate error ====
+today | 2026-10-01
+
+Got the following error when trying to run uv sync
+
+$ uv sync --extra dev
+Resolved 65 packages in 1ms
+  × Failed to download `ddgs==9.16.0`
+  ├─▶ Request failed after 3 retries in 4.3s
+  ├─▶ Failed to fetch: `https://files.pythonhosted.org/packages/f9/0c/b43a87e81e45caf2c30fea9a5914dfd17b83a9f3c2c59ae22b6257bcf083/ddgs-9.16.0-py3-none-any.whl`
+  ├─▶ error sending request for url (https://files.pythonhosted.org/packages/f9/0c/b43a87e81e45caf2c30fea9a5914dfd17b83a9f3c2c59ae22b6257bcf083/ddgs-9.16.0-py3-none-any.whl)
+  ├─▶ client error (Connect)
+  ╰─▶ invalid peer certificate: UnknownIssuer
+
+hint: `ddgs` (v9.16.0) was included because `primary-wire` (v0.1.0) depends on `ddgs`(primary_wire)
+
+The following worked.
+
+$ uv sync --extra dev --system-certs
