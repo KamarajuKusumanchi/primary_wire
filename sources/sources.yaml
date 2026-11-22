@@ -95,6 +95,10 @@ sources:
     name: AFLAC Incorporated
     ticker: AFL
     ir_url: https://investors.aflac.com/
+  - slug: aig
+    name: American International Group, Inc.
+    ticker: AIG
+    ir_url: https://www.aig.com/home/investor-relations
   - slug: airbnb
     name: Airbnb, Inc.
     ticker: ABNB
@@ -279,6 +283,10 @@ sources:
     name: Builders FirstSource, Inc.
     ticker: BLDR
     ir_url: https://investors.bldr.com/
+  - slug: bunge
+    name: Bunge Global SA
+    ticker: BG
+    ir_url: https://investors.bunge.com/
   - slug: c-h-robinson
     name: C.H. Robinson Worldwide, Inc.
     ticker: CHRW
@@ -546,6 +554,10 @@ sources:
     name: eBay Inc.
     ticker: EBAY
     ir_url: https://investors.ebayinc.com/
+  - slug: echostar
+    name: EchoStar Corporation
+    ticker: ECHO
+    ir_url: https://ir.echostar.com/
   - slug: ecolab
     name: Ecolab Inc.
     ticker: ECL
@@ -586,6 +598,10 @@ sources:
     name: Erie Indemnity Company
     ticker: ERIE
     ir_url: https://www.erieinsurance.com/investors
+  - slug: essex-apartment-homes
+    name: Essex Property Trust, Inc.
+    ticker: ESS
+    ir_url: https://investors.essexapartmenthomes.com/
   - slug: evergy
     name: Evergy, Inc.
     ticker: EVRG
@@ -655,6 +671,10 @@ sources:
     name: Fortinet, Inc.
     ticker: FTNT
     ir_url: https://investor.fortinet.com/
+  - slug: fortive
+    name: Fortive Corporation
+    ticker: FTV
+    ir_url: https://investors.fortive.com/
   - slug: fox
     name: Fox Corporation
     ticker: FOXA
@@ -850,6 +870,10 @@ sources:
     name: JP Morgan Chase & Co.
     ticker: JPM
     ir_url: https://www.jpmorganchase.com/ir
+  - slug: kenvue
+    name: Kenvue Inc
+    ticker: KVUE
+    ir_url: https://investors.kenvue.com/
   - slug: keycorp
     name: KeyCorp
     ticker: KEY
@@ -874,6 +898,10 @@ sources:
     name: KLA Corporation
     ticker: KLAC
     ir_url: https://ir.kla.com/
+  - slug: kraft-heinz
+    name: The Kraft Heinz Company
+    ticker: KHC
+    ir_url: https://ir.kraftheinzcompany.com/
   - slug: kroger
     name: Kroger Company (The)
     ticker: KR
@@ -1084,6 +1112,10 @@ sources:
     name: Omnicom Group Inc.
     ticker: OMC
     ir_url: https://investor.omc.com/
+  - slug: oneok
+    name: ONEOK, Inc.
+    ticker: OKE
+    ir_url: https://ir.oneok.com/
   - slug: onsemi
     name: ON Semiconductor Corporation
     ticker: "ON"
@@ -1172,6 +1204,10 @@ sources:
     name: Royal Caribbean Cruises Ltd.
     ticker: RCL
     ir_url: https://www.rclinvestor.com/
+  - slug: rtx
+    name: RTX Corporation
+    ticker: RTX
+    ir_url: https://investors.rtx.com/
   - slug: s-p-global
     name: S&P Global Inc.
     ticker: SPGI
@@ -1226,6 +1262,10 @@ sources:
     name: The Southern Company
     ticker: SO
     ir_url: https://investor.southerncompany.com/
+  - slug: southwest
+    name: Southwest Airlines Co.
+    ticker: LUV
+    ir_url: https://investors.southwest.com/
   - slug: spacex
     name: Space Exploration Technologies Corp.
     ticker: SPCX
